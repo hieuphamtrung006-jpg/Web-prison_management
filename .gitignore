@@ -1,0 +1,20 @@
+# Node modules
+node_modules/
+frontend/node_modules/
+
+# Python artifacts
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local env files
+backend/.env
+frontend/.env
+
+# Build artifacts
+frontend/dist/
+
+# IDE
+.idea/
+.vscode/
+
