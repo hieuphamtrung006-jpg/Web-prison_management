@@ -1,0 +1,18 @@
+APP_NAME=Prison Management API
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+API_V1_PREFIX=/api/v1
+CORS_ORIGINS=http://localhost:5173
+
+# Supabase direct connection (safe placeholders only)
+SUPABASE_URL=https://xeprtflrcgdelkjbilah.supabase.co
+SUPABASE_DB_HOST=db.xeprtflrcgdelkjbilah.supabase.co
+SUPABASE_DB_PORT=5432
+SUPABASE_DB_NAME=postgres
+SUPABASE_DB_USER=postgres
+SUPABASE_DB_PASSWORD=YOUR_DB_PASSWORD
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+
+# Example only, do not commit real password
+DATABASE_URL=postgresql://postgres:YOUR_DB_PASSWORD@db.xeprtflrcgdelkjbilah.supabase.co:5432/postgres
+
