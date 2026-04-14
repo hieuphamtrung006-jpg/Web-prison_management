@@ -1,0 +1,26 @@
+{
+  "name": "web-prison_management",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hieuphamtrung006-jpg/Web-prison_management.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/hieuphamtrung006-jpg/Web-prison_management/issues"
+  },
+  "homepage": "https://github.com/hieuphamtrung006-jpg/Web-prison_management#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  }
+}
