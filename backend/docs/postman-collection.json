@@ -1,0 +1,307 @@
+{
+  "info": {
+    "name": "Prison Management API",
+    "_postman_id": "0a8522dd-bf95-4d2f-9b4a-6cc0f5f7bd02",
+    "description": "Full business flow collection for backend testing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000/api/v1" },
+    { "key": "token", "value": "" },
+    { "key": "userId", "value": "1" },
+    { "key": "prisonerId", "value": "1" },
+    { "key": "locationId", "value": "1" },
+    { "key": "visitId", "value": "1" },
+    { "key": "configId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin_master\",\n  \"password\": \"123456\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  pm.collectionVariables.set('token', data.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/users?active_only=true"
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/users",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"guard_new\",\n  \"full_name\": \"Quan giao moi\",\n  \"role\": \"Guard\",\n  \"email\": \"guard_new@prison.gov.vn\",\n  \"phone\": \"0900123456\",\n  \"password\": \"secret123\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/users/{{userId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"Warden\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Deactivate User",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/users/{{userId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Prisoners",
+      "item": [
+        {
+          "name": "List Prisoners",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/prisoners"
+          }
+        },
+        {
+          "name": "Prisoner Detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/prisoners/{{prisonerId}}"
+          }
+        },
+        {
+          "name": "Create Prisoner",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/prisoners",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Pham Nhan Moi\",\n  \"date_of_birth\": \"1998-05-05\",\n  \"gender\": \"Male\",\n  \"crime_type\": \"Theft\",\n  \"risk_level\": \"Low\",\n  \"rehab_hours\": 0,\n  \"current_location_id\": 10,\n  \"sentence_start\": \"2026-01-01\",\n  \"sentence_end\": \"2028-01-01\",\n  \"status\": \"InPrison\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Prisoner",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/prisoners/{{prisonerId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"risk_level\": \"High\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Release Prisoner",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/prisoners/{{prisonerId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Facilities and Labor",
+      "item": [
+        {
+          "name": "List Locations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/locations"
+          }
+        },
+        {
+          "name": "Projects Missing Workers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/labor/projects"
+          }
+        },
+        {
+          "name": "Create Assignment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/labor/assignments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prisoner_id\": 1,\n  \"project_id\": 1,\n  \"assignment_date\": \"2026-04-23\",\n  \"hours_assigned\": 4\n}"
+            }
+          }
+        },
+        {
+          "name": "Create Performance",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/labor/performance",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prisoner_id\": 1,\n  \"project_id\": 1,\n  \"work_date\": \"2026-04-22\",\n  \"productivity\": 80,\n  \"notes\": \"OK\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Incidents and Visits",
+      "item": [
+        {
+          "name": "List Incidents",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/incidents"
+          }
+        },
+        {
+          "name": "Create Incident",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/incidents",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prisoner_id\": 1,\n  \"location_id\": 1,\n  \"incident_date\": \"2026-04-22T08:30:00\",\n  \"incident_type\": \"Fight\",\n  \"severity\": \"High\",\n  \"penalty_points\": 10,\n  \"description\": \"Conflict\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List Visits",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/visits?status_filter=Pending&today_only=true"
+          }
+        },
+        {
+          "name": "Approve Visit",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/visits/{{visitId}}/approve"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scheduling",
+      "item": [
+        {
+          "name": "List Shifts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/shifts"
+          }
+        },
+        {
+          "name": "List Configs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/schedules/configs"
+          }
+        },
+        {
+          "name": "Generate Schedule",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/schedules/generate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"config_id\": {{configId}},\n  \"target_date\": \"2026-04-23\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Daily Schedule",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/schedules/daily?target_date=2026-04-23&group_by=location"
+          }
+        }
+      ]
+    }
+  ]
+}

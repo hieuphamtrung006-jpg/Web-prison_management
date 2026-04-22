@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: prison-backend
+Version: 0.1.0
+Summary: Backend service for prison management
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: pydantic>=2.7.0
+Requires-Dist: pydantic-settings>=2.3.0
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: PyJWT>=2.9.0
+Requires-Dist: supabase>=2.7.4
+Requires-Dist: alembic>=1.13.0
+Requires-Dist: pyodbc>=5.1.0

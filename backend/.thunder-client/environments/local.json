@@ -1,0 +1,13 @@
+{
+  "_id": "local-env-prison",
+  "name": "Local",
+  "default": true,
+  "values": [
+    { "name": "baseUrl", "value": "http://localhost:8000/api/v1" },
+    { "name": "token", "value": "" },
+    { "name": "userId", "value": "1" },
+    { "name": "prisonerId", "value": "1" },
+    { "name": "visitId", "value": "1" },
+    { "name": "configId", "value": "1" }
+  ]
+}

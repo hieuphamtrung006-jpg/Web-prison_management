@@ -1,0 +1,5 @@
+{
+  "version": "2.0",
+  "collectionSavePath": "backend/.thunder-client/collections",
+  "envSavePath": "backend/.thunder-client/environments"
+}

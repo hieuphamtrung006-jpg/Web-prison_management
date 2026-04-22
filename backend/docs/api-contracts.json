@@ -1,0 +1,479 @@
+{
+  "meta": {
+    "name": "Prison Management API Contracts",
+    "baseUrl": "http://localhost:8000/api/v1",
+    "auth": "Bearer JWT from /auth/login"
+  },
+  "endpoints": [
+    {
+      "name": "Login",
+      "method": "POST",
+      "path": "/auth/login",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "username": "admin_master",
+        "password": "123456"
+      },
+      "response200": {
+        "access_token": "eyJ...",
+        "token_type": "bearer"
+      }
+    },
+    {
+      "name": "Current User Profile",
+      "method": "GET",
+      "path": "/auth/me",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "user_id": 1,
+        "username": "admin_master",
+        "full_name": "He Thong Admin",
+        "role": "Admin",
+        "is_active": true
+      }
+    },
+    {
+      "name": "List Users",
+      "method": "GET",
+      "path": "/users?active_only=true",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": [
+        {
+          "user_id": 1,
+          "username": "admin_master",
+          "full_name": "He Thong Admin",
+          "role": "Admin",
+          "email": "admin_master@prison.gov.vn",
+          "phone": "0900000001",
+          "is_active": true
+        }
+      ]
+    },
+    {
+      "name": "Create User",
+      "method": "POST",
+      "path": "/users",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "username": "guard_new",
+        "full_name": "Quan giao moi",
+        "role": "Guard",
+        "email": "guard_new@prison.gov.vn",
+        "phone": "0900123456",
+        "password": "secret123"
+      },
+      "response201": {
+        "user_id": 220,
+        "username": "guard_new",
+        "full_name": "Quan giao moi",
+        "role": "Guard",
+        "email": "guard_new@prison.gov.vn",
+        "phone": "0900123456",
+        "is_active": true
+      }
+    },
+    {
+      "name": "Update User",
+      "method": "PUT",
+      "path": "/users/{user_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "role": "Warden",
+        "full_name": "Giam thi moi"
+      },
+      "response200": {
+        "user_id": 220,
+        "username": "guard_new",
+        "full_name": "Giam thi moi",
+        "role": "Warden",
+        "email": "guard_new@prison.gov.vn",
+        "phone": "0900123456",
+        "is_active": true
+      }
+    },
+    {
+      "name": "Deactivate User",
+      "method": "DELETE",
+      "path": "/users/{user_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "detail": "User deactivated"
+      }
+    },
+    {
+      "name": "List Prisoners",
+      "method": "GET",
+      "path": "/prisoners?name=&risk_level=&location_id=",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": [
+        {
+          "prisoner_id": 12,
+          "full_name": "Nguyen Van A",
+          "date_of_birth": "1990-10-21",
+          "gender": "Male",
+          "crime_type": "Fraud",
+          "risk_level": "Medium",
+          "rehab_hours": 12,
+          "current_location_id": 2,
+          "sentence_start": "2023-01-01",
+          "sentence_end": "2030-01-01",
+          "status": "InPrison",
+          "productivity_score": 72.5
+        }
+      ]
+    },
+    {
+      "name": "Create Prisoner",
+      "method": "POST",
+      "path": "/prisoners",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "full_name": "Pham Nhan Moi",
+        "date_of_birth": "1998-05-05",
+        "gender": "Male",
+        "crime_type": "Theft",
+        "risk_level": "Low",
+        "rehab_hours": 0,
+        "current_location_id": 10,
+        "sentence_start": "2026-01-01",
+        "sentence_end": "2028-01-01",
+        "status": "InPrison"
+      },
+      "response201": {
+        "prisoner_id": 231,
+        "full_name": "Pham Nhan Moi",
+        "date_of_birth": "1998-05-05",
+        "gender": "Male",
+        "crime_type": "Theft",
+        "risk_level": "Low",
+        "rehab_hours": 0,
+        "current_location_id": 10,
+        "sentence_start": "2026-01-01",
+        "sentence_end": "2028-01-01",
+        "status": "InPrison",
+        "productivity_score": 0
+      }
+    },
+    {
+      "name": "Prisoner Detail",
+      "method": "GET",
+      "path": "/prisoners/{prisoner_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "prisoner_id": 12,
+        "full_name": "Nguyen Van A",
+        "date_of_birth": "1990-10-21",
+        "gender": "Male",
+        "crime_type": "Fraud",
+        "risk_level": "Medium",
+        "rehab_hours": 12,
+        "current_location_id": 2,
+        "sentence_start": "2023-01-01",
+        "sentence_end": "2030-01-01",
+        "status": "InPrison",
+        "productivity_score": 72.5,
+        "current_location_name": "Buong giam A-02",
+        "projects": ["Du an may", "Du an moc"]
+      }
+    },
+    {
+      "name": "Update Prisoner",
+      "method": "PUT",
+      "path": "/prisoners/{prisoner_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "current_location_id": 5,
+        "risk_level": "High"
+      },
+      "response200": {
+        "prisoner_id": 12,
+        "full_name": "Nguyen Van A",
+        "date_of_birth": "1990-10-21",
+        "gender": "Male",
+        "crime_type": "Fraud",
+        "risk_level": "High",
+        "rehab_hours": 12,
+        "current_location_id": 5,
+        "sentence_start": "2023-01-01",
+        "sentence_end": "2030-01-01",
+        "status": "InPrison",
+        "productivity_score": 72.5
+      }
+    },
+    {
+      "name": "Release Prisoner",
+      "method": "DELETE",
+      "path": "/prisoners/{prisoner_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "detail": "Prisoner released"
+      }
+    },
+    {
+      "name": "List Incidents",
+      "method": "GET",
+      "path": "/incidents",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Create Incident",
+      "method": "POST",
+      "path": "/incidents",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "prisoner_id": 12,
+        "location_id": 2,
+        "incident_date": "2026-04-22T08:30:00",
+        "incident_type": "Fight",
+        "severity": "High",
+        "penalty_points": 10,
+        "description": "Xung dot trong khu vuc"
+      }
+    },
+    {
+      "name": "List Visits",
+      "method": "GET",
+      "path": "/visits?status_filter=Pending&today_only=true",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Create Visit",
+      "method": "POST",
+      "path": "/visits",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "prisoner_id": 12,
+        "visitor_name": "Tran Thi B",
+        "visit_date": "2026-04-23T14:30:00",
+        "notes": "Nguoi than"
+      }
+    },
+    {
+      "name": "Approve Visit",
+      "method": "PUT",
+      "path": "/visits/{visit_id}/approve",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "List Locations",
+      "method": "GET",
+      "path": "/locations",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": [
+        {
+          "location_id": 2,
+          "location_name": "Buong giam A-02",
+          "type": "Cell",
+          "capacity": 4,
+          "security_level": "Medium",
+          "is_active": true,
+          "current_occupancy": 3
+        }
+      ]
+    },
+    {
+      "name": "Create Location",
+      "method": "POST",
+      "path": "/locations",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "location_name": "Xuong may C-01",
+        "type": "Workshop",
+        "capacity": 25,
+        "security_level": "Medium",
+        "is_active": true
+      }
+    },
+    {
+      "name": "Update Location",
+      "method": "PUT",
+      "path": "/locations/{location_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "type": "Workshop",
+        "capacity": 30
+      }
+    },
+    {
+      "name": "Labor Projects Missing Workers",
+      "method": "GET",
+      "path": "/labor/projects?on_date=2026-04-23",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Create Labor Assignment",
+      "method": "POST",
+      "path": "/labor/assignments",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "prisoner_id": 12,
+        "project_id": 5,
+        "assignment_date": "2026-04-23",
+        "hours_assigned": 4
+      }
+    },
+    {
+      "name": "Create Daily Performance",
+      "method": "POST",
+      "path": "/labor/performance",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "prisoner_id": 12,
+        "project_id": 5,
+        "work_date": "2026-04-22",
+        "productivity": 82.5,
+        "notes": "Tot"
+      }
+    },
+    {
+      "name": "Prisoner Performance 30 Days",
+      "method": "GET",
+      "path": "/labor/performance/prisoner/{prisoner_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": [
+        {
+          "work_date": "2026-04-01",
+          "productivity": 75.0
+        }
+      ]
+    },
+    {
+      "name": "List Shifts",
+      "method": "GET",
+      "path": "/shifts",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "List Schedule Configs",
+      "method": "GET",
+      "path": "/schedules/configs",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Update Schedule Config",
+      "method": "PUT",
+      "path": "/schedules/configs/{config_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "weight_economy": 0.5,
+        "weight_security": 0.3,
+        "weight_rehab": 0.2,
+        "parameters": "{\"PopulationSize\": 100, \"Generations\": 200, \"MutationRate\": 0.06}"
+      }
+    },
+    {
+      "name": "Generate Schedule",
+      "method": "POST",
+      "path": "/schedules/generate",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "config_id": 1,
+        "target_date": "2026-04-23"
+      },
+      "response200": {
+        "detail": "Schedule generated",
+        "count": 1610,
+        "target_date": "2026-04-23",
+        "ai_meta": {
+          "population_size": 80,
+          "generations": 120,
+          "mutation_rate": 0.08,
+          "elite_size": 8,
+          "best_fitness": 1234.5,
+          "schedule_rows": 1610
+        }
+      }
+    },
+    {
+      "name": "Daily Schedule",
+      "method": "GET",
+      "path": "/schedules/daily?target_date=2026-04-23&group_by=location",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "target_date": "2026-04-23",
+        "group_by": "location",
+        "groups": {
+          "Xuong may C-01": [
+            {
+              "schedule_id": 1,
+              "start_time": "2026-04-23T08:00:00",
+              "end_time": "2026-04-23T12:00:00",
+              "prisoner_id": 12,
+              "full_name": "Nguyen Van A",
+              "project_name": "Du an may",
+              "location_name": "Xuong may C-01"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
