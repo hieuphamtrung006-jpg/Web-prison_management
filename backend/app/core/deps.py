@@ -38,7 +38,7 @@ def get_current_user(
     except ValueError as exc:
         raise credentials_exception from exc
 
-    user = db.query(User).filter(User.username == username, User.is_active.is_(True)).first()
+    user = db.query(User).filter(User.username == username, User.is_active == True).first()
     if not user:
         raise credentials_exception
     return user

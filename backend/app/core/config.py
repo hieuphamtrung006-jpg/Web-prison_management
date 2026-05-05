@@ -5,7 +5,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "Prison Management API"
     database_url: str = Field(
-        default="mssql+pyodbc://user:password@localhost/PrisonDB?driver=ODBC+Driver+18+for+SQL+Server",
+        default=(
+            "mssql+pyodbc://localhost/PRISON?driver=ODBC+Driver+18+for+SQL+Server"
+            "&Trusted_Connection=yes&Encrypt=yes&TrustServerCertificate=yes"
+        ),
         validation_alias="DATABASE_URL",
     )
     jwt_secret_key: str = Field(default="change-this-secret-in-production", validation_alias="JWT_SECRET_KEY")

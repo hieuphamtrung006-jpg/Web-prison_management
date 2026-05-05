@@ -19,7 +19,7 @@ def list_users(
 ) -> list[User]:
     query = db.query(User)
     if active_only:
-        query = query.filter(User.is_active.is_(True))
+        query = query.filter(User.is_active == True)
     return query.order_by(User.user_id).all()
 
 

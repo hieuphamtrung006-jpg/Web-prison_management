@@ -94,9 +94,9 @@ def generate_schedule(
 
     target_date = payload.target_date or (date.today() + timedelta(days=1))
     prisoners = db.query(Prisoner).filter(Prisoner.status == "InPrison").all()
-    projects = db.query(LaborProject).filter(LaborProject.is_active.is_(True)).all()
+    projects = db.query(LaborProject).filter(LaborProject.is_active == True).all()
     shifts = db.query(Shift).all()
-    locations = db.query(Location).filter(Location.is_active.is_(True)).all()
+    locations = db.query(Location).filter(Location.is_active == True).all()
     assignment_rows = (
         db.query(LaborAssignment)
         .filter(LaborAssignment.assignment_date <= target_date)

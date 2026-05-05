@@ -10,7 +10,11 @@ if (Test-Path $nodeDir) {
 }
 
 Write-Host "[1/4] Starting backend..." -ForegroundColor Cyan
-$backendCmd = "Set-Location '$backend'; py -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
+$workspaceRoot = Split-Path $root -Parent
+$rootVenvPython = Join-Path $workspaceRoot ".venv\Scripts\python.exe"
+$backendVenvPython = Join-Path $backend ".venv\Scripts\python.exe"
+$pythonExe = if (Test-Path $rootVenvPython) { $rootVenvPython } elseif (Test-Path $backendVenvPython) { $backendVenvPython } else { "py" }
+$backendCmd = "Set-Location '$backend'; & '$pythonExe' -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 $backendProc = Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backendCmd -PassThru
 
 Start-Sleep -Seconds 2
@@ -26,6 +30,6 @@ $frontendCmd = "Set-Location '$frontend'; npm run dev"
 $frontendProc = Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $frontendCmd -PassThru
 
 Write-Host "[4/4] Ready" -ForegroundColor Green
-Write-Host "Backend: http://127.0.0.1:8000/docs"
+Write-Host "Backend: http://localhost:8000/docs"
 Write-Host "Frontend: http://127.0.0.1:5173"
 Write-Host "Use Stop-Process -Id $($backendProc.Id),$($frontendProc.Id) to stop both." -ForegroundColor Yellow
