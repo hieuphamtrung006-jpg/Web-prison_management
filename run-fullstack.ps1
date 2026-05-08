@@ -14,7 +14,7 @@ $workspaceRoot = Split-Path $root -Parent
 $rootVenvPython = Join-Path $workspaceRoot ".venv\Scripts\python.exe"
 $backendVenvPython = Join-Path $backend ".venv\Scripts\python.exe"
 $pythonExe = if (Test-Path $rootVenvPython) { $rootVenvPython } elseif (Test-Path $backendVenvPython) { $backendVenvPython } else { "py" }
-$backendCmd = "Set-Location '$backend'; & '$pythonExe' -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+$backendCmd = "Set-Location '$backend'; & '$pythonExe' -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
 $backendProc = Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backendCmd -PassThru
 
 Start-Sleep -Seconds 2

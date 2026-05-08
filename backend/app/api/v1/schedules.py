@@ -1,8 +1,7 @@
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import cast
 from sqlalchemy import Date as SQLDate
 from sqlalchemy.orm import Session
@@ -13,40 +12,58 @@ from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
 from app.db.models.schedule import Schedule, SchedulingConfig, Shift
 from app.db.models.user import User
+from app.schemas.common import MessageResponse
+from app.schemas.schedule import (
+    ScheduleConfigRead,
+    ScheduleConfigUpdate,
+    ScheduleDailyResponse,
+    ScheduleGenerateRequest,
+    ScheduleGenerateResponse,
+    ScheduleRead,
+    ScheduleUpdate,
+)
 from app.services.ai_engine import run_genetic_algorithm
 
 router = APIRouter()
 
 
-class ScheduleConfigUpdate(BaseModel):
-    config_name: str | None = None
-    weight_economy: float | None = None
-    weight_security: float | None = None
-    weight_rehab: float | None = None
-    parameters: str | None = None
-
-
-class ScheduleGenerateRequest(BaseModel):
-    config_id: int
-    target_date: date | None = None
-
-
-@router.get("/configs")
+@router.get("/configs", response_model=list[ScheduleConfigRead])
 def list_configs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[dict]:
-    rows = db.query(SchedulingConfig).order_by(SchedulingConfig.config_id).all()
-    return jsonable_encoder(rows)
+) -> list[ScheduleConfigRead]:
+    offset = (page - 1) * page_size
+    rows = (
+        db.query(SchedulingConfig)
+        .order_by(SchedulingConfig.config_id.desc())
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
+    return [ScheduleConfigRead.model_validate(row) for row in rows]
 
 
-@router.put("/configs/{config_id}")
+@router.get("/configs/{config_id}", response_model=ScheduleConfigRead)
+def get_config(
+    config_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> ScheduleConfigRead:
+    config = db.query(SchedulingConfig).filter(SchedulingConfig.config_id == config_id).first()
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    return ScheduleConfigRead.model_validate(config)
+
+
+@router.put("/configs/{config_id}", response_model=ScheduleConfigRead)
 def update_config(
     config_id: int,
     payload: ScheduleConfigUpdate,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden")),
-) -> dict:
+) -> ScheduleConfigRead:
     config = db.query(SchedulingConfig).filter(SchedulingConfig.config_id == config_id).first()
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
@@ -56,7 +73,35 @@ def update_config(
     config.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(config)
-    return jsonable_encoder(config)
+    return ScheduleConfigRead.model_validate(config)
+
+
+@router.get("/", response_model=list[ScheduleRead])
+def list_schedules(
+    target_date: date | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[ScheduleRead]:
+    query = db.query(Schedule)
+    if target_date:
+        query = query.filter(cast(Schedule.start_time, SQLDate) == target_date)
+    offset = (page - 1) * page_size
+    rows = query.order_by(Schedule.schedule_id.desc()).offset(offset).limit(page_size).all()
+    return [ScheduleRead.model_validate(row) for row in rows]
+
+
+@router.get("/{schedule_id}", response_model=ScheduleRead)
+def get_schedule(
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> ScheduleRead:
+    schedule = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return ScheduleRead.model_validate(schedule)
 
 
 def _fallback_schedule(prisoners: list[Prisoner], projects: list[LaborProject], shifts: list[Shift], target_date: date) -> list[dict]:
@@ -82,12 +127,12 @@ def _fallback_schedule(prisoners: list[Prisoner], projects: list[LaborProject], 
     return entries
 
 
-@router.post("/generate")
+@router.post("/generate", response_model=ScheduleGenerateResponse)
 def generate_schedule(
     payload: ScheduleGenerateRequest,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden")),
-) -> dict:
+) -> ScheduleGenerateResponse:
     config = db.query(SchedulingConfig).filter(SchedulingConfig.config_id == payload.config_id).first()
     if not config:
         raise HTTPException(status_code=404, detail="Config not found")
@@ -192,21 +237,61 @@ def generate_schedule(
     config.updated_at = datetime.now(timezone.utc)
     db.commit()
 
-    return {
-        "detail": "Schedule generated",
-        "count": len(to_insert),
-        "target_date": target_date.isoformat(),
-        "ai_meta": ai_result.get("meta", {}),
-    }
+    return ScheduleGenerateResponse(
+        detail="Schedule generated",
+        count=len(to_insert),
+        target_date=target_date.isoformat(),
+        ai_meta=ai_result.get("meta", {}),
+    )
 
 
-@router.get("/daily")
+@router.put("/{schedule_id}", response_model=ScheduleRead)
+def update_schedule(
+    schedule_id: int,
+    payload: ScheduleUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden")),
+) -> ScheduleRead:
+    schedule = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    if "prisoner_id" in data:
+        prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == data["prisoner_id"]).first()
+        if not prisoner:
+            raise HTTPException(status_code=404, detail="Prisoner not found")
+    if "project_id" in data and data["project_id"] is not None:
+        project = db.query(LaborProject).filter(LaborProject.project_id == data["project_id"]).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    if "location_id" in data and data["location_id"] is not None:
+        location = db.query(Location).filter(Location.location_id == data["location_id"]).first()
+        if not location:
+            raise HTTPException(status_code=404, detail="Location not found")
+    if "shift_id" in data:
+        shift = db.query(Shift).filter(Shift.shift_id == data["shift_id"]).first()
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+
+    for field, value in data.items():
+        setattr(schedule, field, value)
+    if schedule.start_time and schedule.end_time and schedule.end_time < schedule.start_time:
+        raise HTTPException(status_code=400, detail="End time must be after start time")
+
+    schedule.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(schedule)
+    return ScheduleRead.model_validate(schedule)
+
+
+@router.get("/daily", response_model=ScheduleDailyResponse)
 def get_daily_schedule(
     target_date: date,
-    group_by: str = "location",
+    group_by: Literal["location", "project"] = "location",
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> dict:
+) -> ScheduleDailyResponse:
     rows = (
         db.query(
             Schedule.schedule_id,
@@ -232,4 +317,23 @@ def get_daily_schedule(
         key = data.get(key_name) or "Unassigned"
         grouped.setdefault(key, []).append(data)
 
-    return {"target_date": target_date.isoformat(), "group_by": group_by, "groups": grouped}
+    return ScheduleDailyResponse(
+        target_date=target_date.isoformat(),
+        group_by=group_by,
+        groups=grouped,
+    )
+
+
+@router.delete("/{schedule_id}", response_model=MessageResponse)
+def delete_schedule(
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden")),
+) -> MessageResponse:
+    schedule = db.query(Schedule).filter(Schedule.schedule_id == schedule_id).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+
+    db.delete(schedule)
+    db.commit()
+    return MessageResponse(detail="Schedule deleted")

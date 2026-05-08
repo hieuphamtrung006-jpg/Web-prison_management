@@ -39,7 +39,7 @@
     {
       "name": "List Users",
       "method": "GET",
-      "path": "/users?active_only=true",
+      "path": "/users?active_only=true&page=1&page_size=20",
       "headers": {
         "Authorization": "Bearer {{token}}"
       },
@@ -54,6 +54,23 @@
           "is_active": true
         }
       ]
+    },
+    {
+      "name": "Get User",
+      "method": "GET",
+      "path": "/users/{user_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "user_id": 1,
+        "username": "admin_master",
+        "full_name": "He Thong Admin",
+        "role": "Admin",
+        "email": "admin_master@prison.gov.vn",
+        "phone": "0900000001",
+        "is_active": true
+      }
     },
     {
       "name": "Create User",
@@ -104,20 +121,20 @@
       }
     },
     {
-      "name": "Deactivate User",
+      "name": "Delete User",
       "method": "DELETE",
       "path": "/users/{user_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       },
       "response200": {
-        "detail": "User deactivated"
+        "detail": "User deleted"
       }
     },
     {
       "name": "List Prisoners",
       "method": "GET",
-      "path": "/prisoners?name=&risk_level=&location_id=",
+      "path": "/prisoners?name=&risk_level=&location_id=&page=1&page_size=20",
       "headers": {
         "Authorization": "Bearer {{token}}"
       },
@@ -225,20 +242,28 @@
       }
     },
     {
-      "name": "Release Prisoner",
+      "name": "Delete Prisoner",
       "method": "DELETE",
       "path": "/prisoners/{prisoner_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       },
       "response200": {
-        "detail": "Prisoner released"
+        "detail": "Prisoner deleted"
       }
     },
     {
       "name": "List Incidents",
       "method": "GET",
-      "path": "/incidents",
+      "path": "/incidents?page=1&page_size=20",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Get Incident",
+      "method": "GET",
+      "path": "/incidents/{incident_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       }
@@ -262,9 +287,42 @@
       }
     },
     {
+      "name": "Update Incident",
+      "method": "PUT",
+      "path": "/incidents/{incident_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "severity": "Medium",
+        "penalty_points": 5,
+        "description": "Dieu chinh muc phat"
+      }
+    },
+    {
+      "name": "Delete Incident",
+      "method": "DELETE",
+      "path": "/incidents/{incident_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "detail": "Incident deleted"
+      }
+    },
+    {
       "name": "List Visits",
       "method": "GET",
-      "path": "/visits?status_filter=Pending&today_only=true",
+      "path": "/visits?status_filter=Pending&today_only=true&page=1&page_size=20",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Get Visit",
+      "method": "GET",
+      "path": "/visits/{visit_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       }
@@ -293,9 +351,33 @@
       }
     },
     {
+      "name": "Update Visit",
+      "method": "PUT",
+      "path": "/visits/{visit_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "status": "Approved",
+        "notes": "Cap nhat ghi chu"
+      }
+    },
+    {
+      "name": "Delete Visit",
+      "method": "DELETE",
+      "path": "/visits/{visit_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "detail": "Visit deleted"
+      }
+    },
+    {
       "name": "List Locations",
       "method": "GET",
-      "path": "/locations",
+      "path": "/locations?page=1&page_size=20",
       "headers": {
         "Authorization": "Bearer {{token}}"
       },
@@ -310,6 +392,14 @@
           "current_occupancy": 3
         }
       ]
+    },
+    {
+      "name": "Get Location",
+      "method": "GET",
+      "path": "/locations/{location_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
     },
     {
       "name": "Create Location",
@@ -341,9 +431,28 @@
       }
     },
     {
+      "name": "Delete Location",
+      "method": "DELETE",
+      "path": "/locations/{location_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "detail": "Location deleted"
+      }
+    },
+    {
       "name": "Labor Projects Missing Workers",
       "method": "GET",
-      "path": "/labor/projects?on_date=2026-04-23",
+      "path": "/labor/projects?on_date=2026-04-23&page=1&page_size=20",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Get Labor Project",
+      "method": "GET",
+      "path": "/labor/projects/{project_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       }
@@ -364,6 +473,14 @@
       }
     },
     {
+      "name": "Get Labor Assignment",
+      "method": "GET",
+      "path": "/labor/assignments/{assignment_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
       "name": "Create Daily Performance",
       "method": "POST",
       "path": "/labor/performance",
@@ -377,6 +494,14 @@
         "work_date": "2026-04-22",
         "productivity": 82.5,
         "notes": "Tot"
+      }
+    },
+    {
+      "name": "Get Daily Performance",
+      "method": "GET",
+      "path": "/labor/performance/{performance_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
       }
     },
     {
@@ -396,7 +521,15 @@
     {
       "name": "List Shifts",
       "method": "GET",
-      "path": "/shifts",
+      "path": "/shifts?page=1&page_size=20",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Get Shift",
+      "method": "GET",
+      "path": "/shifts/{shift_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       }
@@ -404,7 +537,15 @@
     {
       "name": "List Schedule Configs",
       "method": "GET",
-      "path": "/schedules/configs",
+      "path": "/schedules/configs?page=1&page_size=20",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Get Schedule Config",
+      "method": "GET",
+      "path": "/schedules/configs/{config_id}",
       "headers": {
         "Authorization": "Bearer {{token}}"
       }
@@ -422,6 +563,22 @@
         "weight_security": 0.3,
         "weight_rehab": 0.2,
         "parameters": "{\"PopulationSize\": 100, \"Generations\": 200, \"MutationRate\": 0.06}"
+      }
+    },
+    {
+      "name": "List Schedules",
+      "method": "GET",
+      "path": "/schedules?page=1&page_size=20",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      }
+    },
+    {
+      "name": "Get Schedule",
+      "method": "GET",
+      "path": "/schedules/{schedule_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
       }
     },
     {
@@ -448,6 +605,29 @@
           "best_fitness": 1234.5,
           "schedule_rows": 1610
         }
+      }
+    },
+    {
+      "name": "Update Schedule",
+      "method": "PUT",
+      "path": "/schedules/{schedule_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}",
+        "Content-Type": "application/json"
+      },
+      "requestBody": {
+        "status": "Completed"
+      }
+    },
+    {
+      "name": "Delete Schedule",
+      "method": "DELETE",
+      "path": "/schedules/{schedule_id}",
+      "headers": {
+        "Authorization": "Bearer {{token}}"
+      },
+      "response200": {
+        "detail": "Schedule deleted"
       }
     },
     {

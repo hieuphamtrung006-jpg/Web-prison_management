@@ -5,20 +5,26 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_roles
-from app.db.models.labor import LaborAssignment, LaborProject
+from app.db.models.incident import Incident
+from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
+from app.db.models.schedule import Schedule
 from app.db.models.user import User
+from app.db.models.visit import Visit
+from app.schemas.common import MessageResponse
 from app.schemas.prisoner import PrisonerCreate, PrisonerDetail, PrisonerRead, PrisonerUpdate
 
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=list[PrisonerRead])
 def list_prisoners(
-    name: str | None = Query(default=None),
-    risk_level: str | None = Query(default=None),
+    name: str | None = Query(default=None, min_length=1, max_length=100),
+    risk_level: str | None = Query(default=None, max_length=20),
     location_id: int | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> list[PrisonerRead]:
@@ -29,7 +35,8 @@ def list_prisoners(
         query = query.filter(Prisoner.risk_level == risk_level)
     if location_id is not None:
         query = query.filter(Prisoner.current_location_id == location_id)
-    return query.order_by(Prisoner.prisoner_id.desc()).all()
+    offset = (page - 1) * page_size
+    return query.order_by(Prisoner.prisoner_id.desc()).offset(offset).limit(page_size).all()
 
 
 @router.post("/", response_model=PrisonerRead, status_code=status.HTTP_201_CREATED)
@@ -129,17 +136,32 @@ def update_prisoner(
     return prisoner
 
 
-@router.delete("/{prisoner_id}")
-def release_prisoner(
+@router.delete("/{prisoner_id}", response_model=MessageResponse)
+def delete_prisoner(
     prisoner_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden")),
-) -> dict[str, str]:
+) -> MessageResponse:
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
 
-    prisoner.status = "Released"
-    prisoner.updated_at = datetime.now(timezone.utc)
+    has_incidents = db.query(Incident.incident_id).filter(Incident.prisoner_id == prisoner_id).first()
+    has_visits = db.query(Visit.visit_id).filter(Visit.prisoner_id == prisoner_id).first()
+    has_assignments = (
+        db.query(LaborAssignment.assignment_id)
+        .filter(LaborAssignment.prisoner_id == prisoner_id)
+        .first()
+    )
+    has_performance = (
+        db.query(DailyPerformance.performance_id)
+        .filter(DailyPerformance.prisoner_id == prisoner_id)
+        .first()
+    )
+    has_schedules = db.query(Schedule.schedule_id).filter(Schedule.prisoner_id == prisoner_id).first()
+    if has_incidents or has_visits or has_assignments or has_performance or has_schedules:
+        raise HTTPException(status_code=400, detail="Prisoner has related records and cannot be deleted")
+
+    db.delete(prisoner)
     db.commit()
-    return {"detail": "Prisoner released"}
+    return MessageResponse(detail="Prisoner deleted")

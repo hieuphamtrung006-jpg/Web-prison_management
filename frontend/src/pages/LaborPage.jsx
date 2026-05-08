@@ -20,11 +20,13 @@ export default function LaborPage() {
   const [projects, setProjects] = useState([]);
   const [assignForm, setAssignForm] = useState(assignInit);
   const [perfForm, setPerfForm] = useState(perfInit);
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
   const [error, setError] = useState("");
 
   const load = async () => {
     try {
-      const response = await api.get("/labor/projects");
+      const response = await api.get(`/labor/projects?page=${page}&page_size=${pageSize}`);
       setProjects(response.data);
     } catch (err) {
       setError(parseApiError(err));
@@ -33,7 +35,7 @@ export default function LaborPage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [page]);
 
   const createAssignment = async (e) => {
     e.preventDefault();
@@ -71,6 +73,11 @@ export default function LaborPage() {
       <section className="panel">
         <h2>Projects Missing Workers</h2>
         {error && <p className="error-msg">{error}</p>}
+        <div className="inline-form">
+          <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+          <span className="muted">Page {page}</span>
+          <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Next</button>
+        </div>
         <div className="table-wrap">
           <table>
             <thead><tr><th>Project</th><th>Current</th><th>Max</th><th>Open</th></tr></thead>

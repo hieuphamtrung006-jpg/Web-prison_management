@@ -1,9 +1,7 @@
 from datetime import timedelta
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -16,26 +14,13 @@ from app.core.security import (
     verify_password,
 )
 from app.db.models.user import User
+from app.schemas.auth import LoginRequest, SignUpRequest, SignUpResponse, TokenResponse, UserProfile
 
 router = APIRouter()
 optional_bearer = HTTPBearer(auto_error=False)
 
 ALLOWED_ROLES = {"Admin", "Warden", "Guard", "Viewer"}
 PRIVILEGED_SIGNUP_ROLES = {"Admin", "Warden", "Guard"}
-
-
-class LoginRequest(BaseModel):
-    username: str
-    password: str
-
-
-class SignUpRequest(BaseModel):
-    username: str
-    password: str
-    full_name: str
-    role: Literal["Admin", "Warden", "Guard", "Viewer"] = "Viewer"
-    email: str | None = None
-    phone: str | None = None
 
 
 def _resolve_token_user(
@@ -57,8 +42,8 @@ def _resolve_token_user(
     return db.query(User).filter(User.username == username, User.is_active == True).first()
 
 
-@router.post("/login")
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict:
+@router.post("/login", response_model=TokenResponse)
+def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = (
       db.query(User)
       .filter(User.username == payload.username, User.is_active == True)
@@ -76,15 +61,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> dict:
         role=user.role,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
-    return {"access_token": token, "token_type": "bearer"}
+    return TokenResponse(access_token=token)
 
 
-@router.post("/signup", status_code=status.HTTP_201_CREATED)
+@router.post("/signup", response_model=SignUpResponse, status_code=status.HTTP_201_CREATED)
 def signup(
     payload: SignUpRequest,
     db: Session = Depends(get_db),
     credentials: HTTPAuthorizationCredentials | None = Security(optional_bearer),
-) -> dict:
+) -> SignUpResponse:
     if payload.role not in ALLOWED_ROLES:
         raise HTTPException(status_code=400, detail="Invalid role")
 
@@ -118,21 +103,14 @@ def signup(
         role=user.role,
         expires_delta=timedelta(minutes=settings.access_token_expire_minutes),
     )
-    return {
-        "user_id": user.user_id,
-        "username": user.username,
-        "role": user.role,
-        "access_token": token,
-        "token_type": "bearer",
-    }
+    return SignUpResponse(
+        user_id=user.user_id,
+        username=user.username,
+        role=user.role,
+        access_token=token,
+    )
 
 
-@router.get("/me")
-def me(current_user: User = Depends(get_current_user)) -> dict:
-    return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
-        "full_name": current_user.full_name,
-        "role": current_user.role,
-        "is_active": current_user.is_active,
-    }
+@router.get("/me", response_model=UserProfile)
+def me(current_user: User = Depends(get_current_user)) -> UserProfile:
+    return UserProfile.model_validate(current_user)

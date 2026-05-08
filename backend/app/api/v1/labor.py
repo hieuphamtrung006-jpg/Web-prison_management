@@ -1,9 +1,6 @@
 from datetime import date, timedelta
-from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -11,31 +8,27 @@ from app.core.deps import get_current_user, get_db, require_roles
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
 from app.db.models.prisoner import Prisoner
 from app.db.models.user import User
+from app.schemas.labor import (
+    AssignmentCreate,
+    AssignmentRead,
+    LaborProjectRead,
+    LaborProjectSummary,
+    PerformanceCreate,
+    PerformanceRead,
+    PrisonerPerformancePoint,
+)
 
 router = APIRouter()
 
 
-class AssignmentCreate(BaseModel):
-    prisoner_id: int
-    project_id: int
-    assignment_date: date
-    hours_assigned: Decimal
-
-
-class PerformanceCreate(BaseModel):
-    prisoner_id: int
-    project_id: int
-    work_date: date
-    productivity: Decimal
-    notes: str | None = None
-
-
-@router.get("/projects")
+@router.get("/projects", response_model=list[LaborProjectSummary])
 def list_projects_missing_workers(
     on_date: date | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[dict]:
+) -> list[LaborProjectSummary]:
     target_date = on_date or date.today()
     assignment_subquery = (
         db.query(
@@ -56,6 +49,7 @@ def list_projects_missing_workers(
         )
         .outerjoin(assignment_subquery, assignment_subquery.c.project_id == LaborProject.project_id)
         .filter(LaborProject.is_active.is_(True))
+        .order_by(LaborProject.project_id.desc())
         .all()
     )
 
@@ -72,15 +66,33 @@ def list_projects_missing_workers(
                     "open_slots": open_slots,
                 }
             )
-    return result
+    offset = (page - 1) * page_size
+    paged = result[offset : offset + page_size]
+    return [LaborProjectSummary(**item) for item in paged]
 
 
-@router.post("/assignments", status_code=status.HTTP_201_CREATED)
+@router.get("/projects/{project_id}", response_model=LaborProjectRead)
+def get_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> LaborProjectRead:
+    project = db.query(LaborProject).filter(LaborProject.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return LaborProjectRead.model_validate(project)
+
+
+@router.post("/assignments", response_model=AssignmentRead, status_code=status.HTTP_201_CREATED)
 def create_assignment(
     payload: AssignmentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> dict:
+) -> AssignmentRead:
+    prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
+    if not prisoner:
+        raise HTTPException(status_code=404, detail="Prisoner not found")
+
     project = db.query(LaborProject).filter(LaborProject.project_id == payload.project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -106,15 +118,35 @@ def create_assignment(
     db.add(assignment)
     db.commit()
     db.refresh(assignment)
-    return jsonable_encoder(assignment)
+    return AssignmentRead.model_validate(assignment)
 
 
-@router.post("/performance", status_code=status.HTTP_201_CREATED)
+@router.get("/assignments/{assignment_id}", response_model=AssignmentRead)
+def get_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> AssignmentRead:
+    assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return AssignmentRead.model_validate(assignment)
+
+
+@router.post("/performance", response_model=PerformanceRead, status_code=status.HTTP_201_CREATED)
 def create_performance(
     payload: PerformanceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> dict:
+) -> PerformanceRead:
+    prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
+    if not prisoner:
+        raise HTTPException(status_code=404, detail="Prisoner not found")
+
+    project = db.query(LaborProject).filter(LaborProject.project_id == payload.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
     performance = DailyPerformance(
         prisoner_id=payload.prisoner_id,
         project_id=payload.project_id,
@@ -131,21 +163,32 @@ def create_performance(
         .filter(DailyPerformance.prisoner_id == payload.prisoner_id)
         .scalar()
     )
-    prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
-    if prisoner and avg_score is not None:
+    if avg_score is not None:
         prisoner.productivity_score = avg_score
 
     db.commit()
     db.refresh(performance)
-    return jsonable_encoder(performance)
+    return PerformanceRead.model_validate(performance)
 
 
-@router.get("/performance/prisoner/{prisoner_id}")
+@router.get("/performance/{performance_id}", response_model=PerformanceRead)
+def get_performance(
+    performance_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> PerformanceRead:
+    performance = db.query(DailyPerformance).filter(DailyPerformance.performance_id == performance_id).first()
+    if not performance:
+        raise HTTPException(status_code=404, detail="Performance not found")
+    return PerformanceRead.model_validate(performance)
+
+
+@router.get("/performance/prisoner/{prisoner_id}", response_model=list[PrisonerPerformancePoint])
 def get_prisoner_performance_30_days(
     prisoner_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[dict]:
+) -> list[PrisonerPerformancePoint]:
     start_date = date.today() - timedelta(days=30)
     rows = (
         db.query(DailyPerformance.work_date, DailyPerformance.productivity)
@@ -156,4 +199,7 @@ def get_prisoner_performance_30_days(
         .order_by(DailyPerformance.work_date.asc())
         .all()
     )
-    return [{"work_date": str(row.work_date), "productivity": float(row.productivity)} for row in rows]
+    return [
+        PrisonerPerformancePoint(work_date=row.work_date, productivity=float(row.productivity))
+        for row in rows
+    ]
