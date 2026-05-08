@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+
+# Logs
+*.log
+backend.log
+
+# Frontend dependencies and caches
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Build and cache artifacts
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Local/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Generated project exports
+repomix-output.xml
