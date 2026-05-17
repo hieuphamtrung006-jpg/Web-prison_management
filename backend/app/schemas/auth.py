@@ -27,6 +27,7 @@ class TokenResponse(BaseModel):
 class SignUpResponse(TokenResponse):
     user_id: int
     username: str
+    full_name: str
     role: RoleName
 
 
