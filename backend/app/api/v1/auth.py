@@ -106,6 +106,7 @@ def signup(
     return SignUpResponse(
         user_id=user.user_id,
         username=user.username,
+        full_name=user.full_name,
         role=user.role,
         access_token=token,
     )

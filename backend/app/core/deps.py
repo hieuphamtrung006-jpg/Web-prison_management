@@ -46,12 +46,13 @@ def get_current_user(
 
 def require_roles(*roles: str) -> Callable:
     normalized = {role.lower() for role in roles}
+    required_roles = ", ".join(sorted(roles))
 
     def _role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role.lower() not in normalized:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action",
+                detail=f"Insufficient permissions. Required roles: {required_roles}",
             )
         return current_user
 
