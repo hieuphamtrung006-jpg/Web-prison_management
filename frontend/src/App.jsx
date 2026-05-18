@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RoleBasedRoute from "./components/RoleBasedRoute";
 import DashboardPage from "./pages/DashboardPage";
 import IncidentsPage from "./pages/IncidentsPage";
 import LaborPage from "./pages/LaborPage";
@@ -25,7 +26,16 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<WithLayout><DashboardPage /></WithLayout>} />
-      <Route path="/users" element={<WithLayout><UsersPage /></WithLayout>} />
+      <Route
+        path="/users"
+        element={
+          <WithLayout>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden"]}>
+              <UsersPage />
+            </RoleBasedRoute>
+          </WithLayout>
+        }
+      />
       <Route path="/prisoners" element={<WithLayout><PrisonersPage /></WithLayout>} />
       <Route path="/locations" element={<WithLayout><LocationsPage /></WithLayout>} />
       <Route path="/incidents" element={<WithLayout><IncidentsPage /></WithLayout>} />
