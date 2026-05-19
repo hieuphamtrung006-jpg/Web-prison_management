@@ -10,171 +10,347 @@ const initialForm = {
   password: "",
 };
 
-export default function UsersPage() {
-  const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(initialForm);
-  const [updateForm, setUpdateForm] = useState({
-    user_id: "",
-    full_name: "",
-    role: "",
-    email: "",
-    phone: "",
+function Toast({ message, type = "info", onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return <div className={`toast toast-${type}`}>{message}</div>;
+}
+
+function UserEditModal({ user, onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    full_name: user?.full_name || "",
+    role: user?.role || "Guard",
+    email: user?.email || "",
+    phone: user?.phone || "",
     password: "",
-    is_active: "",
+    is_active: user?.is_active ?? true,
   });
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    try {
-      const response = await api.get(`/users?active_only=true&page=${page}&page_size=${pageSize}`);
-      setRows(response.data);
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
   useEffect(() => {
-    load();
-  }, [page]);
+    setForm({
+      full_name: user?.full_name || "",
+      role: user?.role || "Guard",
+      email: user?.email || "",
+      phone: user?.phone || "",
+      password: "",
+      is_active: user?.is_active ?? true,
+    });
+    setError("");
+  }, [user]);
 
-  const createUser = async (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setLoading(true);
     setError("");
-    try {
-      await api.post("/users", form);
-      setForm(initialForm);
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
-  const updateUser = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (!updateForm.user_id) {
-      setError("User ID is required");
-      return;
-    }
-
-    const payload = {};
-    if (updateForm.full_name) payload.full_name = updateForm.full_name;
-    if (updateForm.role) payload.role = updateForm.role;
-    if (updateForm.email) payload.email = updateForm.email;
-    if (updateForm.phone) payload.phone = updateForm.phone;
-    if (updateForm.password) payload.password = updateForm.password;
-    if (updateForm.is_active !== "") payload.is_active = updateForm.is_active === "true";
 
     try {
-      await api.put(`/users/${Number(updateForm.user_id)}`, payload);
-      setUpdateForm({
-        user_id: "",
-        full_name: "",
-        role: "",
-        email: "",
-        phone: "",
-        password: "",
-        is_active: "",
-      });
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
+      const payload = {
+        full_name: form.full_name,
+        role: form.role,
+        email: form.email || null,
+        phone: form.phone || null,
+        is_active: form.is_active,
+      };
 
-  const deleteUser = async (userId) => {
-    const confirmed = window.confirm("Delete this user permanently?");
-    if (!confirmed) return;
-    setError("");
-    try {
-      await api.delete(`/users/${userId}`);
-      await load();
+      if (form.password) {
+        payload.password = form.password;
+      }
+
+      await api.put(`/users/${user.user_id}`, payload);
+      showToast("User updated successfully", "success");
+      onSaved();
+      onClose();
     } catch (err) {
-      setError(parseApiError(err));
+      const errorMsg = parseApiError(err);
+      setError(errorMsg);
+      showToast(errorMsg, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="split-grid">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit User: {user?.username}</h3>
+          <button className="close-btn" type="button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label>
+            Full name
+            <input
+              value={form.full_name}
+              onChange={(event) => setForm({ ...form, full_name: event.target.value })}
+              required
+            />
+          </label>
+
+          <label>
+            Role
+            <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+              <option>Admin</option>
+              <option>Warden</option>
+              <option>Guard</option>
+              <option>Viewer</option>
+            </select>
+          </label>
+
+          <label>
+            Email
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => setForm({ ...form, email: event.target.value })}
+            />
+          </label>
+
+          <label>
+            Phone
+            <input
+              value={form.phone}
+              onChange={(event) => setForm({ ...form, phone: event.target.value })}
+            />
+          </label>
+
+          <label>
+            New password
+            <input
+              type="password"
+              value={form.password}
+              onChange={(event) => setForm({ ...form, password: event.target.value })}
+              placeholder="Leave blank to keep current password"
+            />
+          </label>
+
+          <label>
+            <input
+              type="checkbox"
+              checked={form.is_active}
+              onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+            />
+            Active
+          </label>
+
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? "Saving..." : "Save"}
+            </button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function UsersPage() {
+  const [rows, setRows] = useState([]);
+  const [form, setForm] = useState(initialForm);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+  const [editingUser, setEditingUser] = useState(null);
+
+  const pageSize = 20;
+
+  const showToast = (message, type = "info") => {
+    setToast({ message, type });
+  };
+
+  const load = async (pageNumber = page) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await api.get(`/users?active_only=true&page=${pageNumber}&page_size=${pageSize}`);
+      setRows(response.data);
+    } catch (err) {
+      const errorMsg = parseApiError(err);
+      setError(errorMsg);
+      showToast(errorMsg, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load(page);
+  }, [page]);
+
+  const createUser = async (event) => {
+    event.preventDefault();
+    setCreating(true);
+    setError("");
+
+    try {
+      await api.post("/users", form);
+      setForm(initialForm);
+      showToast("User created successfully", "success");
+
+      if (page === 1) {
+        await load(1);
+      } else {
+        setPage(1);
+      }
+    } catch (err) {
+      const errorMsg = parseApiError(err);
+      setError(errorMsg);
+      showToast(errorMsg, "error");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteUser = async (userId, username) => {
+    const confirmed = window.confirm(`Delete user "${username}" permanently? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setError("");
+
+    try {
+      await api.delete(`/users/${userId}`);
+      showToast("User deleted successfully", "success");
+      await load(page);
+    } catch (err) {
+      const errorMsg = parseApiError(err);
+      setError(errorMsg);
+      showToast(errorMsg, "error");
+    }
+  };
+
+  return (
+    <div className="split-grid users-page">
       <section className="panel">
         <h2>Users</h2>
-        {error && <p className="error-msg">{error}</p>}
-        <div className="inline-form">
-          <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+        {error && <div className="error-msg">{error}</div>}
+
+        <div className="inline-form pagination">
+          <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}>
+            Prev
+          </button>
           <span className="muted">Page {page}</span>
-          <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Next</button>
+          <button className="secondary-btn" disabled={loading} onClick={() => setPage((currentPage) => currentPage + 1)}>
+            Next
+          </button>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Username</th>
-                <th>Full name</th>
-                <th>Role</th>
-                <th>Email</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.user_id}>
-                  <td>{row.user_id}</td>
-                  <td>{row.username}</td>
-                  <td>{row.full_name}</td>
-                  <td>{row.role}</td>
-                  <td>{row.email || "-"}</td>
-                  <td><button className="danger-btn" onClick={() => deleteUser(row.user_id)}>Delete</button></td>
+
+        {loading ? (
+          <div className="loading-state">
+            <div className="spinner" />
+            <p>Loading users...</p>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="loading-state">
+            <p>No users found</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Username</th>
+                  <th>Full name</th>
+                  <th>Role</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.user_id}>
+                    <td>{row.user_id}</td>
+                    <td>{row.username}</td>
+                    <td>{row.full_name}</td>
+                    <td>{row.role}</td>
+                    <td>{row.email || "-"}</td>
+                    <td>
+                      <span className={`status-badge ${row.is_active ? "status-active" : "status-inactive"}`}>
+                        {row.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="table-actions">
+                        <button className="btn-sm btn-edit" type="button" onClick={() => setEditingUser(row)}>
+                          Edit
+                        </button>
+                        <button className="btn-sm btn-delete" type="button" onClick={() => deleteUser(row.user_id, row.username)}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="panel">
         <h2>Create user</h2>
         <form className="form-grid" onSubmit={createUser}>
-          <label>Username<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></label>
-          <label>Full name<input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required /></label>
-          <label>Role
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Admin</option><option>Warden</option><option>Guard</option><option>Viewer</option>
+          <label>
+            Username
+            <input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} required />
+          </label>
+          <label>
+            Full name
+            <input value={form.full_name} onChange={(event) => setForm({ ...form, full_name: event.target.value })} required />
+          </label>
+          <label>
+            Role
+            <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })}>
+              <option>Admin</option>
+              <option>Warden</option>
+              <option>Guard</option>
+              <option>Viewer</option>
             </select>
           </label>
-          <label>Email<input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
-          <label>Phone<input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
-          <label>Password<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required /></label>
-          <button className="primary-btn" type="submit">Create</button>
+          <label>
+            Email
+            <input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+          </label>
+          <label>
+            Phone
+            <input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} />
+          </label>
+          <label>
+            Password
+            <input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} required />
+          </label>
+          <button className="primary-btn" type="submit" disabled={creating}>
+            {creating ? "Creating..." : "Create"}
+          </button>
         </form>
       </section>
 
-      <section className="panel">
-        <h2>Update user</h2>
-        <form className="form-grid" onSubmit={updateUser}>
-          <label>User ID<input type="number" value={updateForm.user_id} onChange={(e) => setUpdateForm({ ...updateForm, user_id: e.target.value })} required /></label>
-          <label>Full name<input value={updateForm.full_name} onChange={(e) => setUpdateForm({ ...updateForm, full_name: e.target.value })} /></label>
-          <label>Role
-            <select value={updateForm.role} onChange={(e) => setUpdateForm({ ...updateForm, role: e.target.value })}>
-              <option value="">(no change)</option>
-              <option>Admin</option><option>Warden</option><option>Guard</option><option>Viewer</option>
-            </select>
-          </label>
-          <label>Email<input value={updateForm.email} onChange={(e) => setUpdateForm({ ...updateForm, email: e.target.value })} /></label>
-          <label>Phone<input value={updateForm.phone} onChange={(e) => setUpdateForm({ ...updateForm, phone: e.target.value })} /></label>
-          <label>Password<input type="password" value={updateForm.password} onChange={(e) => setUpdateForm({ ...updateForm, password: e.target.value })} /></label>
-          <label>Active
-            <select value={updateForm.is_active} onChange={(e) => setUpdateForm({ ...updateForm, is_active: e.target.value })}>
-              <option value="">(no change)</option>
-              <option value="true">true</option>
-              <option value="false">false</option>
-            </select>
-          </label>
-          <button className="primary-btn" type="submit">Update</button>
-        </form>
-      </section>
+      {editingUser && (
+        <UserEditModal
+          user={editingUser}
+          onClose={() => setEditingUser(null)}
+          showToast={showToast}
+          onSaved={() => load(page)}
+        />
+      )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
