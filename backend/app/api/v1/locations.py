@@ -74,6 +74,8 @@ def create_location(
     _: User = Depends(require_roles("Admin", "Warden")),
 ) -> LocationRead:
     location = Location(**payload.model_dump())
+    # ensure created_at is set (DB has server_default but set here for immediate value)
+    location.created_at = datetime.now(timezone.utc)
     db.add(location)
     db.commit()
     db.refresh(location)
@@ -91,7 +93,21 @@ def update_location(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    update_data = payload.model_dump(exclude_unset=True)
+    # If capacity is being reduced, ensure it is not less than current occupancy
+    if "capacity" in update_data and update_data["capacity"] is not None:
+        current_occupancy = (
+            db.query(func.count(Prisoner.prisoner_id))
+            .filter(Prisoner.current_location_id == location_id, Prisoner.status != "Released")
+            .scalar()
+        ) or 0
+        if update_data["capacity"] < current_occupancy:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Capacity cannot be reduced below current occupancy ({current_occupancy})",
+            )
+
+    for field, value in update_data.items():
         setattr(location, field, value)
     location.updated_at = datetime.now(timezone.utc)
 

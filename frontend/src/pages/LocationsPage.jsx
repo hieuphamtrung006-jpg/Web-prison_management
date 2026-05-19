@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 const initialForm = {
   location_name: "",
@@ -9,148 +10,312 @@ const initialForm = {
   is_active: true,
 };
 
-export default function LocationsPage() {
-  const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(initialForm);
-  const [updateForm, setUpdateForm] = useState({
-    location_id: "",
-    location_name: "",
-    type: "",
-    capacity: "",
-    security_level: "",
-    is_active: "",
+function Toast({ message, type = "info", onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return <div className={`toast toast-${type}`}>{message}</div>;
+}
+
+function LocationEditModal({ location, onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    location_name: location?.location_name || "",
+    type: location?.type || "Cell",
+    capacity: location?.capacity || 1,
+    security_level: location?.security_level || "",
+    is_active: location?.is_active ?? true,
   });
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    try {
-      const response = await api.get(`/locations?page=${page}&page_size=${pageSize}`);
-      setRows(response.data);
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
   useEffect(() => {
-    load();
-  }, [page]);
+    setForm({
+      location_name: location?.location_name || "",
+      type: location?.type || "Cell",
+      capacity: location?.capacity || 1,
+      security_level: location?.security_level || "",
+      is_active: location?.is_active ?? true,
+    });
+    setError("");
+  }, [location]);
 
-  const create = async (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setLoading(true);
     setError("");
-    try {
-      await api.post("/locations", { ...form, capacity: Number(form.capacity) });
-      setForm(initialForm);
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
-  const update = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (!updateForm.location_id) {
-      setError("Location ID is required");
-      return;
-    }
-
-    const payload = {};
-    if (updateForm.location_name) payload.location_name = updateForm.location_name;
-    if (updateForm.type) payload.type = updateForm.type;
-    if (updateForm.capacity) payload.capacity = Number(updateForm.capacity);
-    if (updateForm.security_level) payload.security_level = updateForm.security_level;
-    if (updateForm.is_active !== "") payload.is_active = updateForm.is_active === "true";
 
     try {
-      await api.put(`/locations/${Number(updateForm.location_id)}`, payload);
-      setUpdateForm({
-        location_id: "",
-        location_name: "",
-        type: "",
-        capacity: "",
-        security_level: "",
-        is_active: "",
-      });
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
+      const payload = {
+        location_name: form.location_name,
+        type: form.type || null,
+        capacity: Number(form.capacity),
+        security_level: form.security_level || null,
+        is_active: form.is_active,
+      };
 
-  const deleteLocation = async (locationId) => {
-    const confirmed = window.confirm("Delete this location permanently?");
-    if (!confirmed) return;
-    setError("");
-    try {
-      await api.delete(`/locations/${locationId}`);
-      await load();
+      await api.put(`/locations/${location.location_id}`, payload);
+      showToast("Location updated", "success");
+      onSaved();
+      onClose();
     } catch (err) {
-      setError(parseApiError(err));
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="split-grid">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit location: {location?.location_name}</h3>
+          <button className="close-btn" type="button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label>
+            Name
+            <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
+          </label>
+
+          <label>
+            Type
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <option>Cell</option>
+              <option>Workshop</option>
+              <option>Dining</option>
+              <option>Yard</option>
+              <option>Hospital</option>
+            </select>
+          </label>
+
+          <label>
+            Capacity
+            <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
+          </label>
+
+          <label>
+            Security
+            <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
+          </label>
+
+          <label>
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> Active
+          </label>
+
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? "Saving..." : "Save"}
+            </button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function LocationsPage() {
+  const { user } = useAuth();
+  const [rows, setRows] = useState([]);
+  const [form, setForm] = useState(initialForm);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+  const [editing, setEditing] = useState(null);
+
+  const pageSize = 20;
+
+  const showToast = (message, type = "info") => setToast({ message, type });
+
+  const load = async (pageNumber = page) => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await api.get(`/locations?page=${pageNumber}&page_size=${pageSize}`);
+      setRows(res.data);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load(page);
+  }, [page]);
+
+  const createLocation = async (e) => {
+    e.preventDefault();
+    setCreating(true);
+    setError("");
+    try {
+      await api.post("/locations", { ...form, capacity: Number(form.capacity) });
+      setForm(initialForm);
+      showToast("Location created", "success");
+      setPage(1);
+      await load(1);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteLocation = async (loc) => {
+    const confirmed = window.confirm(`Delete location "${loc.location_name}" permanently?`);
+    if (!confirmed) return;
+    setError("");
+    try {
+      await api.delete(`/locations/${loc.location_id}`);
+      showToast("Location deleted", "success");
+      await load(page);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  const canWrite = user?.role === "Admin" || user?.role === "Warden";
+
+  return (
+    <div className="split-grid users-page">
       <section className="panel">
-        <h2>Locations and occupancy</h2>
-        {error && <p className="error-msg">{error}</p>}
-        <div className="inline-form">
-          <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+        <h2>Locations</h2>
+        {error && <div className="error-msg">{error}</div>}
+
+        <div className="inline-form pagination">
+          <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            Prev
+          </button>
           <span className="muted">Page {page}</span>
-          <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Next</button>
+          <button className="secondary-btn" disabled={loading} onClick={() => setPage((p) => p + 1)}>
+            Next
+          </button>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Capacity</th>
-                <th>Occupancy</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.location_id}>
-                  <td>{row.location_name}</td>
-                  <td>{row.type}</td>
-                  <td>{row.capacity}</td>
-                  <td>{row.current_occupancy}</td>
-                  <td><button className="danger-btn" onClick={() => deleteLocation(row.location_id)}>Delete</button></td>
+
+        {loading ? (
+          <div className="loading-state">
+            <div className="spinner" />
+            <p>Loading locations...</p>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="loading-state">
+            <p>No locations found</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Type</th>
+                  <th>Capacity</th>
+                  <th>Occupancy</th>
+                  <th>Rate</th>
+                  <th>Status</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const rate = r.capacity ? (r.current_occupancy / r.capacity) * 100 : 0;
+                  const over = r.current_occupancy > r.capacity;
+                  return (
+                    <tr key={r.location_id}>
+                      <td>{r.location_id}</td>
+                      <td>{r.location_name}</td>
+                      <td>{r.type || "-"}</td>
+                      <td>{r.capacity}</td>
+                      <td>{r.current_occupancy}</td>
+                      <td>{rate.toFixed(1)}%</td>
+                      <td>
+                        <span className={`status-badge ${over ? "status-inactive" : "status-active"}`}>
+                          {over ? "Over Capacity" : "Normal"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="table-actions">
+                          <button className="btn-sm btn-edit" onClick={() => setEditing(r)} disabled={!canWrite}>
+                            Edit
+                          </button>
+                          <button className="btn-sm btn-delete" onClick={() => deleteLocation(r)} disabled={!canWrite}>
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="panel">
         <h2>Create location</h2>
-        <form className="form-grid" onSubmit={create}>
-          <label>Name<input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required /></label>
-          <label>Type<select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}><option>Cell</option><option>Workshop</option><option>Dining</option><option>Yard</option><option>Hospital</option></select></label>
-          <label>Capacity<input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} required /></label>
-          <label>Security<input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Create</button>
+        <form className="form-grid" onSubmit={createLocation}>
+          <label>
+            Name
+            <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
+          </label>
+
+          <label>
+            Type
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <option>Cell</option>
+              <option>Workshop</option>
+              <option>Dining</option>
+              <option>Yard</option>
+              <option>Hospital</option>
+            </select>
+          </label>
+
+          <label>
+            Capacity
+            <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
+          </label>
+
+          <label>
+            Security
+            <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
+          </label>
+
+          <button className="primary-btn" type="submit" disabled={!canWrite || creating}>
+            {creating ? "Creating..." : "Create"}
+          </button>
         </form>
       </section>
 
-      <section className="panel">
-        <h2>Update location</h2>
-        <form className="form-grid" onSubmit={update}>
-          <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} required /></label>
-          <label>Name<input value={updateForm.location_name} onChange={(e) => setUpdateForm({ ...updateForm, location_name: e.target.value })} /></label>
-          <label>Type<select value={updateForm.type} onChange={(e) => setUpdateForm({ ...updateForm, type: e.target.value })}><option value="">(no change)</option><option>Cell</option><option>Workshop</option><option>Dining</option><option>Yard</option><option>Hospital</option></select></label>
-          <label>Capacity<input type="number" value={updateForm.capacity} onChange={(e) => setUpdateForm({ ...updateForm, capacity: e.target.value })} /></label>
-          <label>Security<input value={updateForm.security_level} onChange={(e) => setUpdateForm({ ...updateForm, security_level: e.target.value })} /></label>
-          <label>Active<select value={updateForm.is_active} onChange={(e) => setUpdateForm({ ...updateForm, is_active: e.target.value })}><option value="">(no change)</option><option value="true">true</option><option value="false">false</option></select></label>
-          <button className="primary-btn" type="submit">Update</button>
-        </form>
-      </section>
+      {editing && (
+        <LocationEditModal
+          location={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => load(page)}
+          showToast={showToast}
+        />
+      )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
