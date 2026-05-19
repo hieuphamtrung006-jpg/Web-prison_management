@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -16,14 +18,36 @@ router = APIRouter()
 @router.get("/", response_model=list[UserRead])
 def list_users(
     active_only: bool = True,
+    role: str | None = Query(default=None, description="Filter by user role"),
+    search: str | None = Query(default=None, description="Search by username or full name"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden")),
 ) -> list[User]:
+    """List users with optional filtering and pagination.
+    
+    Args:
+        active_only: Only return active users (default: True)
+        role: Filter by specific role (Admin, Warden, Guard, Viewer)
+        search: Search by username or full name
+        page: Page number (starts at 1)
+        page_size: Items per page (max 100)
+    """
     query = db.query(User)
+    
     if active_only:
         query = query.filter(User.is_active == True)
+    
+    if role:
+        query = query.filter(User.role == role)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            (User.username.ilike(search_term)) | (User.full_name.ilike(search_term))
+        )
+    
     offset = (page - 1) * page_size
     return query.order_by(User.user_id.desc()).offset(offset).limit(page_size).all()
 
