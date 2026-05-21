@@ -9,3 +9,4 @@ PyJWT>=2.9.0
 supabase>=2.7.4
 alembic>=1.13.0
 pyodbc>=5.1.0
+ortools>=9.9.0

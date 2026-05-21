@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 const initialForm = {
   full_name: "",
@@ -15,6 +16,8 @@ const initialForm = {
 };
 
 export default function PrisonersPage() {
+  const { user } = useAuth();
+  const isViewer = user?.role === "Viewer";
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [updateForm, setUpdateForm] = useState({
@@ -124,40 +127,43 @@ export default function PrisonersPage() {
                   <td>{row.risk_level}</td>
                   <td>{row.status}</td>
                   <td>{row.current_location_id ?? "-"}</td>
-                  <td><button className="danger-btn" onClick={() => deletePrisoner(row.prisoner_id)}>Delete</button></td>
+                  <td>{!isViewer && <button className="danger-btn" onClick={() => deletePrisoner(row.prisoner_id)}>Delete</button>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
+      {!isViewer && (
+        <section className="panel">
+          <h2>New prisoner</h2>
+          <form className="form-grid" onSubmit={create}>
+            <label>Full name<input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required /></label>
+            <label>Date of birth<input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} required /></label>
+            <label>Gender<select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}><option>Male</option><option>Female</option><option>Other</option></select></label>
+            <label>Crime type<input value={form.crime_type} onChange={(e) => setForm({ ...form, crime_type: e.target.value })} /></label>
+            <label>Risk<select value={form.risk_level} onChange={(e) => setForm({ ...form, risk_level: e.target.value })}><option>Low</option><option>Medium</option><option>High</option></select></label>
+            <label>Location ID<input type="number" value={form.current_location_id} onChange={(e) => setForm({ ...form, current_location_id: e.target.value })} required /></label>
+            <label>Sentence start<input type="date" value={form.sentence_start} onChange={(e) => setForm({ ...form, sentence_start: e.target.value })} /></label>
+            <label>Sentence end<input type="date" value={form.sentence_end} onChange={(e) => setForm({ ...form, sentence_end: e.target.value })} /></label>
+            <button className="primary-btn" type="submit">Create</button>
+          </form>
+        </section>
+      )}
 
-      <section className="panel">
-        <h2>New prisoner</h2>
-        <form className="form-grid" onSubmit={create}>
-          <label>Full name<input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required /></label>
-          <label>Date of birth<input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} required /></label>
-          <label>Gender<select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}><option>Male</option><option>Female</option><option>Other</option></select></label>
-          <label>Crime type<input value={form.crime_type} onChange={(e) => setForm({ ...form, crime_type: e.target.value })} /></label>
-          <label>Risk<select value={form.risk_level} onChange={(e) => setForm({ ...form, risk_level: e.target.value })}><option>Low</option><option>Medium</option><option>High</option></select></label>
-          <label>Location ID<input type="number" value={form.current_location_id} onChange={(e) => setForm({ ...form, current_location_id: e.target.value })} required /></label>
-          <label>Sentence start<input type="date" value={form.sentence_start} onChange={(e) => setForm({ ...form, sentence_start: e.target.value })} /></label>
-          <label>Sentence end<input type="date" value={form.sentence_end} onChange={(e) => setForm({ ...form, sentence_end: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Create</button>
-        </form>
-      </section>
-
-      <section className="panel">
-        <h2>Update prisoner</h2>
-        <form className="form-grid" onSubmit={update}>
-          <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} required /></label>
-          <label>Full name<input value={updateForm.full_name} onChange={(e) => setUpdateForm({ ...updateForm, full_name: e.target.value })} /></label>
-          <label>Risk<select value={updateForm.risk_level} onChange={(e) => setUpdateForm({ ...updateForm, risk_level: e.target.value })}><option value="">(no change)</option><option>Low</option><option>Medium</option><option>High</option></select></label>
-          <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>InPrison</option><option>Released</option></select></label>
-          <label>Location ID<input type="number" value={updateForm.current_location_id} onChange={(e) => setUpdateForm({ ...updateForm, current_location_id: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Update</button>
-        </form>
-      </section>
+      {!isViewer && (
+        <section className="panel">
+          <h2>Update prisoner</h2>
+          <form className="form-grid" onSubmit={update}>
+            <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} required /></label>
+            <label>Full name<input value={updateForm.full_name} onChange={(e) => setUpdateForm({ ...updateForm, full_name: e.target.value })} /></label>
+            <label>Risk<select value={updateForm.risk_level} onChange={(e) => setUpdateForm({ ...updateForm, risk_level: e.target.value })}><option value="">(no change)</option><option>Low</option><option>Medium</option><option>High</option></select></label>
+            <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>InPrison</option><option>Released</option></select></label>
+            <label>Location ID<input type="number" value={updateForm.current_location_id} onChange={(e) => setUpdateForm({ ...updateForm, current_location_id: e.target.value })} /></label>
+            <button className="primary-btn" type="submit">Update</button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }

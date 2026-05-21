@@ -31,8 +31,16 @@ app/db/models/schedule.py
 app/db/models/user.py
 app/db/models/visit.py
 app/schemas/__init__.py
+app/schemas/auth.py
+app/schemas/common.py
+app/schemas/incident.py
+app/schemas/labor.py
+app/schemas/location.py
 app/schemas/prisoner.py
+app/schemas/schedule.py
+app/schemas/shift.py
 app/schemas/user.py
+app/schemas/visit.py
 app/services/__init__.py
 app/services/ai_engine.py
 prison_backend.egg-info/PKG-INFO

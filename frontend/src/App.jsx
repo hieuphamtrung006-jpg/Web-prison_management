@@ -37,12 +37,48 @@ export default function App() {
         }
       />
       <Route path="/prisoners" element={<WithLayout><PrisonersPage /></WithLayout>} />
-      <Route path="/locations" element={<WithLayout><LocationsPage /></WithLayout>} />
-      <Route path="/incidents" element={<WithLayout><IncidentsPage /></WithLayout>} />
+      <Route
+        path="/locations"
+        element={
+          <WithLayout>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard"]}>
+              <LocationsPage />
+            </RoleBasedRoute>
+          </WithLayout>
+        }
+      />
+      <Route
+        path="/incidents"
+        element={
+          <WithLayout>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard"]}>
+              <IncidentsPage />
+            </RoleBasedRoute>
+          </WithLayout>
+        }
+      />
       <Route path="/visits" element={<WithLayout><VisitsPage /></WithLayout>} />
-      <Route path="/labor" element={<WithLayout><LaborPage /></WithLayout>} />
+      <Route
+        path="/labor"
+        element={
+          <WithLayout>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard"]}>
+              <LaborPage />
+            </RoleBasedRoute>
+          </WithLayout>
+        }
+      />
       <Route path="/schedules" element={<WithLayout><SchedulesPage /></WithLayout>} />
-      <Route path="/shifts" element={<WithLayout><ShiftsPage /></WithLayout>} />
+      <Route
+        path="/shifts"
+        element={
+          <WithLayout>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard"]}>
+              <ShiftsPage />
+            </RoleBasedRoute>
+          </WithLayout>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

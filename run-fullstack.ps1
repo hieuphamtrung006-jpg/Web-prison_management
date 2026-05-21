@@ -12,8 +12,10 @@ if (Test-Path $nodeDir) {
 Write-Host "[1/4] Starting backend..." -ForegroundColor Cyan
 $workspaceRoot = Split-Path $root -Parent
 $rootVenvPython = Join-Path $workspaceRoot ".venv\Scripts\python.exe"
+$rootVenvAltPython = Join-Path $workspaceRoot "venv\Scripts\python.exe"
 $backendVenvPython = Join-Path $backend ".venv\Scripts\python.exe"
-$pythonExe = if (Test-Path $rootVenvPython) { $rootVenvPython } elseif (Test-Path $backendVenvPython) { $backendVenvPython } else { "py" }
+$backendVenvAltPython = Join-Path $backend "venv\Scripts\python.exe"
+$pythonExe = if (Test-Path $rootVenvPython) { $rootVenvPython } elseif (Test-Path $rootVenvAltPython) { $rootVenvAltPython } elseif (Test-Path $backendVenvPython) { $backendVenvPython } elseif (Test-Path $backendVenvAltPython) { $backendVenvAltPython } else { "py" }
 $backendCmd = "Set-Location '$backend'; & '$pythonExe' -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
 $backendProc = Start-Process -FilePath "powershell" -ArgumentList "-NoExit", "-Command", $backendCmd -PassThru
 

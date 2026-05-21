@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const navItems = [
+const fullNavItems = [
   { to: "/", label: "Dashboard" },
   { to: "/users", label: "Users" },
   { to: "/prisoners", label: "Prisoners" },
@@ -13,9 +13,16 @@ const navItems = [
   { to: "/shifts", label: "Shifts" },
 ];
 
+const viewerNavItems = [
+  { to: "/prisoners", label: "Prisoners" },
+  { to: "/schedules", label: "Schedules" },
+  { to: "/visits", label: "Visits" },
+];
+
 export default function AppLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const navItems = user?.role === "Viewer" ? viewerNavItems : fullNavItems;
 
   const handleLogout = () => {
     logout();

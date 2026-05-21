@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 const initialForm = {
   prisoner_id: 1,
@@ -8,9 +9,18 @@ const initialForm = {
   notes: "",
 };
 
+const initialRequestForm = {
+  prisoner_id: 1,
+  requested_date: new Date().toISOString().slice(0, 16),
+};
+
 export default function VisitsPage() {
+  const { user } = useAuth();
+  const isViewer = user?.role === "Viewer";
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(initialForm);
+  const [requestForm, setRequestForm] = useState(initialRequestForm);
+  const [pendingRequests, setPendingRequests] = useState([]);
   const [updateForm, setUpdateForm] = useState({
     visit_id: "",
     prisoner_id: "",
@@ -25,8 +35,19 @@ export default function VisitsPage() {
 
   const load = async () => {
     try {
-      const response = await api.get(`/visits?status_filter=Pending&today_only=false&page=${page}&page_size=${pageSize}`);
+      const statusFilter = isViewer ? "Approved" : "Pending";
+      const response = await api.get(`/visits?status_filter=${statusFilter}&today_only=false&page=${page}&page_size=${pageSize}`);
       setRows(response.data);
+    } catch (err) {
+      setError(parseApiError(err));
+    }
+  };
+
+  const loadPendingRequests = async () => {
+    if (isViewer) return;
+    try {
+      const response = await api.get("/visits/requests/pending");
+      setPendingRequests(response.data);
     } catch (err) {
       setError(parseApiError(err));
     }
@@ -34,7 +55,8 @@ export default function VisitsPage() {
 
   useEffect(() => {
     load();
-  }, [page]);
+    loadPendingRequests();
+  }, [page, isViewer]);
 
   const create = async (event) => {
     event.preventDefault();
@@ -50,7 +72,23 @@ export default function VisitsPage() {
 
   const approve = async (visitId) => {
     try {
-      await api.put(`/visits/${visitId}/approve`);
+      await api.put(`/visits/requests/${visitId}/approve`);
+      await load();
+      await loadPendingRequests();
+    } catch (err) {
+      setError(parseApiError(err));
+    }
+  };
+
+  const requestVisit = async (event) => {
+    event.preventDefault();
+    setError("");
+    try {
+      await api.post("/visits/request", {
+        prisoner_id: Number(requestForm.prisoner_id),
+        requested_date: requestForm.requested_date,
+      });
+      setRequestForm(initialRequestForm);
       await load();
     } catch (err) {
       setError(parseApiError(err));
@@ -96,7 +134,7 @@ export default function VisitsPage() {
   return (
     <div className="split-grid">
       <section className="panel">
-        <h2>Visit Requests</h2>
+        <h2>{isViewer ? "Visits" : "Pending Visit Requests"}</h2>
         {error && <p className="error-msg">{error}</p>}
         <div className="inline-form">
           <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
@@ -107,40 +145,60 @@ export default function VisitsPage() {
           <table>
             <thead><tr><th>ID</th><th>Prisoner</th><th>Visitor</th><th>Status</th><th></th><th></th></tr></thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.visit_id}>
-                  <td>{row.visit_id}</td><td>{row.prisoner_id}</td><td>{row.visitor_name}</td><td>{row.status}</td>
-                  <td>{row.status === "Pending" && <button className="secondary-btn" onClick={() => approve(row.visit_id)}>Approve</button>}</td>
-                  <td><button className="danger-btn" onClick={() => deleteVisit(row.visit_id)}>Delete</button></td>
-                </tr>
-              ))}
+              {isViewer
+                ? rows.map((row) => (
+                    <tr key={row.visit_id}>
+                      <td>{row.visit_id}</td><td>{row.prisoner_id}</td><td>{row.visitor_name}</td><td>{row.status}</td>
+                      <td></td><td></td>
+                    </tr>
+                  ))
+                : pendingRequests.map((row) => (
+                    <tr key={row.request_id}>
+                      <td>{row.request_id}</td><td>{row.prisoner_id}</td><td>{row.viewer_id}</td><td>{row.status}</td>
+                      <td><button className="secondary-btn" onClick={() => approve(row.request_id)}>Approve</button></td>
+                      <td></td>
+                    </tr>
+                  ))}
             </tbody>
           </table>
         </div>
       </section>
-      <section className="panel">
-        <h2>Create Visit</h2>
-        <form className="form-grid" onSubmit={create}>
-          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
-          <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
-          <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
-          <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Create</button>
-        </form>
-      </section>
+      {isViewer ? (
+        <section className="panel">
+          <h2>Request Visit</h2>
+          <form className="form-grid" onSubmit={requestVisit}>
+            <label>Prisoner ID<input type="number" value={requestForm.prisoner_id} onChange={(e) => setRequestForm({ ...requestForm, prisoner_id: e.target.value })} required /></label>
+            <label>Date<input type="datetime-local" value={requestForm.requested_date} onChange={(e) => setRequestForm({ ...requestForm, requested_date: e.target.value })} required /></label>
+            <button className="primary-btn" type="submit">Request</button>
+          </form>
+        </section>
+      ) : (
+        <>
+          <section className="panel">
+            <h2>Create Visit</h2>
+            <form className="form-grid" onSubmit={create}>
+              <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+              <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
+              <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
+              <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
+              <button className="primary-btn" type="submit">Create</button>
+            </form>
+          </section>
 
-      <section className="panel">
-        <h2>Update Visit</h2>
-        <form className="form-grid" onSubmit={updateVisit}>
-          <label>Visit ID<input type="number" value={updateForm.visit_id} onChange={(e) => setUpdateForm({ ...updateForm, visit_id: e.target.value })} required /></label>
-          <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-          <label>Visitor<input value={updateForm.visitor_name} onChange={(e) => setUpdateForm({ ...updateForm, visitor_name: e.target.value })} /></label>
-          <label>Date<input type="datetime-local" value={updateForm.visit_date} onChange={(e) => setUpdateForm({ ...updateForm, visit_date: e.target.value })} /></label>
-          <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
-          <label>Notes<textarea value={updateForm.notes} onChange={(e) => setUpdateForm({ ...updateForm, notes: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Update</button>
-        </form>
-      </section>
+          <section className="panel">
+            <h2>Update Visit</h2>
+            <form className="form-grid" onSubmit={updateVisit}>
+              <label>Visit ID<input type="number" value={updateForm.visit_id} onChange={(e) => setUpdateForm({ ...updateForm, visit_id: e.target.value })} required /></label>
+              <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
+              <label>Visitor<input value={updateForm.visitor_name} onChange={(e) => setUpdateForm({ ...updateForm, visitor_name: e.target.value })} /></label>
+              <label>Date<input type="datetime-local" value={updateForm.visit_date} onChange={(e) => setUpdateForm({ ...updateForm, visit_date: e.target.value })} /></label>
+              <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
+              <label>Notes<textarea value={updateForm.notes} onChange={(e) => setUpdateForm({ ...updateForm, notes: e.target.value })} /></label>
+              <button className="primary-btn" type="submit">Update</button>
+            </form>
+          </section>
+        </>
+      )}
     </div>
   );
 }

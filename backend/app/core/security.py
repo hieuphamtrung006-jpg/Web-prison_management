@@ -2,19 +2,20 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import string
 
+import bcrypt
 import jwt
 from jwt import InvalidTokenError
-from passlib.context import CryptContext
 
 from app.core.config import settings
-
-# Chỉ dùng bcrypt thuần
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")
+    # bcrypt only uses the first 72 bytes; truncate to avoid backend errors
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    return bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def is_legacy_sha256_hash(hashed_password: str) -> bool:
@@ -30,7 +31,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return hashlib.sha256(plain_password.encode("utf-8")).hexdigest() == hashed_password
     
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        plain_bytes = plain_password.encode("utf-8")
+        if len(plain_bytes) > 72:
+            plain_bytes = plain_bytes[:72]
+        return bcrypt.checkpw(plain_bytes, hashed_password.encode("utf-8"))
     except Exception:
         return False
 

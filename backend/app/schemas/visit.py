@@ -30,3 +30,18 @@ class VisitUpdate(BaseModel):
     visit_date: datetime | None = None
     status: str | None = Field(default=None, min_length=1, max_length=20)
     notes: str | None = Field(default=None, max_length=500)
+
+
+class VisitRequestCreate(BaseModel):
+    prisoner_id: int = Field(..., gt=0)
+    requested_date: datetime
+
+
+class VisitRequestRead(BaseModel):
+    request_id: int
+    prisoner_id: int
+    viewer_id: int
+    requested_date: datetime
+    status: str
+
+    model_config = {"from_attributes": True}

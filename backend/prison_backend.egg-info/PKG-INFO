@@ -14,3 +14,4 @@ Requires-Dist: PyJWT>=2.9.0
 Requires-Dist: supabase>=2.7.4
 Requires-Dist: alembic>=1.13.0
 Requires-Dist: pyodbc>=5.1.0
+Requires-Dist: ortools>=9.9.0

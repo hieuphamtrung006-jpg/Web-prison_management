@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 export default function SchedulesPage() {
+  const { user } = useAuth();
+  const isViewer = user?.role === "Viewer";
   const [configs, setConfigs] = useState([]);
   const [selectedConfig, setSelectedConfig] = useState(1);
   const [targetDate, setTargetDate] = useState(new Date().toISOString().slice(0, 10));
@@ -123,25 +126,27 @@ export default function SchedulesPage() {
 
   return (
     <div className="stack-grid">
-      <section className="panel">
-        <h2>Schedule Generator (GA)</h2>
-        {error && <p className="error-msg">{error}</p>}
-        <div className="inline-form">
-          <label>Config
-            <select value={selectedConfig} onChange={(e) => setSelectedConfig(e.target.value)}>
-              {configs.map((cfg) => (
-                <option key={cfg.config_id} value={cfg.config_id}>{cfg.config_name || `Config ${cfg.config_id}`}</option>
-              ))}
-            </select>
-          </label>
-          <label>Target date<input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} /></label>
-          <button className="primary-btn" onClick={generate}>Generate</button>
-          <button className="secondary-btn" onClick={loadDaily}>Refresh Daily</button>
-        </div>
-        {result && (
-          <pre className="json-box">{JSON.stringify(result, null, 2)}</pre>
-        )}
-      </section>
+      {!isViewer && (
+        <section className="panel">
+          <h2>Schedule Generator (Optimizer)</h2>
+          {error && <p className="error-msg">{error}</p>}
+          <div className="inline-form">
+            <label>Config
+              <select value={selectedConfig} onChange={(e) => setSelectedConfig(e.target.value)}>
+                {configs.map((cfg) => (
+                  <option key={cfg.config_id} value={cfg.config_id}>{cfg.config_name || `Config ${cfg.config_id}`}</option>
+                ))}
+              </select>
+            </label>
+            <label>Target date<input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} /></label>
+            <button className="primary-btn" onClick={generate}>Generate</button>
+            <button className="secondary-btn" onClick={loadDaily}>Refresh Daily</button>
+          </div>
+          {result && (
+            <pre className="json-box">{JSON.stringify(result, null, 2)}</pre>
+          )}
+        </section>
+      )}
 
       <section className="panel">
         <h2>Daily Grouped Schedule</h2>
@@ -158,38 +163,75 @@ export default function SchedulesPage() {
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Prisoner</th><th>Shift</th><th>Start</th><th>End</th><th>Status</th><th></th></tr></thead>
+            {isViewer ? (
+              <thead>
+                <tr>
+                  <th>Prisoner Name</th>
+                  <th>Prisoner ID</th>
+                  <th>Location ID</th>
+                  <th>Shift (Ca lam)</th>
+                  <th>Start Time</th>
+                  <th>End Time</th>
+                </tr>
+              </thead>
+            ) : (
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Prisoner</th>
+                  <th>Shift</th>
+                  <th>Start</th>
+                  <th>End</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+            )}
             <tbody>
               {schedules.map((row) => (
                 <tr key={row.schedule_id}>
-                  <td>{row.schedule_id}</td>
-                  <td>{row.prisoner_id}</td>
-                  <td>{row.shift_id}</td>
-                  <td>{String(row.start_time).slice(0, 16)}</td>
-                  <td>{String(row.end_time).slice(0, 16)}</td>
-                  <td>{row.status}</td>
-                  <td><button className="danger-btn" onClick={() => deleteSchedule(row.schedule_id)}>Delete</button></td>
+                  {isViewer ? (
+                    <>
+                      <td>{row.prisoner_name || row.prisoner?.full_name || "-"}</td>
+                      <td>{row.prisoner_id}</td>
+                      <td>{row.location_id ?? "-"}</td>
+                      <td>{row.shift_name || row.shift_id}</td>
+                      <td>{String(row.start_time).slice(0, 16)}</td>
+                      <td>{String(row.end_time).slice(0, 16)}</td>
+                    </>
+                  ) : (
+                    <>
+                      <td>{row.schedule_id}</td>
+                      <td>{row.prisoner_id}</td>
+                      <td>{row.shift_id}</td>
+                      <td>{String(row.start_time).slice(0, 16)}</td>
+                      <td>{String(row.end_time).slice(0, 16)}</td>
+                      <td>{row.status}</td>
+                      <td><button className="danger-btn" onClick={() => deleteSchedule(row.schedule_id)}>Delete</button></td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </section>
-
-      <section className="panel">
-        <h2>Update schedule</h2>
-        <form className="form-grid" onSubmit={updateSchedule}>
-          <label>Schedule ID<input type="number" value={updateForm.schedule_id} onChange={(e) => setUpdateForm({ ...updateForm, schedule_id: e.target.value })} required /></label>
-          <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-          <label>Project ID<input type="number" value={updateForm.project_id} onChange={(e) => setUpdateForm({ ...updateForm, project_id: e.target.value })} /></label>
-          <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
-          <label>Shift ID<input type="number" value={updateForm.shift_id} onChange={(e) => setUpdateForm({ ...updateForm, shift_id: e.target.value })} /></label>
-          <label>Start<input type="datetime-local" value={updateForm.start_time} onChange={(e) => setUpdateForm({ ...updateForm, start_time: e.target.value })} /></label>
-          <label>End<input type="datetime-local" value={updateForm.end_time} onChange={(e) => setUpdateForm({ ...updateForm, end_time: e.target.value })} /></label>
-          <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Active</option><option>Cancelled</option><option>Completed</option></select></label>
-          <button className="primary-btn" type="submit">Update</button>
-        </form>
-      </section>
+      {!isViewer && (
+        <section className="panel">
+          <h2>Update schedule</h2>
+          <form className="form-grid" onSubmit={updateSchedule}>
+            <label>Schedule ID<input type="number" value={updateForm.schedule_id} onChange={(e) => setUpdateForm({ ...updateForm, schedule_id: e.target.value })} required /></label>
+            <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
+            <label>Project ID<input type="number" value={updateForm.project_id} onChange={(e) => setUpdateForm({ ...updateForm, project_id: e.target.value })} /></label>
+            <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
+            <label>Shift ID<input type="number" value={updateForm.shift_id} onChange={(e) => setUpdateForm({ ...updateForm, shift_id: e.target.value })} /></label>
+            <label>Start<input type="datetime-local" value={updateForm.start_time} onChange={(e) => setUpdateForm({ ...updateForm, start_time: e.target.value })} /></label>
+            <label>End<input type="datetime-local" value={updateForm.end_time} onChange={(e) => setUpdateForm({ ...updateForm, end_time: e.target.value })} /></label>
+            <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Active</option><option>Cancelled</option><option>Completed</option></select></label>
+            <button className="primary-btn" type="submit">Update</button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }

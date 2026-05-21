@@ -9,10 +9,80 @@ from app.core.deps import get_current_user, get_db, require_roles
 from app.db.models.prisoner import Prisoner
 from app.db.models.user import User
 from app.db.models.visit import Visit
+from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
-from app.schemas.visit import VisitCreate, VisitRead, VisitUpdate
+from app.schemas.visit import VisitCreate, VisitRead, VisitRequestCreate, VisitRequestRead, VisitUpdate
 
 router = APIRouter()
+
+
+@router.post("/request", response_model=VisitRequestRead, status_code=status.HTTP_201_CREATED)
+def request_visit(
+    payload: VisitRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("Viewer")),
+) -> VisitRequestRead:
+    prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
+    if not prisoner:
+        raise HTTPException(status_code=404, detail="Prisoner not found")
+
+    request = VisitRequest(
+        prisoner_id=payload.prisoner_id,
+        viewer_id=current_user.user_id,
+        requested_date=payload.requested_date,
+        status="Pending",
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return VisitRequestRead.model_validate(request)
+
+
+@router.get("/requests/pending", response_model=list[VisitRequestRead])
+def list_pending_requests(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Warden", "Guard")),
+) -> list[VisitRequestRead]:
+    rows = (
+        db.query(VisitRequest)
+        .filter(VisitRequest.status == "Pending")
+        .order_by(VisitRequest.request_id.desc())
+        .all()
+    )
+    return [VisitRequestRead.model_validate(row) for row in rows]
+
+
+@router.put("/requests/{request_id}/approve", response_model=VisitRead)
+def approve_visit_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("Warden", "Guard")),
+) -> VisitRead:
+    request = db.query(VisitRequest).filter(VisitRequest.request_id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Visit request not found")
+    if request.status != "Pending":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+
+    viewer = db.query(User).filter(User.user_id == request.viewer_id).first()
+    visitor_name = (viewer.full_name if viewer and viewer.full_name else None) or (
+        viewer.username if viewer else "Viewer"
+    )
+
+    visit = Visit(
+        prisoner_id=request.prisoner_id,
+        visitor_name=visitor_name,
+        visit_date=request.requested_date,
+        status="Approved",
+        approved_by=current_user.user_id,
+        notes=f"Approved request #{request.request_id}",
+    )
+
+    request.status = "Approved"
+    db.add(visit)
+    db.commit()
+    db.refresh(visit)
+    return VisitRead.model_validate(visit)
 
 
 @router.get("/", response_model=list[VisitRead])

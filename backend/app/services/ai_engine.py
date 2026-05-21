@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
-import random
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
+
+from ortools.sat.python import cp_model
 
 
 def _to_datetime(value: Any) -> datetime:
@@ -15,10 +16,7 @@ def _to_datetime(value: Any) -> datetime:
 
 def _load_parameters(parameters: str | None) -> dict[str, float]:
     defaults = {
-        "population_size": 80,
-        "generations": 120,
-        "mutation_rate": 0.08,
-        "elite_size": 8,
+        "time_limit_seconds": 12,
     }
     if not parameters:
         return defaults
@@ -29,16 +27,12 @@ def _load_parameters(parameters: str | None) -> dict[str, float]:
         return defaults
 
     mapped = {
-        "population_size": raw.get("PopulationSize", raw.get("population_size", defaults["population_size"])),
-        "generations": raw.get("Generations", raw.get("generations", defaults["generations"])),
-        "mutation_rate": raw.get("MutationRate", raw.get("mutation_rate", defaults["mutation_rate"])),
-        "elite_size": raw.get("EliteSize", raw.get("elite_size", defaults["elite_size"])),
+        "time_limit_seconds": raw.get(
+            "TimeLimitSeconds", raw.get("time_limit_seconds", defaults["time_limit_seconds"])
+        ),
     }
     return {
-        "population_size": max(20, int(mapped["population_size"])),
-        "generations": max(20, int(mapped["generations"])),
-        "mutation_rate": min(0.5, max(0.01, float(mapped["mutation_rate"]))),
-        "elite_size": max(2, int(mapped["elite_size"])),
+        "time_limit_seconds": max(5, float(mapped["time_limit_seconds"])),
     }
 
 
@@ -57,210 +51,12 @@ def _classify_shift(shift_type: str | None) -> str:
     return "general"
 
 
-def _location_groups(locations: list[dict]) -> dict[str, list[dict]]:
-    groups: dict[str, list[dict]] = defaultdict(list)
-    for location in locations:
-        groups[(location.get("type") or "").lower()].append(location)
-    return groups
-
-
-def _choose_location(
-    candidates: list[dict],
-    occupancy: dict[tuple[int, int], int],
-    shift_id: int,
-    rng: random.Random,
-) -> int | None:
-    if not candidates:
-        return None
-
-    available = [
-        loc
-        for loc in candidates
-        if occupancy[(shift_id, loc["location_id"])] < int(loc.get("capacity", 0) or 0)
-    ]
-    bucket = available if available else candidates
-    chosen = rng.choice(bucket)
-    occupancy[(shift_id, chosen["location_id"])] += 1
-    return chosen["location_id"]
-
-
-def _build_individual(
-    prisoners: list[dict],
-    shifts: list[dict],
-    locations: list[dict],
-    projects: dict[int, dict],
-    assignments_by_prisoner: dict[int, dict],
-    max_workers_by_project_shift: dict[tuple[int, int], int],
-    rng: random.Random,
-) -> list[dict]:
-    location_groups = _location_groups(locations)
-    occupancy: dict[tuple[int, int], int] = defaultdict(int)
-    project_workers: dict[tuple[int, int], int] = defaultdict(int)
-    schedule_rows: list[dict] = []
-
-    for shift in shifts:
-        shift_id = int(shift["shift_id"])
-        shift_class = _classify_shift(shift.get("shift_type"))
-        shift_start = _to_datetime(shift["start_time"])
-        shift_end = _to_datetime(shift["end_time"])
-
-        for prisoner in prisoners:
-            prisoner_id = int(prisoner["prisoner_id"])
-            assignment = assignments_by_prisoner.get(prisoner_id)
-            project_id: int | None = None
-
-            if shift_class == "labor" and assignment:
-                project_id = int(assignment["project_id"])
-                max_workers = max_workers_by_project_shift.get((project_id, shift_id), 0)
-                if project_workers[(project_id, shift_id)] < max_workers:
-                    project_workers[(project_id, shift_id)] += 1
-                    project = projects.get(project_id)
-                    location_id = project.get("location_id") if project else None
-                    if location_id is not None:
-                        occupancy[(shift_id, int(location_id))] += 1
-                else:
-                    project_id = None
-
-            if project_id is None:
-                if shift_class == "labor":
-                    candidates = location_groups.get("workshop", [])
-                    if not candidates:
-                        candidates = locations
-                elif shift_class == "meal":
-                    candidates = location_groups.get("dining", []) or locations
-                elif shift_class == "sleep":
-                    candidates = location_groups.get("cell", []) or locations
-                else:
-                    candidates = (
-                        location_groups.get("yard", [])
-                        + location_groups.get("hospital", [])
-                        + location_groups.get("cell", [])
-                    ) or locations
-                location_id = _choose_location(candidates, occupancy, shift_id, rng)
-            else:
-                project = projects.get(project_id)
-                location_id = project.get("location_id") if project else None
-                if location_id is None:
-                    location_id = _choose_location(locations, occupancy, shift_id, rng)
-
-            schedule_rows.append(
-                {
-                    "prisoner_id": prisoner_id,
-                    "project_id": project_id,
-                    "location_id": int(location_id) if location_id is not None else None,
-                    "shift_id": shift_id,
-                    "start_time": shift_start,
-                    "end_time": shift_end,
-                }
-            )
-
-    return schedule_rows
-
-
-def _fitness(
-    individual: list[dict],
-    prisoners_by_id: dict[int, dict],
-    locations_by_id: dict[int, dict],
-    projects_by_id: dict[int, dict],
-    config: dict,
-) -> float:
-    w_economy = float(config.get("weight_economy", 0.4))
-    w_security = float(config.get("weight_security", 0.3))
-    w_rehab = float(config.get("weight_rehab", 0.3))
-
-    occupancy: dict[tuple[int, int], int] = defaultdict(int)
-    economy_gain = 0.0
-    rehabilitation_gain = 0.0
-    security_penalty = 0.0
-
-    for row in individual:
-        prisoner = prisoners_by_id.get(row["prisoner_id"], {})
-        location = locations_by_id.get(row.get("location_id"))
-        project = projects_by_id.get(row.get("project_id"))
-
-        if row.get("location_id") is not None:
-            occupancy[(row["shift_id"], row["location_id"])] += 1
-
-        risk = (prisoner.get("risk_level") or "Medium").lower()
-        productivity = float(prisoner.get("productivity_score") or 0)
-
-        if project:
-            economy_gain += productivity + float(project.get("revenue_per_hour") or 0) / 100.0
-        else:
-            loc_type = (location.get("type") if location else "") or ""
-            if str(loc_type).lower() in {"yard", "hospital"}:
-                rehabilitation_gain += 1.0
-
-        if risk == "high":
-            loc_security = str((location.get("security_level") if location else "") or "").lower()
-            loc_type = str((location.get("type") if location else "") or "").lower()
-            if loc_type == "yard":
-                security_penalty += 2.0
-            if loc_security not in {"high", "max"}:
-                security_penalty += 1.5
-
-    for (_, location_id), count in occupancy.items():
-        location = locations_by_id.get(location_id)
-        capacity = int(location.get("capacity") or 0) if location else 0
-        if count > capacity:
-            security_penalty += (count - capacity) * 5.0
-
-    return (w_economy * economy_gain) + (w_rehab * rehabilitation_gain) - (w_security * security_penalty)
-
-
-def _crossover(parent_a: list[dict], parent_b: list[dict], rng: random.Random) -> list[dict]:
-    if not parent_a:
-        return []
-    pivot = rng.randint(0, len(parent_a) - 1)
-    return parent_a[:pivot] + parent_b[pivot:]
-
-
-def _mutate(
-    individual: list[dict],
-    mutation_rate: float,
-    shifts_by_id: dict[int, dict],
-    locations: list[dict],
-    assignments_by_prisoner: dict[int, dict],
-    rng: random.Random,
-) -> list[dict]:
-    mutated = [dict(row) for row in individual]
-    if not mutated:
-        return mutated
-
-    location_groups = _location_groups(locations)
-    for row in mutated:
-        if rng.random() > mutation_rate:
-            continue
-
-        shift = shifts_by_id.get(int(row["shift_id"]), {})
-        shift_class = _classify_shift(shift.get("shift_type"))
-        prisoner_id = int(row["prisoner_id"])
-
-        if shift_class == "labor" and assignments_by_prisoner.get(prisoner_id):
-            # Preserve hard assignment slots for labor shifts.
-            continue
-
-        if shift_class == "labor":
-            candidates = location_groups.get("workshop", []) or locations
-        elif shift_class == "meal":
-            candidates = location_groups.get("dining", []) or locations
-        elif shift_class == "sleep":
-            candidates = location_groups.get("cell", []) or locations
-        else:
-            candidates = (
-                location_groups.get("yard", [])
-                + location_groups.get("hospital", [])
-                + location_groups.get("cell", [])
-            ) or locations
-
-        if candidates:
-            row["location_id"] = int(rng.choice(candidates)["location_id"])
-
-    return mutated
+def _scaled(value: float, scale: int) -> int:
+    return int(round(value * scale))
 
 
 def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
-    """Generate prison schedules using a GA with hard and soft constraints.
+    """Generate prison schedules using CP-SAT (OR-Tools).
 
     Input payload must include:
     - config with weight_* and parameters
@@ -288,10 +84,15 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
 
     projects = {int(p["project_id"]): p for p in projects_list}
     shifts = sorted(shifts, key=lambda item: int(item["shift_id"]))
-    shifts_by_id = {int(s["shift_id"]): s for s in shifts}
     prisoners_by_id = {int(p["prisoner_id"]): p for p in prisoners}
     locations_by_id = {int(l["location_id"]): l for l in locations}
-    assignments_by_prisoner = {int(a["prisoner_id"]): a for a in assignments if a.get("project_id") is not None}
+    assignments_by_prisoner = {
+        int(a["prisoner_id"]): a for a in assignments if a.get("project_id") is not None
+    }
+
+    prisoner_ids = [int(p["prisoner_id"]) for p in prisoners]
+    shift_ids = [int(s["shift_id"]) for s in shifts]
+    location_ids = [int(l["location_id"]) for l in locations]
 
     max_workers_by_project_shift: dict[tuple[int, int], int] = {}
     for project in projects_list:
@@ -304,81 +105,167 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
             else:
                 max_workers_by_project_shift[(project_id, shift_id)] = 0
 
-    seed = abs(hash(f"{payload.get('target_date', '')}:{config.get('id', 0)}")) % (2**32)
-    rng = random.Random(seed)
+    model = cp_model.CpModel()
+    x: dict[tuple[int, int, int], cp_model.IntVar] = {}
 
-    population_size = int(params["population_size"])
-    generations = int(params["generations"])
-    mutation_rate = float(params["mutation_rate"])
-    elite_size = min(int(params["elite_size"]), population_size)
-
-    population = [
-        _build_individual(
-            prisoners=prisoners,
-            shifts=shifts,
-            locations=locations,
-            projects=projects,
-            assignments_by_prisoner=assignments_by_prisoner,
-            max_workers_by_project_shift=max_workers_by_project_shift,
-            rng=rng,
-        )
-        for _ in range(population_size)
-    ]
-
-    best_score = float("-inf")
-    best_individual: list[dict] = []
-
-    for _ in range(generations):
-        ranked = sorted(
-            [
-                (
-                    _fitness(
-                        individual,
-                        prisoners_by_id=prisoners_by_id,
-                        locations_by_id=locations_by_id,
-                        projects_by_id=projects,
-                        config=config,
-                    ),
-                    individual,
+    for prisoner_id in prisoner_ids:
+        for shift in shifts:
+            shift_id = int(shift["shift_id"])
+            for location_id in location_ids:
+                x[(prisoner_id, shift_id, location_id)] = model.NewBoolVar(
+                    f"x_p{prisoner_id}_s{shift_id}_l{location_id}"
                 )
-                for individual in population
-            ],
-            key=lambda item: item[0],
-            reverse=True,
-        )
 
-        if ranked and ranked[0][0] > best_score:
-            best_score = ranked[0][0]
-            best_individual = ranked[0][1]
-
-        elites = [ind for _, ind in ranked[:elite_size]]
-        next_population = elites.copy()
-
-        while len(next_population) < population_size:
-            parent_a = rng.choice(elites)
-            parent_b = rng.choice(elites)
-            child = _crossover(parent_a, parent_b, rng)
-            child = _mutate(
-                child,
-                mutation_rate=mutation_rate,
-                shifts_by_id=shifts_by_id,
-                locations=locations,
-                assignments_by_prisoner=assignments_by_prisoner,
-                rng=rng,
+    # Each prisoner must be assigned to exactly one location per shift.
+    for prisoner_id in prisoner_ids:
+        for shift in shifts:
+            shift_id = int(shift["shift_id"])
+            model.Add(
+                sum(x[(prisoner_id, shift_id, loc_id)] for loc_id in location_ids) == 1
             )
-            next_population.append(child)
 
-        population = next_population
+            shift_class = _classify_shift(shift.get("shift_type"))
+            assignment = assignments_by_prisoner.get(prisoner_id)
+            if shift_class == "labor" and assignment:
+                project_id = int(assignment["project_id"])
+                project = projects.get(project_id)
+                location_id = int(project.get("location_id")) if project else None
+                if location_id is not None and location_id in location_ids:
+                    for loc_id in location_ids:
+                        if loc_id == location_id:
+                            model.Add(x[(prisoner_id, shift_id, loc_id)] == 1)
+                        else:
+                            model.Add(x[(prisoner_id, shift_id, loc_id)] == 0)
+
+    # Capacity constraints per shift and location.
+    for shift_id in shift_ids:
+        for location_id in location_ids:
+            capacity = int(locations_by_id.get(location_id, {}).get("capacity") or 0)
+            model.Add(
+                sum(x[(prisoner_id, shift_id, location_id)] for prisoner_id in prisoner_ids)
+                <= capacity
+            )
+
+    # Project max workers per labor shift.
+    for (project_id, shift_id), max_workers in max_workers_by_project_shift.items():
+        if max_workers <= 0:
+            continue
+        project = projects.get(project_id)
+        if not project or project.get("location_id") is None:
+            continue
+        location_id = int(project["location_id"])
+        assigned_prisoners = [
+            pid
+            for pid, assignment in assignments_by_prisoner.items()
+            if int(assignment["project_id"]) == project_id
+        ]
+        if assigned_prisoners:
+            model.Add(
+                sum(x[(pid, shift_id, location_id)] for pid in assigned_prisoners) <= max_workers
+            )
+
+    # Objective: maximize weighted economy + rehab - security penalty.
+    w_economy = float(config.get("weight_economy", 0.4))
+    w_security = float(config.get("weight_security", 0.3))
+    w_rehab = float(config.get("weight_rehab", 0.3))
+    scale = 100
+
+    objective_terms: list[cp_model.LinearExpr] = []
+
+    for prisoner_id in prisoner_ids:
+        prisoner = prisoners_by_id.get(prisoner_id, {})
+        risk = (prisoner.get("risk_level") or "Medium").lower()
+        productivity = float(prisoner.get("productivity_score") or 0)
+
+        for shift in shifts:
+            shift_id = int(shift["shift_id"])
+            shift_class = _classify_shift(shift.get("shift_type"))
+            assignment = assignments_by_prisoner.get(prisoner_id)
+
+            for location_id in location_ids:
+                location = locations_by_id.get(location_id, {})
+                loc_type = str(location.get("type") or "").lower()
+                loc_security = str(location.get("security_level") or "").lower()
+
+                economy_gain = 0.0
+                rehab_gain = 0.0
+                security_penalty = 0.0
+
+                if shift_class == "labor" and assignment:
+                    project = projects.get(int(assignment["project_id"]))
+                    project_location = int(project.get("location_id")) if project else None
+                    if project and project_location == location_id:
+                        economy_gain += productivity + float(project.get("revenue_per_hour") or 0) / 100.0
+                else:
+                    if loc_type in {"yard", "hospital"}:
+                        rehab_gain += 1.0
+
+                if risk == "high":
+                    if loc_type == "yard":
+                        security_penalty += 2.0
+                    if loc_security not in {"high", "max"}:
+                        security_penalty += 1.5
+
+                score = (w_economy * economy_gain) + (w_rehab * rehab_gain) - (w_security * security_penalty)
+                coef = _scaled(score, scale)
+                if coef != 0:
+                    objective_terms.append(coef * x[(prisoner_id, shift_id, location_id)])
+
+    if objective_terms:
+        model.Maximize(sum(objective_terms))
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = float(params["time_limit_seconds"])
+
+    status = solver.Solve(model)
+
+    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return {
+            "status": "infeasible",
+            "schedules": [],
+            "meta": {
+                "reason": "No feasible solution",
+                "solver_status": solver.StatusName(status),
+            },
+        }
+
+    schedules: list[dict] = []
+    for shift in shifts:
+        shift_id = int(shift["shift_id"])
+        shift_start = _to_datetime(shift["start_time"])
+        shift_end = _to_datetime(shift["end_time"])
+        shift_class = _classify_shift(shift.get("shift_type"))
+
+        for prisoner_id in prisoner_ids:
+            chosen_location_id = None
+            for location_id in location_ids:
+                if solver.BooleanValue(x[(prisoner_id, shift_id, location_id)]):
+                    chosen_location_id = location_id
+                    break
+
+            assignment = assignments_by_prisoner.get(prisoner_id)
+            project_id = None
+            if shift_class == "labor" and assignment:
+                project_id = int(assignment["project_id"])
+
+            schedules.append(
+                {
+                    "prisoner_id": prisoner_id,
+                    "project_id": project_id,
+                    "location_id": chosen_location_id,
+                    "shift_id": shift_id,
+                    "start_time": shift_start,
+                    "end_time": shift_end,
+                }
+            )
 
     return {
         "status": "ok",
-        "schedules": best_individual,
+        "schedules": schedules,
         "meta": {
-            "population_size": population_size,
-            "generations": generations,
-            "mutation_rate": mutation_rate,
-            "elite_size": elite_size,
-            "best_fitness": best_score,
-            "schedule_rows": len(best_individual),
+            "solver_status": solver.StatusName(status),
+            "objective": solver.ObjectiveValue() if objective_terms else 0,
+            "schedule_rows": len(schedules),
+            "time_limit_seconds": params["time_limit_seconds"],
         },
     }
