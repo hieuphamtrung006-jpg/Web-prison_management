@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 const initialForm = {
   username: "",
@@ -142,6 +143,8 @@ function Toast({ message, type = "info", onClose }) {
 }
 
 export default function UsersPage() {
+  const { user } = useAuth();
+  const isGuard = user?.role === "Guard";
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [page, setPage] = useState(1);
@@ -210,6 +213,8 @@ export default function UsersPage() {
       showToast(errorMsg, "error");
     }
   };
+
+  const visibleRows = isGuard ? rows.filter((row) => row.role === "Viewer") : rows;
 
   return (
     <div className="users-page">
@@ -592,7 +597,7 @@ export default function UsersPage() {
             <div className="spinner"></div>
             <p>Loading users...</p>
           </div>
-        ) : rows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <div className="loading-state">
             <p>No users found</p>
           </div>
@@ -611,7 +616,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {visibleRows.map((row) => (
                   <tr key={row.user_id}>
                     <td>{row.user_id}</td>
                     <td>{row.username}</td>

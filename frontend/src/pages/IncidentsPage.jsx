@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
 const initialForm = {
   prisoner_id: 1,
@@ -12,6 +13,8 @@ const initialForm = {
 };
 
 export default function IncidentsPage() {
+  const { user } = useAuth();
+  const isGuard = user?.role === "Guard";
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [updateForm, setUpdateForm] = useState({
@@ -131,34 +134,38 @@ export default function IncidentsPage() {
           </table>
         </div>
       </section>
-      <section className="panel">
-        <h2>Create incident</h2>
-        <form className="form-grid" onSubmit={create}>
-          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
-          <label>Location ID<input type="number" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })} required /></label>
-          <label>Incident date<input type="datetime-local" value={form.incident_date} onChange={(e) => setForm({ ...form, incident_date: e.target.value })} required /></label>
-          <label>Type<input value={form.incident_type} onChange={(e) => setForm({ ...form, incident_type: e.target.value })} /></label>
-          <label>Severity<select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}><option>Low</option><option>Medium</option><option>High</option></select></label>
-          <label>Penalty<input type="number" value={form.penalty_points} onChange={(e) => setForm({ ...form, penalty_points: e.target.value })} /></label>
-          <label>Description<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Create</button>
-        </form>
-      </section>
+      {!isGuard && (
+        <section className="panel">
+          <h2>Create incident</h2>
+          <form className="form-grid" onSubmit={create}>
+            <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+            <label>Location ID<input type="number" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })} required /></label>
+            <label>Incident date<input type="datetime-local" value={form.incident_date} onChange={(e) => setForm({ ...form, incident_date: e.target.value })} required /></label>
+            <label>Type<input value={form.incident_type} onChange={(e) => setForm({ ...form, incident_type: e.target.value })} /></label>
+            <label>Severity<select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}><option>Low</option><option>Medium</option><option>High</option></select></label>
+            <label>Penalty<input type="number" value={form.penalty_points} onChange={(e) => setForm({ ...form, penalty_points: e.target.value })} /></label>
+            <label>Description<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+            <button className="primary-btn" type="submit">Create</button>
+          </form>
+        </section>
+      )}
 
-      <section className="panel">
-        <h2>Update incident</h2>
-        <form className="form-grid" onSubmit={updateIncident}>
-          <label>Incident ID<input type="number" value={updateForm.incident_id} onChange={(e) => setUpdateForm({ ...updateForm, incident_id: e.target.value })} required /></label>
-          <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-          <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
-          <label>Incident date<input type="datetime-local" value={updateForm.incident_date} onChange={(e) => setUpdateForm({ ...updateForm, incident_date: e.target.value })} /></label>
-          <label>Type<input value={updateForm.incident_type} onChange={(e) => setUpdateForm({ ...updateForm, incident_type: e.target.value })} /></label>
-          <label>Severity<select value={updateForm.severity} onChange={(e) => setUpdateForm({ ...updateForm, severity: e.target.value })}><option value="">(no change)</option><option>Low</option><option>Medium</option><option>High</option></select></label>
-          <label>Penalty<input type="number" value={updateForm.penalty_points} onChange={(e) => setUpdateForm({ ...updateForm, penalty_points: e.target.value })} /></label>
-          <label>Description<textarea value={updateForm.description} onChange={(e) => setUpdateForm({ ...updateForm, description: e.target.value })} /></label>
-          <button className="primary-btn" type="submit">Update</button>
-        </form>
-      </section>
+      {!isGuard && (
+        <section className="panel">
+          <h2>Update incident</h2>
+          <form className="form-grid" onSubmit={updateIncident}>
+            <label>Incident ID<input type="number" value={updateForm.incident_id} onChange={(e) => setUpdateForm({ ...updateForm, incident_id: e.target.value })} required /></label>
+            <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
+            <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
+            <label>Incident date<input type="datetime-local" value={updateForm.incident_date} onChange={(e) => setUpdateForm({ ...updateForm, incident_date: e.target.value })} /></label>
+            <label>Type<input value={updateForm.incident_type} onChange={(e) => setUpdateForm({ ...updateForm, incident_type: e.target.value })} /></label>
+            <label>Severity<select value={updateForm.severity} onChange={(e) => setUpdateForm({ ...updateForm, severity: e.target.value })}><option value="">(no change)</option><option>Low</option><option>Medium</option><option>High</option></select></label>
+            <label>Penalty<input type="number" value={updateForm.penalty_points} onChange={(e) => setUpdateForm({ ...updateForm, penalty_points: e.target.value })} /></label>
+            <label>Description<textarea value={updateForm.description} onChange={(e) => setUpdateForm({ ...updateForm, description: e.target.value })} /></label>
+            <button className="primary-btn" type="submit">Update</button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }

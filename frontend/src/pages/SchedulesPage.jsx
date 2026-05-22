@@ -5,6 +5,8 @@ import { useAuth } from "../context/AuthContext";
 export default function SchedulesPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
+  const isGuard = user?.role === "Guard";
+  const isReadOnly = isViewer || isGuard;
   const [configs, setConfigs] = useState([]);
   const [selectedConfig, setSelectedConfig] = useState(1);
   const [targetDate, setTargetDate] = useState(new Date().toISOString().slice(0, 10));
@@ -126,7 +128,7 @@ export default function SchedulesPage() {
 
   return (
     <div className="stack-grid">
-      {!isViewer && (
+      {!isReadOnly && (
         <section className="panel">
           <h2>Schedule Generator (Optimizer)</h2>
           {error && <p className="error-msg">{error}</p>}
@@ -163,7 +165,7 @@ export default function SchedulesPage() {
         </div>
         <div className="table-wrap">
           <table>
-            {isViewer ? (
+            {isReadOnly ? (
               <thead>
                 <tr>
                   <th>Prisoner Name</th>
@@ -190,7 +192,7 @@ export default function SchedulesPage() {
             <tbody>
               {schedules.map((row) => (
                 <tr key={row.schedule_id}>
-                  {isViewer ? (
+                  {isReadOnly ? (
                     <>
                       <td>{row.prisoner_name || row.prisoner?.full_name || "-"}</td>
                       <td>{row.prisoner_id}</td>
@@ -216,7 +218,7 @@ export default function SchedulesPage() {
           </table>
         </div>
       </section>
-      {!isViewer && (
+      {!isReadOnly && (
         <section className="panel">
           <h2>Update schedule</h2>
           <form className="form-grid" onSubmit={updateSchedule}>

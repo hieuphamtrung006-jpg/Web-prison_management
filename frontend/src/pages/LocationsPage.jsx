@@ -127,6 +127,7 @@ function LocationEditModal({ location, onClose, onSaved, showToast }) {
 
 export default function LocationsPage() {
   const { user } = useAuth();
+  const isGuard = user?.role === "Guard";
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [page, setPage] = useState(1);
@@ -194,6 +195,7 @@ export default function LocationsPage() {
   };
 
   const canWrite = user?.role === "Admin" || user?.role === "Warden";
+  const showActions = !isGuard;
 
   return (
     <div className="split-grid users-page">
@@ -232,7 +234,7 @@ export default function LocationsPage() {
                   <th>Occupancy</th>
                   <th>Rate</th>
                   <th>Status</th>
-                  <th>Actions</th>
+                  {showActions && <th>Actions</th>}
                 </tr>
               </thead>
               <tbody>
@@ -252,16 +254,18 @@ export default function LocationsPage() {
                           {over ? "Over Capacity" : "Normal"}
                         </span>
                       </td>
-                      <td>
-                        <div className="table-actions">
-                          <button className="btn-sm btn-edit" onClick={() => setEditing(r)} disabled={!canWrite}>
-                            Edit
-                          </button>
-                          <button className="btn-sm btn-delete" onClick={() => deleteLocation(r)} disabled={!canWrite}>
-                            Delete
-                          </button>
-                        </div>
-                      </td>
+                      {showActions && (
+                        <td>
+                          <div className="table-actions">
+                            <button className="btn-sm btn-edit" onClick={() => setEditing(r)} disabled={!canWrite}>
+                              Edit
+                            </button>
+                            <button className="btn-sm btn-delete" onClick={() => deleteLocation(r)} disabled={!canWrite}>
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -271,40 +275,42 @@ export default function LocationsPage() {
         )}
       </section>
 
-      <section className="panel">
-        <h2>Create location</h2>
-        <form className="form-grid" onSubmit={createLocation}>
-          <label>
-            Name
-            <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
-          </label>
+      {!isGuard && (
+        <section className="panel">
+          <h2>Create location</h2>
+          <form className="form-grid" onSubmit={createLocation}>
+            <label>
+              Name
+              <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
+            </label>
 
-          <label>
-            Type
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option>Cell</option>
-              <option>Workshop</option>
-              <option>Dining</option>
-              <option>Yard</option>
-              <option>Hospital</option>
-            </select>
-          </label>
+            <label>
+              Type
+              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                <option>Cell</option>
+                <option>Workshop</option>
+                <option>Dining</option>
+                <option>Yard</option>
+                <option>Hospital</option>
+              </select>
+            </label>
 
-          <label>
-            Capacity
-            <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
-          </label>
+            <label>
+              Capacity
+              <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
+            </label>
 
-          <label>
-            Security
-            <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
-          </label>
+            <label>
+              Security
+              <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
+            </label>
 
-          <button className="primary-btn" type="submit" disabled={!canWrite || creating}>
-            {creating ? "Creating..." : "Create"}
-          </button>
-        </form>
-      </section>
+            <button className="primary-btn" type="submit" disabled={!canWrite || creating}>
+              {creating ? "Creating..." : "Create"}
+            </button>
+          </form>
+        </section>
+      )}
 
       {editing && (
         <LocationEditModal

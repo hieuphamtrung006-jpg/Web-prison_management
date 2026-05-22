@@ -268,7 +268,7 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
 export default function PrisonersPage() {
   const { user } = useAuth();
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
-  const canEdit = user?.role === "Admin" || user?.role === "Warden" || user?.role === "Guard";
+  const canEdit = user?.role === "Admin" || user?.role === "Warden";
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
   const [rows, setRows] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -820,7 +820,7 @@ export default function PrisonersPage() {
         ) : (
           <section className="panel">
             <h2>Access</h2>
-            <p className="hint-text">Your role can view prisoner data. Guard role can edit only basic fields from the modal.</p>
+            <p className="hint-text">Your role can view prisoner data.</p>
           </section>
         )}
       </div>

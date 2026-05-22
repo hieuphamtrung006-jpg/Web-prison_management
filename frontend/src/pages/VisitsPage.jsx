@@ -17,6 +17,8 @@ const initialRequestForm = {
 export default function VisitsPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
+  const isGuard = user?.role === "Guard";
+  const isReadOnly = isViewer || isGuard;
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [requestForm, setRequestForm] = useState(initialRequestForm);
@@ -35,7 +37,7 @@ export default function VisitsPage() {
 
   const load = async () => {
     try {
-      const statusFilter = isViewer ? "Approved" : "Pending";
+      const statusFilter = isReadOnly ? "Approved" : "Pending";
       const response = await api.get(`/visits?status_filter=${statusFilter}&today_only=false&page=${page}&page_size=${pageSize}`);
       setRows(response.data);
     } catch (err) {
@@ -44,7 +46,7 @@ export default function VisitsPage() {
   };
 
   const loadPendingRequests = async () => {
-    if (isViewer) return;
+    if (isReadOnly) return;
     try {
       const response = await api.get("/visits/requests/pending");
       setPendingRequests(response.data);
@@ -56,7 +58,7 @@ export default function VisitsPage() {
   useEffect(() => {
     load();
     loadPendingRequests();
-  }, [page, isViewer]);
+  }, [page, isReadOnly]);
 
   const create = async (event) => {
     event.preventDefault();
@@ -134,7 +136,7 @@ export default function VisitsPage() {
   return (
     <div className="split-grid">
       <section className="panel">
-        <h2>{isViewer ? "Visits" : "Pending Visit Requests"}</h2>
+        <h2>{isReadOnly ? "Visits" : "Pending Visit Requests"}</h2>
         {error && <p className="error-msg">{error}</p>}
         <div className="inline-form">
           <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
@@ -143,13 +145,18 @@ export default function VisitsPage() {
         </div>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Prisoner</th><th>Visitor</th><th>Status</th><th></th><th></th></tr></thead>
+            <thead>
+              {isReadOnly ? (
+                <tr><th>ID</th><th>Prisoner</th><th>Visitor</th><th>Status</th></tr>
+              ) : (
+                <tr><th>ID</th><th>Prisoner</th><th>Visitor</th><th>Status</th><th></th><th></th></tr>
+              )}
+            </thead>
             <tbody>
-              {isViewer
+              {isReadOnly
                 ? rows.map((row) => (
                     <tr key={row.visit_id}>
                       <td>{row.visit_id}</td><td>{row.prisoner_id}</td><td>{row.visitor_name}</td><td>{row.status}</td>
-                      <td></td><td></td>
                     </tr>
                   ))
                 : pendingRequests.map((row) => (
@@ -172,7 +179,7 @@ export default function VisitsPage() {
             <button className="primary-btn" type="submit">Request</button>
           </form>
         </section>
-      ) : (
+      ) : isGuard ? null : (
         <>
           <section className="panel">
             <h2>Create Visit</h2>

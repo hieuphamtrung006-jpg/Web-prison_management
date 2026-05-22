@@ -22,7 +22,12 @@ const viewerNavItems = [
 export default function AppLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const navItems = user?.role === "Viewer" ? viewerNavItems : fullNavItems;
+  const isGuard = user?.role === "Guard";
+  const navItems = user?.role === "Viewer"
+    ? viewerNavItems
+    : isGuard
+      ? fullNavItems.filter((item) => item.label !== "Dashboard")
+      : fullNavItems;
 
   const handleLogout = () => {
     logout();
