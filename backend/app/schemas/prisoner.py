@@ -55,4 +55,4 @@ class PrisonerRead(PrisonerBase):
 
 class PrisonerDetail(PrisonerRead):
     current_location_name: str | None = None
-    projects: list[str] = []
+    projects: list[str] = Field(default_factory=list)

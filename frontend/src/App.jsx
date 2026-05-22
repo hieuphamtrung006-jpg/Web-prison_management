@@ -36,7 +36,16 @@ export default function App() {
           </WithLayout>
         }
       />
-      <Route path="/prisoners" element={<WithLayout><PrisonersPage /></WithLayout>} />
+      <Route
+        path="/prisoners"
+        element={
+          <WithLayout>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard", "Viewer"]}>
+              <PrisonersPage />
+            </RoleBasedRoute>
+          </WithLayout>
+        }
+      />
       <Route
         path="/locations"
         element={

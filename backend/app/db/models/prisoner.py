@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -24,5 +24,16 @@ class Prisoner(Base):
     sentence_start: Mapped[date | None] = mapped_column("SentenceStart", Date, nullable=True)
     sentence_end: Mapped[date | None] = mapped_column("SentenceEnd", Date, nullable=True)
     status: Mapped[str] = mapped_column("Status", String(20), default="InPrison")
-    created_at: Mapped[datetime] = mapped_column("CreatedAt", DateTime)
-    updated_at: Mapped[datetime | None] = mapped_column("UpdatedAt", DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        "CreatedAt",
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        "UpdatedAt",
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
