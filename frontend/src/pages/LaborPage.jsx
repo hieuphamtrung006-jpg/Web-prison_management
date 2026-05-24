@@ -1,119 +1,1249 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import { useAuth } from "../context/AuthContext";
 
-const assignInit = {
-  prisoner_id: 1,
-  project_id: 1,
-  assignment_date: new Date().toISOString().slice(0, 10),
+const today = new Date().toISOString().slice(0, 10);
+const pageSize = 10;
+
+const initialProjectForm = {
+  project_name: "",
+  location_id: "",
+  revenue_per_hour: 0,
+  priority_score: 0,
+  max_workers: 1,
+  required_skills: "",
+  is_active: true,
+};
+
+const initialAssignmentForm = {
+  prisoner_id: "",
+  project_id: "",
+  assignment_date: today,
   hours_assigned: 4,
 };
 
-const perfInit = {
-  prisoner_id: 1,
-  project_id: 1,
-  work_date: new Date().toISOString().slice(0, 10),
+const initialPerformanceForm = {
+  prisoner_id: "",
+  project_id: "",
+  work_date: today,
   productivity: 80,
   notes: "",
 };
 
-export default function LaborPage() {
-  const [projects, setProjects] = useState([]);
-  const [assignForm, setAssignForm] = useState(assignInit);
-  const [perfForm, setPerfForm] = useState(perfInit);
-  const [page, setPage] = useState(1);
-  const pageSize = 20;
+const initialAssignmentFilters = {
+  prisoner_id: "",
+  project_id: "",
+};
+
+const initialPerformanceFilters = {
+  prisoner_id: "",
+  project_id: "",
+};
+
+const projectSortOptions = [
+  { value: "project_name:asc", label: "Project name A-Z" },
+  { value: "project_name:desc", label: "Project name Z-A" },
+  { value: "current_workers:desc", label: "Most workers" },
+  { value: "open_slots:asc", label: "Fewest open slots" },
+  { value: "revenue_per_hour:desc", label: "Highest revenue" },
+];
+
+const assignmentSortOptions = [
+  { value: "assignment_date:desc", label: "Newest assignments" },
+  { value: "assignment_date:asc", label: "Oldest assignments" },
+  { value: "prisoner_name:asc", label: "Prisoner A-Z" },
+  { value: "project_name:asc", label: "Project A-Z" },
+];
+
+const performanceSortOptions = [
+  { value: "work_date:desc", label: "Newest scores" },
+  { value: "work_date:asc", label: "Oldest scores" },
+  { value: "productivity:desc", label: "Highest productivity" },
+  { value: "prisoner_name:asc", label: "Prisoner A-Z" },
+];
+
+function formatDateOnly(value) {
+  if (!value) return "-";
+  const dateValue = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(dateValue.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(dateValue);
+}
+
+function formatMoney(value) {
+  const numberValue = Number(value ?? 0);
+  return Number.isFinite(numberValue) ? numberValue.toFixed(2) : "0.00";
+}
+
+function formatDecimal(value) {
+  const numberValue = Number(value ?? 0);
+  return Number.isFinite(numberValue) ? numberValue.toFixed(2) : "0.00";
+}
+
+function normalizeNumber(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  return Number(value);
+}
+
+function sortByField(rows, sortValue) {
+  const [field, direction] = sortValue.split(":");
+  const factor = direction === "desc" ? -1 : 1;
+
+  return [...rows].sort((left, right) => {
+    const leftValue = left?.[field];
+    const rightValue = right?.[field];
+
+    if (typeof leftValue === "number" || typeof rightValue === "number") {
+      return ((Number(leftValue) || 0) - (Number(rightValue) || 0)) * factor;
+    }
+
+    if (field.includes("date")) {
+      return (new Date(leftValue || 0).getTime() - new Date(rightValue || 0).getTime()) * factor;
+    }
+
+    return String(leftValue ?? "").localeCompare(String(rightValue ?? "")) * factor;
+  });
+}
+
+function includesText(value, query) {
+  return String(value ?? "").toLowerCase().includes(query.trim().toLowerCase());
+}
+
+function Toast({ message, type = "info", onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return <div className={`toast toast-${type}`}>{message}</div>;
+}
+
+function ProjectEditModal({ project, locations, onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    project_name: project?.project_name || "",
+    location_id: project?.location_id ?? "",
+    revenue_per_hour: project?.revenue_per_hour ?? 0,
+    priority_score: project?.priority_score ?? 0,
+    max_workers: project?.max_workers ?? 1,
+    required_skills: project?.required_skills || "",
+    is_active: project?.is_active ?? true,
+  });
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = async () => {
-    try {
-      const response = await api.get(`/labor/projects?page=${page}&page_size=${pageSize}`);
-      setProjects(response.data);
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
   useEffect(() => {
-    load();
-  }, [page]);
-
-  const createAssignment = async (e) => {
-    e.preventDefault();
+    setForm({
+      project_name: project?.project_name || "",
+      location_id: project?.location_id ?? "",
+      revenue_per_hour: project?.revenue_per_hour ?? 0,
+      priority_score: project?.priority_score ?? 0,
+      max_workers: project?.max_workers ?? 1,
+      required_skills: project?.required_skills || "",
+      is_active: project?.is_active ?? true,
+    });
     setError("");
-    try {
-      await api.post("/labor/assignments", {
-        ...assignForm,
-        prisoner_id: Number(assignForm.prisoner_id),
-        project_id: Number(assignForm.project_id),
-        hours_assigned: Number(assignForm.hours_assigned),
-      });
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
+  }, [project]);
 
-  const createPerformance = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
     setError("");
+
     try {
-      await api.post("/labor/performance", {
-        ...perfForm,
-        prisoner_id: Number(perfForm.prisoner_id),
-        project_id: Number(perfForm.project_id),
-        productivity: Number(perfForm.productivity),
+      await api.put(`/labor/projects/${project.project_id}`, {
+        project_name: form.project_name,
+        location_id: normalizeNumber(form.location_id),
+        revenue_per_hour: Number(form.revenue_per_hour),
+        priority_score: Number(form.priority_score),
+        max_workers: Number(form.max_workers),
+        required_skills: form.required_skills || null,
+        is_active: form.is_active,
       });
+      showToast("Project updated", "success");
+      onSaved();
+      onClose();
     } catch (err) {
-      setError(parseApiError(err));
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="stack-grid">
-      <section className="panel">
-        <h2>Projects Missing Workers</h2>
-        {error && <p className="error-msg">{error}</p>}
-        <div className="inline-form">
-          <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-          <span className="muted">Page {page}</span>
-          <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Next</button>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit project: {project?.project_name}</h3>
+          <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Project</th><th>Current</th><th>Max</th><th>Open</th></tr></thead>
-            <tbody>
-              {projects.map((row) => (
-                <tr key={row.project_id}><td>{row.project_name}</td><td>{row.current_workers}</td><td>{row.max_workers}</td><td>{row.open_slots}</td></tr>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            Project name
+            <input value={form.project_name} onChange={(e) => setForm({ ...form, project_name: e.target.value })} required />
+          </label>
+
+          <label>
+            Location
+            <select value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })}>
+              <option value="">Unassigned</option>
+              {locations.map((location) => (
+                <option key={location.location_id} value={location.location_id}>
+                  {location.location_name} ({location.capacity})
+                </option>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
+            </select>
+          </label>
 
-      <div className="split-grid">
-        <section className="panel">
-          <h2>Create Assignment</h2>
-          <form className="form-grid" onSubmit={createAssignment}>
-            <label>Prisoner ID<input type="number" value={assignForm.prisoner_id} onChange={(e) => setAssignForm({ ...assignForm, prisoner_id: e.target.value })} /></label>
-            <label>Project ID<input type="number" value={assignForm.project_id} onChange={(e) => setAssignForm({ ...assignForm, project_id: e.target.value })} /></label>
-            <label>Date<input type="date" value={assignForm.assignment_date} onChange={(e) => setAssignForm({ ...assignForm, assignment_date: e.target.value })} /></label>
-            <label>Hours<input type="number" value={assignForm.hours_assigned} onChange={(e) => setAssignForm({ ...assignForm, hours_assigned: e.target.value })} /></label>
-            <button className="primary-btn" type="submit">Assign</button>
-          </form>
-        </section>
+          <label>
+            Revenue / hour
+            <input type="number" step="0.01" min="0" value={form.revenue_per_hour} onChange={(e) => setForm({ ...form, revenue_per_hour: e.target.value })} required />
+          </label>
 
-        <section className="panel">
-          <h2>Daily Performance</h2>
-          <form className="form-grid" onSubmit={createPerformance}>
-            <label>Prisoner ID<input type="number" value={perfForm.prisoner_id} onChange={(e) => setPerfForm({ ...perfForm, prisoner_id: e.target.value })} /></label>
-            <label>Project ID<input type="number" value={perfForm.project_id} onChange={(e) => setPerfForm({ ...perfForm, project_id: e.target.value })} /></label>
-            <label>Work Date<input type="date" value={perfForm.work_date} onChange={(e) => setPerfForm({ ...perfForm, work_date: e.target.value })} /></label>
-            <label>Productivity<input type="number" value={perfForm.productivity} onChange={(e) => setPerfForm({ ...perfForm, productivity: e.target.value })} /></label>
-            <label>Notes<textarea value={perfForm.notes} onChange={(e) => setPerfForm({ ...perfForm, notes: e.target.value })} /></label>
-            <button className="primary-btn" type="submit">Submit</button>
-          </form>
-        </section>
+          <label>
+            Priority score
+            <input type="number" min="0" value={form.priority_score} onChange={(e) => setForm({ ...form, priority_score: e.target.value })} />
+          </label>
+
+          <label>
+            Max workers
+            <input type="number" min="1" value={form.max_workers} onChange={(e) => setForm({ ...form, max_workers: e.target.value })} required />
+          </label>
+
+          <label>
+            Required skills
+            <textarea value={form.required_skills} onChange={(e) => setForm({ ...form, required_skills: e.target.value })} />
+          </label>
+
+          <label>
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> Active
+          </label>
+
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Save"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
       </div>
+    </div>
+  );
+}
+
+function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    prisoner_id: assignment?.prisoner_id ?? "",
+    project_id: assignment?.project_id ?? "",
+    assignment_date: assignment?.assignment_date || today,
+    hours_assigned: assignment?.hours_assigned ?? 1,
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    setForm({
+      prisoner_id: assignment?.prisoner_id ?? "",
+      project_id: assignment?.project_id ?? "",
+      assignment_date: assignment?.assignment_date || today,
+      hours_assigned: assignment?.hours_assigned ?? 1,
+    });
+    setError("");
+  }, [assignment]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      await api.put(`/labor/assignments/${assignment.assignment_id}`, {
+        prisoner_id: Number(form.prisoner_id),
+        project_id: Number(form.project_id),
+        assignment_date: form.assignment_date,
+        hours_assigned: Number(form.hours_assigned),
+      });
+      showToast("Assignment updated", "success");
+      onSaved();
+      onClose();
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Edit assignment: {assignment?.prisoner_name || `#${assignment?.prisoner_id}`}</h3>
+          <button className="close-btn" type="button" onClick={onClose}>×</button>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            Prisoner
+            <select value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required>
+              <option value="">Select prisoner</option>
+              {prisoners.map((prisoner) => (
+                <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                  {prisoner.full_name} (#{prisoner.prisoner_id})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Project
+            <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} required>
+              <option value="">Select a project</option>
+              {projects.map((project) => (
+                <option key={project.project_id} value={project.project_id}>
+                  {project.project_name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Assignment Date
+            <input type="date" value={form.assignment_date} onChange={(e) => setForm({ ...form, assignment_date: e.target.value })} required />
+          </label>
+
+          <label>
+            Hours Assigned
+            <input type="number" step="0.25" min="0.25" value={form.hours_assigned} onChange={(e) => setForm({ ...form, hours_assigned: e.target.value })} required />
+          </label>
+
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Save"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function SectionLoading({ label }) {
+  return (
+    <div className="loading-state">
+      <div className="spinner" />
+      <p>{label}</p>
+    </div>
+  );
+}
+
+export default function LaborPage() {
+  const { user } = useAuth();
+  const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
+  const canManageLabor = canManageProjects || user?.role === "Guard";
+
+  const [projects, setProjects] = useState([]);
+  const [assignments, setAssignments] = useState([]);
+  const [performanceRows, setPerformanceRows] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [prisoners, setPrisoners] = useState([]);
+  const [prisonerSearch, setPrisonerSearch] = useState("");
+  const [projectSearch, setProjectSearch] = useState("");
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  const [performanceSearch, setPerformanceSearch] = useState("");
+  const [projectSort, setProjectSort] = useState("project_name:asc");
+  const [assignmentSort, setAssignmentSort] = useState("assignment_date:desc");
+  const [performanceSort, setPerformanceSort] = useState("work_date:desc");
+  const [projectForm, setProjectForm] = useState(initialProjectForm);
+  const [assignmentForm, setAssignmentForm] = useState(initialAssignmentForm);
+  const [performanceForm, setPerformanceForm] = useState(initialPerformanceForm);
+  const [assignmentFilters, setAssignmentFilters] = useState(initialAssignmentFilters);
+  const [performanceFilters, setPerformanceFilters] = useState(initialPerformanceFilters);
+  const [assignmentPage, setAssignmentPage] = useState(1);
+  const [performancePage, setPerformancePage] = useState(1);
+  const [assignmentHasNext, setAssignmentHasNext] = useState(false);
+  const [performanceHasNext, setPerformanceHasNext] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [loadingPerformance, setLoadingPerformance] = useState(false);
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [loadingPrisoners, setLoadingPrisoners] = useState(false);
+  const [savingProject, setSavingProject] = useState(false);
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [savingPerformance, setSavingPerformance] = useState(false);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+  const [editingProject, setEditingProject] = useState(null);
+  const [editingAssignment, setEditingAssignment] = useState(null);
+
+  const showToast = (message, type = "info") => setToast({ message, type });
+
+  const filteredPrisoners = useMemo(() => {
+    const search = prisonerSearch.trim().toLowerCase();
+    if (!search) return prisoners;
+    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(prisoner.prisoner_id, search));
+  }, [prisoners, prisonerSearch]);
+
+  const selectedPrisonerName = useMemo(() => {
+    const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(assignmentForm.prisoner_id));
+    return found?.full_name || "";
+  }, [assignmentForm.prisoner_id, prisoners]);
+
+  const selectedPerformancePrisonerName = useMemo(() => {
+    const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(performanceForm.prisoner_id));
+    return found?.full_name || "";
+  }, [performanceForm.prisoner_id, prisoners]);
+
+  const projectMap = useMemo(() => new Map(projects.map((project) => [project.project_id, project])), [projects]);
+
+  const loadProjects = async () => {
+    setLoadingProjects(true);
+    try {
+      const response = await api.get("/labor/projects?page=1&page_size=100");
+      setProjects(response.data);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const loadLocations = async () => {
+    setLoadingLocations(true);
+    try {
+      const response = await api.get("/locations?page=1&page_size=100");
+      setLocations(response.data);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingLocations(false);
+    }
+  };
+
+  const loadPrisoners = async (search = prisonerSearch) => {
+    setLoadingPrisoners(true);
+    try {
+      const params = new URLSearchParams({ page: "1", page_size: "100" });
+      if (search.trim()) {
+        params.set("name", search.trim());
+      }
+      const response = await api.get(`/prisoners?${params.toString()}`);
+      setPrisoners(response.data);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingPrisoners(false);
+    }
+  };
+
+  const loadAssignments = async (pageNumber = assignmentPage, filters = assignmentFilters) => {
+    setLoadingAssignments(true);
+    try {
+      const params = new URLSearchParams({ page: String(pageNumber), page_size: String(pageSize) });
+      if (filters.prisoner_id) params.set("prisoner_id", filters.prisoner_id);
+      if (filters.project_id) params.set("project_id", filters.project_id);
+
+      const response = await api.get(`/labor/assignments?${params.toString()}`);
+      setAssignments(response.data);
+      setAssignmentHasNext(response.data.length === pageSize);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingAssignments(false);
+    }
+  };
+
+  const loadPerformance = async (pageNumber = performancePage, filters = performanceFilters) => {
+    setLoadingPerformance(true);
+    try {
+      const params = new URLSearchParams({ page: String(pageNumber), page_size: String(pageSize) });
+      if (filters.prisoner_id) params.set("prisoner_id", filters.prisoner_id);
+      if (filters.project_id) params.set("project_id", filters.project_id);
+
+      const response = await api.get(`/labor/performance?${params.toString()}`);
+      setPerformanceRows(response.data);
+      setPerformanceHasNext(response.data.length === pageSize);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoadingPerformance(false);
+    }
+  };
+
+  const refreshAll = async () => {
+    await Promise.all([
+      loadProjects(),
+      loadLocations(),
+      loadPrisoners(prisonerSearch),
+      loadAssignments(assignmentPage, assignmentFilters),
+      loadPerformance(performancePage, performanceFilters),
+    ]);
+  };
+
+  useEffect(() => {
+    refreshAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    loadPrisoners(prisonerSearch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prisonerSearch]);
+
+  const reloadAssignments = async (nextPage = assignmentPage) => {
+    await loadAssignments(nextPage, assignmentFilters);
+  };
+
+  const reloadPerformance = async (nextPage = performancePage) => {
+    await loadPerformance(nextPage, performanceFilters);
+  };
+
+  const handleCreateProject = async (event) => {
+    event.preventDefault();
+    if (!canManageProjects) return;
+
+    setSavingProject(true);
+    setError("");
+    try {
+      await api.post("/labor/projects", {
+        project_name: projectForm.project_name,
+        location_id: normalizeNumber(projectForm.location_id),
+        revenue_per_hour: Number(projectForm.revenue_per_hour),
+        priority_score: Number(projectForm.priority_score),
+        max_workers: Number(projectForm.max_workers),
+        required_skills: projectForm.required_skills || null,
+        is_active: projectForm.is_active,
+      });
+      setProjectForm(initialProjectForm);
+      showToast("Project created", "success");
+      await loadProjects();
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setSavingProject(false);
+    }
+  };
+
+  const handleCreateAssignment = async (event) => {
+    event.preventDefault();
+    if (!canManageLabor) return;
+
+    setSavingAssignment(true);
+    setError("");
+    try {
+      await api.post("/labor/assignments", {
+        prisoner_id: Number(assignmentForm.prisoner_id),
+        project_id: Number(assignmentForm.project_id),
+        assignment_date: assignmentForm.assignment_date,
+        hours_assigned: Number(assignmentForm.hours_assigned),
+      });
+      setAssignmentForm(initialAssignmentForm);
+      showToast("Assignment created", "success");
+      setAssignmentPage(1);
+      await loadAssignments(1, assignmentFilters);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setSavingAssignment(false);
+    }
+  };
+
+  const handleCreatePerformance = async (event) => {
+    event.preventDefault();
+    if (!canManageLabor) return;
+
+    setSavingPerformance(true);
+    setError("");
+    try {
+      await api.post("/labor/performance", {
+        prisoner_id: Number(performanceForm.prisoner_id),
+        project_id: Number(performanceForm.project_id),
+        work_date: performanceForm.work_date,
+        productivity: Number(performanceForm.productivity),
+        notes: performanceForm.notes || null,
+      });
+      setPerformanceForm(initialPerformanceForm);
+      showToast("Performance recorded", "success");
+      setPerformancePage(1);
+      await loadPerformance(1, performanceFilters);
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setSavingPerformance(false);
+    }
+  };
+
+  const handleDeleteProject = async (project) => {
+    const confirmed = window.confirm(`Delete project "${project.project_name}"?`);
+    if (!confirmed) return;
+
+    setError("");
+    try {
+      await api.delete(`/labor/projects/${project.project_id}`);
+      showToast("Project deleted", "success");
+      await loadProjects();
+      await reloadAssignments();
+      await reloadPerformance();
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  const handleDeleteAssignment = async (assignment) => {
+    const confirmed = window.confirm(`Delete assignment for ${assignment.prisoner_name || assignment.prisoner_id}?`);
+    if (!confirmed) return;
+
+    setError("");
+    try {
+      await api.delete(`/labor/assignments/${assignment.assignment_id}`);
+      showToast("Assignment deleted", "success");
+      await reloadAssignments(assignmentPage);
+      await loadProjects();
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    }
+  };
+
+  const applyAssignmentFilters = async () => {
+    setAssignmentPage(1);
+    await loadAssignments(1, assignmentFilters);
+  };
+
+  const clearAssignmentFilters = async () => {
+    setAssignmentFilters(initialAssignmentFilters);
+    setAssignmentPage(1);
+    await loadAssignments(1, initialAssignmentFilters);
+  };
+
+  const applyPerformanceFilters = async () => {
+    setPerformancePage(1);
+    await loadPerformance(1, performanceFilters);
+  };
+
+  const clearPerformanceFilters = async () => {
+    setPerformanceFilters(initialPerformanceFilters);
+    setPerformancePage(1);
+    await loadPerformance(1, initialPerformanceFilters);
+  };
+
+  const projectStatus = (project) => {
+    if (!project.is_active) return { label: "Inactive", className: "status-inactive" };
+    if (project.current_workers >= project.max_workers) return { label: "Full", className: "status-warning" };
+    return { label: "Active", className: "status-active" };
+  };
+
+  const productivityBadge = (value) => {
+    const score = Number(value ?? 0);
+    if (score >= 80) return "status-active";
+    if (score >= 50) return "status-warning";
+    return "status-inactive";
+  };
+
+  const sortedProjects = useMemo(() => {
+    const search = projectSearch.trim().toLowerCase();
+    const filtered = projects.filter((project) => {
+      if (!search) return true;
+      return (
+        includesText(project.project_name, search) ||
+        includesText(project.location_name, search) ||
+        includesText(project.required_skills, search)
+      );
+    });
+    return sortByField(filtered, projectSort);
+  }, [projects, projectSearch, projectSort]);
+
+  const sortedAssignments = useMemo(() => {
+    const search = assignmentSearch.trim().toLowerCase();
+    const filtered = assignments.filter((assignment) => {
+      if (!search) return true;
+      return (
+        includesText(assignment.prisoner_name, search) ||
+        includesText(assignment.project_name, search) ||
+        includesText(assignment.assigned_by_name, search)
+      );
+    });
+    return sortByField(filtered, assignmentSort);
+  }, [assignments, assignmentSearch, assignmentSort]);
+
+  const sortedPerformance = useMemo(() => {
+    const search = performanceSearch.trim().toLowerCase();
+    const filtered = performanceRows.filter((record) => {
+      if (!search) return true;
+      return (
+        includesText(record.prisoner_name, search) ||
+        includesText(record.project_name, search) ||
+        includesText(record.notes, search)
+      );
+    });
+    return sortByField(filtered, performanceSort);
+  }, [performanceRows, performanceSearch, performanceSort]);
+
+  const prisonerOptions = useMemo(() => {
+    const options = [...filteredPrisoners];
+    const assignmentSelected = prisoners.find((item) => String(item.prisoner_id) === String(assignmentForm.prisoner_id));
+    const performanceSelected = prisoners.find((item) => String(item.prisoner_id) === String(performanceForm.prisoner_id));
+    if (assignmentSelected && !options.some((item) => item.prisoner_id === assignmentSelected.prisoner_id)) options.unshift(assignmentSelected);
+    if (performanceSelected && !options.some((item) => item.prisoner_id === performanceSelected.prisoner_id)) options.unshift(performanceSelected);
+    return options;
+  }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
+
+  return (
+    <div className="labor-page">
+      <style>{`
+        .labor-page { align-items: start; }
+        .labor-columns {
+          display: grid;
+          grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.9fr);
+          gap: 16px;
+          align-items: start;
+        }
+        .labor-stack { display: grid; gap: 16px; }
+        .section-head, .history-header {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: flex-start;
+        }
+        .section-head p, .helper-note, .mini-muted, .filter-hint, .readonly-note { color: var(--muted); }
+        .helper-note, .filter-hint { font-size: 0.88rem; }
+        .mini-muted { font-size: 0.82rem; }
+        .filter-bar, .history-filters, .top-search-row {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          align-items: end;
+          margin-top: 12px;
+        }
+        .filter-bar label, .history-filters label, .top-search-row label { min-width: 160px; }
+        .toolbar-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .table-shell table { min-width: 920px; }
+        .compact-table table { min-width: 760px; }
+        .table-actions, .project-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .form-card .form-grid { margin-top: 12px; }
+        .readonly-note {
+          padding: 10px 12px;
+          border-radius: 12px;
+          border: 1px dashed #c7d1cb;
+          background: #eef3ef;
+        }
+        .status-warning { background: #f3e9bf; color: #826500; }
+        .status-neutral { background: #e8ecec; color: #405256; }
+        .project-summary { display: grid; gap: 4px; }
+        .project-summary strong { font-size: 0.94rem; }
+        .score-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 64px; }
+        .pagination-bar {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          justify-content: space-between;
+          align-items: center;
+          margin-top: 12px;
+        }
+        .pagination-bar .controls { display: flex; gap: 8px; align-items: center; }
+        .searchable-picker {
+          display: grid;
+          gap: 8px;
+          padding: 12px;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          background: #fbfaf6;
+        }
+        .searchable-picker select { min-height: 220px; }
+        .search-status { font-size: 0.82rem; color: var(--muted); }
+        @media (max-width: 1120px) { .labor-columns { grid-template-columns: 1fr; } }
+      `}</style>
+
+      <div className="labor-columns">
+        <div className="labor-stack">
+          <section className="panel">
+            <div className="section-head">
+              <div>
+                <h2>Labor Projects</h2>
+                <p>Current workers are counted from today&apos;s assignments.</p>
+              </div>
+              <button className="secondary-btn" type="button" onClick={loadProjects} disabled={loadingProjects}>Refresh</button>
+            </div>
+
+            <div className="top-search-row">
+              <label>
+                Search projects
+                <input value={projectSearch} onChange={(e) => setProjectSearch(e.target.value)} placeholder="Name, location, skills" />
+              </label>
+              <label>
+                Sort
+                <select value={projectSort} onChange={(e) => setProjectSort(e.target.value)}>
+                  {projectSortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            {error && <div className="error-msg">{error}</div>}
+
+            {loadingProjects ? (
+              <SectionLoading label="Loading projects..." />
+            ) : sortedProjects.length === 0 ? (
+              <div className="loading-state"><p>No labor projects found</p></div>
+            ) : (
+              <div className="table-wrap table-shell">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Location</th>
+                      <th>Max Workers</th>
+                      <th>Current Workers</th>
+                      <th>Revenue / Hour</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedProjects.map((project) => {
+                      const status = projectStatus(project);
+                      const location = project.location_name || (project.location_id ? `#${project.location_id}` : "Unassigned");
+                      return (
+                        <tr key={project.project_id}>
+                          <td>
+                            <div className="project-summary">
+                              <strong>{project.project_name}</strong>
+                              <span className="mini-muted">Priority: {project.priority_score}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="project-summary">
+                              <strong>{location}</strong>
+                              <span className="mini-muted">{project.required_skills || "No skills specified"}</span>
+                            </div>
+                          </td>
+                          <td>{project.max_workers}</td>
+                          <td>{project.current_workers}</td>
+                          <td>{formatMoney(project.revenue_per_hour)}</td>
+                          <td>
+                            <span className={`status-badge ${status.className}`}>{status.label}</span>
+                            <div className="mini-muted">{project.open_slots} open</div>
+                          </td>
+                          <td>
+                            <div className="project-actions">
+                              <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)} disabled={!canManageProjects}>Edit</button>
+                              <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)} disabled={!canManageProjects}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="section-head">
+              <div>
+                <h2>Assignments</h2>
+                <p>Search, filter, sort and page through assignment history.</p>
+              </div>
+              <button className="secondary-btn" type="button" onClick={() => loadAssignments(assignmentPage, assignmentFilters)} disabled={loadingAssignments}>Refresh</button>
+            </div>
+
+            <div className="top-search-row">
+              <label>
+                Search assignments
+                <input value={assignmentSearch} onChange={(e) => setAssignmentSearch(e.target.value)} placeholder="Prisoner, project, assigned by" />
+              </label>
+              <label>
+                Sort
+                <select value={assignmentSort} onChange={(e) => setAssignmentSort(e.target.value)}>
+                  {assignmentSortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="filter-bar">
+              <label>
+                Prisoner
+                <input value={assignmentFilters.prisoner_id} onChange={(e) => setAssignmentFilters({ ...assignmentFilters, prisoner_id: e.target.value })} placeholder="Prisoner ID" />
+              </label>
+              <label>
+                Project
+                <select value={assignmentFilters.project_id} onChange={(e) => setAssignmentFilters({ ...assignmentFilters, project_id: e.target.value })}>
+                  <option value="">All projects</option>
+                  {projects.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="toolbar-row">
+                <button className="primary-btn" type="button" onClick={applyAssignmentFilters}>Apply</button>
+                <button className="secondary-btn" type="button" onClick={clearAssignmentFilters}>Clear</button>
+              </div>
+            </div>
+
+            <div className="pagination-bar">
+              <div className="search-status">Page {assignmentPage} {loadingAssignments ? "• loading" : ""}</div>
+              <div className="controls">
+                <button className="secondary-btn" type="button" disabled={assignmentPage <= 1 || loadingAssignments} onClick={async () => {
+                  const nextPage = Math.max(1, assignmentPage - 1);
+                  setAssignmentPage(nextPage);
+                  await loadAssignments(nextPage, assignmentFilters);
+                }}>Prev</button>
+                <button className="secondary-btn" type="button" disabled={!assignmentHasNext || loadingAssignments} onClick={async () => {
+                  const nextPage = assignmentPage + 1;
+                  setAssignmentPage(nextPage);
+                  await loadAssignments(nextPage, assignmentFilters);
+                }}>Next</button>
+              </div>
+            </div>
+
+            {loadingAssignments ? (
+              <SectionLoading label="Loading assignments..." />
+            ) : sortedAssignments.length === 0 ? (
+              <div className="loading-state"><p>No assignments found</p></div>
+            ) : (
+              <div className="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Prisoner Name</th>
+                      <th>Project</th>
+                      <th>Assigned Date</th>
+                      <th>Hours</th>
+                      <th>Assigned By</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedAssignments.map((assignment) => (
+                      <tr key={assignment.assignment_id}>
+                        <td>{assignment.prisoner_name || `#${assignment.prisoner_id}`}</td>
+                        <td>{assignment.project_name || `#${assignment.project_id}`}</td>
+                        <td>{formatDateOnly(assignment.assignment_date)}</td>
+                        <td>{formatDecimal(assignment.hours_assigned)}</td>
+                        <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
+                        <td>
+                          <div className="table-actions">
+                            <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)} disabled={!canManageLabor}>Edit</button>
+                            <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)} disabled={!canManageLabor}>Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="labor-stack">
+          <section className="panel form-card">
+            <div className="section-head">
+              <div>
+                <h2>Create Project</h2>
+                <p>Project capacity is capped by the selected location.</p>
+              </div>
+              {!canManageProjects && <span className="status-badge status-neutral">Read only</span>}
+            </div>
+            {!canManageProjects && <div className="readonly-note">Admin and Warden can create and edit projects. Guard and Viewer are read-only here.</div>}
+            <form className="form-grid" onSubmit={handleCreateProject}>
+              <label>
+                Name
+                <input value={projectForm.project_name} onChange={(e) => setProjectForm({ ...projectForm, project_name: e.target.value })} required disabled={!canManageProjects} />
+              </label>
+              <label>
+                Location
+                <select value={projectForm.location_id} onChange={(e) => setProjectForm({ ...projectForm, location_id: e.target.value })} disabled={!canManageProjects || loadingLocations}>
+                  <option value="">Unassigned</option>
+                  {locations.map((location) => (
+                    <option key={location.location_id} value={location.location_id}>{location.location_name} ({location.capacity})</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Revenue / Hour
+                <input type="number" step="0.01" min="0" value={projectForm.revenue_per_hour} onChange={(e) => setProjectForm({ ...projectForm, revenue_per_hour: e.target.value })} required disabled={!canManageProjects} />
+              </label>
+              <label>
+                Priority Score
+                <input type="number" min="0" value={projectForm.priority_score} onChange={(e) => setProjectForm({ ...projectForm, priority_score: e.target.value })} disabled={!canManageProjects} />
+              </label>
+              <label>
+                Max Workers
+                <input type="number" min="1" value={projectForm.max_workers} onChange={(e) => setProjectForm({ ...projectForm, max_workers: e.target.value })} required disabled={!canManageProjects} />
+              </label>
+              <label>
+                Required Skills
+                <textarea value={projectForm.required_skills} onChange={(e) => setProjectForm({ ...projectForm, required_skills: e.target.value })} disabled={!canManageProjects} />
+              </label>
+              <label>
+                <input type="checkbox" checked={projectForm.is_active} onChange={(e) => setProjectForm({ ...projectForm, is_active: e.target.checked })} disabled={!canManageProjects} /> Active
+              </label>
+              <button className="primary-btn" type="submit" disabled={!canManageProjects || savingProject}>{savingProject ? "Creating..." : "Create Project"}</button>
+            </form>
+          </section>
+
+          <section className="panel form-card">
+            <div className="section-head">
+              <div>
+                <h2>Create Assignment</h2>
+                <p>Pick a prisoner from the searchable dropdown instead of typing IDs.</p>
+              </div>
+              {!canManageLabor && <span className="status-badge status-neutral">Read only</span>}
+            </div>
+            {!canManageLabor && <div className="readonly-note">Assignments are limited to Admin, Warden, and Guard.</div>}
+            <form className="form-grid" onSubmit={handleCreateAssignment}>
+              <label>
+                Search prisoner
+                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" disabled={!canManageLabor} />
+              </label>
+              <div className="searchable-picker">
+                <div className="search-status">
+                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+                </div>
+                <label>
+                  Prisoner
+                  <select value={assignmentForm.prisoner_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
+                    <option value="">Select prisoner by name</option>
+                    {prisonerOptions.map((prisoner) => (
+                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                        {prisoner.full_name} (#{prisoner.prisoner_id})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
+              </div>
+              <label>
+                Project
+                <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required disabled={!canManageLabor}>
+                  <option value="">Select a project</option>
+                  {projects.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>{project.project_name} ({project.current_workers}/{project.max_workers})</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Assignment Date
+                <input type="date" value={assignmentForm.assignment_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, assignment_date: e.target.value })} required disabled={!canManageLabor} />
+              </label>
+              <label>
+                Hours Assigned
+                <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required disabled={!canManageLabor} />
+              </label>
+              <button className="primary-btn" type="submit" disabled={!canManageLabor || savingAssignment}>{savingAssignment ? "Assigning..." : "Assign Prisoner"}</button>
+            </form>
+          </section>
+
+          <section className="panel form-card">
+            <div className="section-head">
+              <div>
+                <h2>Daily Performance</h2>
+                <p>Recording a score updates the prisoner productivity average automatically.</p>
+              </div>
+              {!canManageLabor && <span className="status-badge status-neutral">Read only</span>}
+            </div>
+            {!canManageLabor && <div className="readonly-note">Performance scoring is limited to Admin, Warden, and Guard.</div>}
+            <form className="form-grid" onSubmit={handleCreatePerformance}>
+              <label>
+                Search prisoner
+                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" disabled={!canManageLabor} />
+              </label>
+              <div className="searchable-picker">
+                <div className="search-status">
+                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+                </div>
+                <label>
+                  Prisoner
+                  <select value={performanceForm.prisoner_id} onChange={(e) => setPerformanceForm({ ...performanceForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
+                    <option value="">Select prisoner by name</option>
+                    {prisonerOptions.map((prisoner) => (
+                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                        {prisoner.full_name} (#{prisoner.prisoner_id})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
+              </div>
+              <label>
+                Project
+                <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
+                  <option value="">Select a project</option>
+                  {projects.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Work Date
+                <input type="date" value={performanceForm.work_date} onChange={(e) => setPerformanceForm({ ...performanceForm, work_date: e.target.value })} required disabled={!canManageLabor} />
+              </label>
+              <label>
+                Productivity
+                <input type="number" step="0.01" min="0" max="100" value={performanceForm.productivity} onChange={(e) => setPerformanceForm({ ...performanceForm, productivity: e.target.value })} required disabled={!canManageLabor} />
+              </label>
+              <label>
+                Notes
+                <textarea value={performanceForm.notes} onChange={(e) => setPerformanceForm({ ...performanceForm, notes: e.target.value })} disabled={!canManageLabor} />
+              </label>
+              <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Saving..." : "Save Performance"}</button>
+            </form>
+          </section>
+
+          <section className="panel">
+            <div className="history-header">
+              <div>
+                <h2>Performance History</h2>
+                <p>Search, filter, sort and page through daily performance records.</p>
+              </div>
+              <button className="secondary-btn" type="button" onClick={() => loadPerformance(performancePage, performanceFilters)} disabled={loadingPerformance}>Refresh</button>
+            </div>
+
+            <div className="top-search-row">
+              <label>
+                Search records
+                <input value={performanceSearch} onChange={(e) => setPerformanceSearch(e.target.value)} placeholder="Prisoner, project, notes" />
+              </label>
+              <label>
+                Sort
+                <select value={performanceSort} onChange={(e) => setPerformanceSort(e.target.value)}>
+                  {performanceSortOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="history-filters">
+              <label>
+                Prisoner ID
+                <input type="number" min="1" value={performanceFilters.prisoner_id} onChange={(e) => setPerformanceFilters({ ...performanceFilters, prisoner_id: e.target.value })} placeholder="Prisoner ID" />
+              </label>
+              <label>
+                Project
+                <select value={performanceFilters.project_id} onChange={(e) => setPerformanceFilters({ ...performanceFilters, project_id: e.target.value })}>
+                  <option value="">All projects</option>
+                  {projects.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="toolbar-row">
+                <button className="primary-btn" type="button" onClick={applyPerformanceFilters}>Apply</button>
+                <button className="secondary-btn" type="button" onClick={clearPerformanceFilters}>Clear</button>
+              </div>
+            </div>
+
+            <div className="pagination-bar">
+              <div className="search-status">Page {performancePage} {loadingPerformance ? "• loading" : ""}</div>
+              <div className="controls">
+                <button className="secondary-btn" type="button" disabled={performancePage <= 1 || loadingPerformance} onClick={async () => {
+                  const nextPage = Math.max(1, performancePage - 1);
+                  setPerformancePage(nextPage);
+                  await loadPerformance(nextPage, performanceFilters);
+                }}>Prev</button>
+                <button className="secondary-btn" type="button" disabled={!performanceHasNext || loadingPerformance} onClick={async () => {
+                  const nextPage = performancePage + 1;
+                  setPerformancePage(nextPage);
+                  await loadPerformance(nextPage, performanceFilters);
+                }}>Next</button>
+              </div>
+            </div>
+
+            {loadingPerformance ? (
+              <SectionLoading label="Loading performance history..." />
+            ) : sortedPerformance.length === 0 ? (
+              <div className="loading-state"><p>No performance records found</p></div>
+            ) : (
+              <div className="table-wrap compact-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Prisoner</th>
+                      <th>Project</th>
+                      <th>Date</th>
+                      <th>Score</th>
+                      <th>Evaluated By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedPerformance.map((record) => (
+                      <tr key={record.performance_id}>
+                        <td>{record.prisoner_name || `#${record.prisoner_id}`}</td>
+                        <td>{record.project_name || `#${record.project_id}`}</td>
+                        <td>{formatDateOnly(record.work_date)}</td>
+                        <td><span className={`status-badge score-pill ${productivityBadge(record.productivity)}`}>{formatDecimal(record.productivity)}</span></td>
+                        <td>{record.evaluated_by_name || record.evaluated_by || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {editingProject && (
+        <ProjectEditModal
+          project={editingProject}
+          locations={locations}
+          onClose={() => setEditingProject(null)}
+          onSaved={async () => {
+            await loadProjects();
+            await reloadAssignments();
+            await reloadPerformance();
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {editingAssignment && (
+        <AssignmentEditModal
+          assignment={editingAssignment}
+          projects={projects}
+          prisoners={prisoners}
+          onClose={() => setEditingAssignment(null)}
+          onSaved={async () => {
+            await reloadAssignments();
+            await loadProjects();
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }

@@ -71,7 +71,7 @@ export default function App() {
         path="/labor"
         element={
           <WithLayout>
-            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard"]}>
+            <RoleBasedRoute allowedRoles={["Admin", "Warden", "Guard", "Viewer"]}>
               <LaborPage />
             </RoleBasedRoute>
           </WithLayout>

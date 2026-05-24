@@ -1,39 +1,153 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_roles
+from app.core.deps import get_db, require_roles
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
+from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
+from app.db.models.schedule import Schedule
 from app.db.models.user import User
+from app.schemas.common import MessageResponse
 from app.schemas.labor import (
-    AssignmentCreate,
-    AssignmentRead,
+    DailyPerformanceCreate,
+    DailyPerformanceRead,
+    LaborAssignmentCreate,
+    LaborAssignmentRead,
+    LaborAssignmentUpdate,
+    LaborProjectCreate,
     LaborProjectRead,
     LaborProjectSummary,
-    PerformanceCreate,
-    PerformanceRead,
+    LaborProjectUpdate,
     PrisonerPerformancePoint,
 )
 
 router = APIRouter()
 
 
-@router.get("/projects", response_model=list[LaborProjectSummary])
-def list_projects_missing_workers(
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _get_location_or_404(db: Session, location_id: int) -> Location:
+    location = db.query(Location).filter(Location.location_id == location_id).first()
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return location
+
+
+def _get_project_or_404(db: Session, project_id: int) -> LaborProject:
+    project = db.query(LaborProject).filter(LaborProject.project_id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _current_worker_count(
+    db: Session,
+    project_id: int,
+    target_date: date,
+    exclude_assignment_id: int | None = None,
+) -> int:
+    query = db.query(func.count(LaborAssignment.assignment_id)).filter(
+        LaborAssignment.project_id == project_id,
+        LaborAssignment.assignment_date == target_date,
+    )
+    if exclude_assignment_id is not None:
+        query = query.filter(LaborAssignment.assignment_id != exclude_assignment_id)
+    return query.scalar() or 0
+
+
+def _project_read_from_row(row) -> LaborProjectRead:
+    data = dict(row._mapping)
+    data["current_workers"] = int(data.get("current_workers", 0))
+    data["open_slots"] = max(int(data["max_workers"]) - data["current_workers"], 0)
+    return LaborProjectRead(**data)
+
+
+def _assignment_read_from_row(row) -> LaborAssignmentRead:
+    return LaborAssignmentRead(**dict(row._mapping))
+
+
+def _performance_read_from_row(row) -> DailyPerformanceRead:
+    return DailyPerformanceRead(**dict(row._mapping))
+
+
+def _validate_project_capacity(
+    db: Session,
+    location_id: int | None,
+    max_workers: int,
+    project_id: int | None = None,
+) -> None:
+    if location_id is None:
+        return
+
+    location = _get_location_or_404(db, location_id)
+    if max_workers > location.capacity:
+        raise HTTPException(status_code=400, detail="Project MaxWorkers cannot exceed location capacity")
+
+    if project_id is None:
+        return
+
+    current_workers = _current_worker_count(db, project_id, date.today())
+    if current_workers > max_workers:
+        raise HTTPException(status_code=400, detail="Project MaxWorkers cannot be lower than current workers")
+
+
+def _validate_project_active(project: LaborProject) -> None:
+    if not project.is_active:
+        raise HTTPException(status_code=400, detail="Project is inactive")
+
+
+def _validate_prisoner_available(prisoner: Prisoner) -> None:
+    if prisoner.status == "Released":
+        raise HTTPException(status_code=400, detail="Released prisoners cannot be assigned to labor")
+
+
+def _get_assignment_row_or_404(db: Session, assignment_id: int):
+    row = (
+        db.query(
+            LaborAssignment.assignment_id,
+            LaborAssignment.prisoner_id,
+            Prisoner.full_name.label("prisoner_name"),
+            LaborAssignment.project_id,
+            LaborProject.project_name.label("project_name"),
+            LaborAssignment.assigned_by,
+            User.full_name.label("assigned_by_name"),
+            LaborAssignment.assignment_date,
+            LaborAssignment.hours_assigned,
+            LaborAssignment.created_at,
+            LaborAssignment.updated_at,
+        )
+        .join(Prisoner, Prisoner.prisoner_id == LaborAssignment.prisoner_id)
+        .join(LaborProject, LaborProject.project_id == LaborAssignment.project_id)
+        .outerjoin(User, User.user_id == LaborAssignment.assigned_by)
+        .filter(LaborAssignment.assignment_id == assignment_id)
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return row
+
+
+@router.get("/projects", response_model=list[LaborProjectRead])
+def list_projects(
     on_date: date | None = None,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[LaborProjectSummary]:
+) -> list[LaborProjectRead]:
     target_date = on_date or date.today()
+    offset = (page - 1) * page_size
+
     assignment_subquery = (
         db.query(
-            LaborAssignment.project_id,
-            func.count(LaborAssignment.assignment_id).label("worker_count"),
+            LaborAssignment.project_id.label("project_id"),
+            func.count(LaborAssignment.assignment_id).label("current_workers"),
         )
         .filter(LaborAssignment.assignment_date == target_date)
         .group_by(LaborAssignment.project_id)
@@ -44,67 +158,209 @@ def list_projects_missing_workers(
         db.query(
             LaborProject.project_id,
             LaborProject.project_name,
+            LaborProject.location_id,
+            Location.location_name.label("location_name"),
+            LaborProject.revenue_per_hour,
+            LaborProject.priority_score,
             LaborProject.max_workers,
-            func.coalesce(assignment_subquery.c.worker_count, 0).label("current_workers"),
+            func.coalesce(assignment_subquery.c.current_workers, 0).label("current_workers"),
+            LaborProject.required_skills,
+            LaborProject.is_active,
+            LaborProject.created_at,
+            LaborProject.updated_at,
         )
+        .outerjoin(Location, Location.location_id == LaborProject.location_id)
         .outerjoin(assignment_subquery, assignment_subquery.c.project_id == LaborProject.project_id)
-        .filter(LaborProject.is_active.is_(True))
         .order_by(LaborProject.project_id.desc())
+        .offset(offset)
+        .limit(page_size)
         .all()
     )
-
-    result = []
-    for row in rows:
-        open_slots = row.max_workers - row.current_workers
-        if open_slots > 0:
-            result.append(
-                {
-                    "project_id": row.project_id,
-                    "project_name": row.project_name,
-                    "max_workers": row.max_workers,
-                    "current_workers": row.current_workers,
-                    "open_slots": open_slots,
-                }
-            )
-    offset = (page - 1) * page_size
-    paged = result[offset : offset + page_size]
-    return [LaborProjectSummary(**item) for item in paged]
+    return [_project_read_from_row(row) for row in rows]
 
 
 @router.get("/projects/{project_id}", response_model=LaborProjectRead)
 def get_project(
     project_id: int,
+    on_date: date | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> LaborProjectRead:
-    project = db.query(LaborProject).filter(LaborProject.project_id == project_id).first()
-    if not project:
+    target_date = on_date or date.today()
+    project = _get_project_or_404(db, project_id)
+
+    row = (
+        db.query(
+            LaborProject.project_id,
+            LaborProject.project_name,
+            LaborProject.location_id,
+            Location.location_name.label("location_name"),
+            LaborProject.revenue_per_hour,
+            LaborProject.priority_score,
+            LaborProject.max_workers,
+            func.count(LaborAssignment.assignment_id).label("current_workers"),
+            LaborProject.required_skills,
+            LaborProject.is_active,
+            LaborProject.created_at,
+            LaborProject.updated_at,
+        )
+        .outerjoin(Location, Location.location_id == LaborProject.location_id)
+        .outerjoin(
+            LaborAssignment,
+            (LaborAssignment.project_id == LaborProject.project_id)
+            & (LaborAssignment.assignment_date == target_date),
+        )
+        .filter(LaborProject.project_id == project.project_id)
+        .group_by(
+            LaborProject.project_id,
+            LaborProject.project_name,
+            LaborProject.location_id,
+            Location.location_name,
+            LaborProject.revenue_per_hour,
+            LaborProject.priority_score,
+            LaborProject.max_workers,
+            LaborProject.required_skills,
+            LaborProject.is_active,
+            LaborProject.created_at,
+            LaborProject.updated_at,
+        )
+        .first()
+    )
+    if not row:
         raise HTTPException(status_code=404, detail="Project not found")
-    return LaborProjectRead.model_validate(project)
+    return _project_read_from_row(row)
 
 
-@router.post("/assignments", response_model=AssignmentRead, status_code=status.HTTP_201_CREATED)
+@router.post("/projects", response_model=LaborProjectRead, status_code=status.HTTP_201_CREATED)
+def create_project(
+    payload: LaborProjectCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden")),
+) -> LaborProjectRead:
+    if payload.location_id is not None:
+        _validate_project_capacity(db, payload.location_id, payload.max_workers)
+
+    project = LaborProject(**payload.model_dump())
+    project.created_at = _now_utc()
+    db.add(project)
+    db.commit()
+    db.refresh(project)
+    return get_project(project.project_id, db=db, _=None)  # type: ignore[arg-type]
+
+
+@router.put("/projects/{project_id}", response_model=LaborProjectRead)
+def update_project(
+    project_id: int,
+    payload: LaborProjectUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden")),
+) -> LaborProjectRead:
+    project = _get_project_or_404(db, project_id)
+    update_data = payload.model_dump(exclude_unset=True)
+
+    candidate_location_id = update_data.get("location_id", project.location_id)
+    candidate_max_workers = update_data.get("max_workers", project.max_workers)
+    if candidate_location_id is not None and candidate_max_workers is not None:
+        _validate_project_capacity(db, candidate_location_id, candidate_max_workers)
+
+    if candidate_max_workers is not None:
+        current_workers = _current_worker_count(db, project_id, date.today())
+        if current_workers > candidate_max_workers:
+            raise HTTPException(status_code=400, detail="Project MaxWorkers cannot be lower than current workers")
+
+    for field, value in update_data.items():
+        setattr(project, field, value)
+    project.updated_at = _now_utc()
+
+    db.commit()
+    db.refresh(project)
+    return get_project(project.project_id, db=db, _=None)  # type: ignore[arg-type]
+
+
+@router.delete("/projects/{project_id}", response_model=MessageResponse)
+def delete_project(
+    project_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden")),
+) -> MessageResponse:
+    project = _get_project_or_404(db, project_id)
+
+    has_assignments = db.query(LaborAssignment.assignment_id).filter(LaborAssignment.project_id == project_id).first()
+    has_performance = db.query(DailyPerformance.performance_id).filter(DailyPerformance.project_id == project_id).first()
+    has_schedules = db.query(Schedule.schedule_id).filter(Schedule.project_id == project_id).first()
+    if has_assignments or has_performance or has_schedules:
+        raise HTTPException(status_code=400, detail="Project has related records and cannot be deleted")
+
+    db.delete(project)
+    db.commit()
+    return MessageResponse(detail="Project deleted")
+
+
+@router.get("/assignments", response_model=list[LaborAssignmentRead])
+def list_assignments(
+    prisoner_id: int | None = Query(default=None, gt=0),
+    project_id: int | None = Query(default=None, gt=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[LaborAssignmentRead]:
+    query = (
+        db.query(
+            LaborAssignment.assignment_id,
+            LaborAssignment.prisoner_id,
+            Prisoner.full_name.label("prisoner_name"),
+            LaborAssignment.project_id,
+            LaborProject.project_name.label("project_name"),
+            LaborAssignment.assigned_by,
+            User.full_name.label("assigned_by_name"),
+            LaborAssignment.assignment_date,
+            LaborAssignment.hours_assigned,
+            LaborAssignment.created_at,
+            LaborAssignment.updated_at,
+        )
+        .join(Prisoner, Prisoner.prisoner_id == LaborAssignment.prisoner_id)
+        .join(LaborProject, LaborProject.project_id == LaborAssignment.project_id)
+        .outerjoin(User, User.user_id == LaborAssignment.assigned_by)
+    )
+
+    if prisoner_id is not None:
+        query = query.filter(LaborAssignment.prisoner_id == prisoner_id)
+    if project_id is not None:
+        query = query.filter(LaborAssignment.project_id == project_id)
+
+    offset = (page - 1) * page_size
+    rows = query.order_by(LaborAssignment.assignment_date.desc(), LaborAssignment.assignment_id.desc()).offset(offset).limit(page_size).all()
+    return [_assignment_read_from_row(row) for row in rows]
+
+
+@router.post("/assignments", response_model=LaborAssignmentRead, status_code=status.HTTP_201_CREATED)
 def create_assignment(
-    payload: AssignmentCreate,
+    payload: LaborAssignmentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> AssignmentRead:
+) -> LaborAssignmentRead:
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
+    _validate_prisoner_available(prisoner)
 
-    project = db.query(LaborProject).filter(LaborProject.project_id == payload.project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = _get_project_or_404(db, payload.project_id)
+    _validate_project_active(project)
 
-    current_workers = (
-        db.query(func.count(LaborAssignment.assignment_id))
+    existing_assignment = (
+        db.query(LaborAssignment.assignment_id)
         .filter(
+            LaborAssignment.prisoner_id == payload.prisoner_id,
             LaborAssignment.project_id == payload.project_id,
             LaborAssignment.assignment_date == payload.assignment_date,
         )
-        .scalar()
+        .first()
     )
+    if existing_assignment:
+        raise HTTPException(status_code=400, detail="Prisoner is already assigned to this project on the selected date")
+
+    current_workers = _current_worker_count(db, payload.project_id, payload.assignment_date)
     if current_workers >= project.max_workers:
         raise HTTPException(status_code=400, detail="Project has reached MaxWorkers")
 
@@ -115,37 +371,164 @@ def create_assignment(
         assignment_date=payload.assignment_date,
         hours_assigned=payload.hours_assigned,
     )
+    assignment.created_at = _now_utc()
     db.add(assignment)
     db.commit()
     db.refresh(assignment)
-    return AssignmentRead.model_validate(assignment)
+
+    return LaborAssignmentRead(
+        assignment_id=assignment.assignment_id,
+        prisoner_id=prisoner.prisoner_id,
+        prisoner_name=prisoner.full_name,
+        project_id=project.project_id,
+        project_name=project.project_name,
+        assigned_by=current_user.user_id,
+        assigned_by_name=current_user.full_name,
+        assignment_date=assignment.assignment_date,
+        hours_assigned=assignment.hours_assigned,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
 
 
-@router.get("/assignments/{assignment_id}", response_model=AssignmentRead)
+@router.get("/assignments/{assignment_id}", response_model=LaborAssignmentRead)
 def get_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> AssignmentRead:
+) -> LaborAssignmentRead:
+    row = _get_assignment_row_or_404(db, assignment_id)
+    return _assignment_read_from_row(row)
+
+
+@router.put("/assignments/{assignment_id}", response_model=LaborAssignmentRead)
+def update_assignment(
+    assignment_id: int,
+    payload: LaborAssignmentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
+) -> LaborAssignmentRead:
     assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
-    return AssignmentRead.model_validate(assignment)
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    next_prisoner_id = update_data.get("prisoner_id", assignment.prisoner_id)
+    next_project_id = update_data.get("project_id", assignment.project_id)
+    next_assignment_date = update_data.get("assignment_date", assignment.assignment_date)
+    next_hours = update_data.get("hours_assigned", assignment.hours_assigned)
+
+    if next_hours is None or Decimal(str(next_hours)) <= 0:
+        raise HTTPException(status_code=400, detail="hours_assigned must be greater than 0")
+
+    prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == next_prisoner_id).first()
+    if not prisoner:
+        raise HTTPException(status_code=404, detail="Prisoner not found")
+    _validate_prisoner_available(prisoner)
+
+    project = _get_project_or_404(db, next_project_id)
+    _validate_project_active(project)
+
+    duplicate = (
+        db.query(LaborAssignment.assignment_id)
+        .filter(
+            LaborAssignment.prisoner_id == next_prisoner_id,
+            LaborAssignment.project_id == next_project_id,
+            LaborAssignment.assignment_date == next_assignment_date,
+            LaborAssignment.assignment_id != assignment_id,
+        )
+        .first()
+    )
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Prisoner is already assigned to this project on the selected date")
+
+    current_workers = _current_worker_count(
+        db,
+        next_project_id,
+        next_assignment_date,
+        exclude_assignment_id=assignment_id,
+    )
+    if current_workers >= project.max_workers:
+        raise HTTPException(status_code=400, detail="Project has reached MaxWorkers")
+
+    assignment.prisoner_id = next_prisoner_id
+    assignment.project_id = next_project_id
+    assignment.assignment_date = next_assignment_date
+    assignment.hours_assigned = next_hours
+    assignment.assigned_by = current_user.user_id
+    assignment.updated_at = _now_utc()
+
+    db.commit()
+    return _assignment_read_from_row(_get_assignment_row_or_404(db, assignment_id))
 
 
-@router.post("/performance", response_model=PerformanceRead, status_code=status.HTTP_201_CREATED)
+@router.delete("/assignments/{assignment_id}", response_model=MessageResponse)
+def delete_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
+) -> MessageResponse:
+    assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    db.delete(assignment)
+    db.commit()
+    return MessageResponse(detail="Assignment deleted")
+
+
+@router.get("/performance", response_model=list[DailyPerformanceRead])
+def list_performance(
+    prisoner_id: int | None = Query(default=None, gt=0),
+    project_id: int | None = Query(default=None, gt=0),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[DailyPerformanceRead]:
+    query = (
+        db.query(
+            DailyPerformance.performance_id,
+            DailyPerformance.prisoner_id,
+            Prisoner.full_name.label("prisoner_name"),
+            DailyPerformance.project_id,
+            LaborProject.project_name.label("project_name"),
+            DailyPerformance.evaluated_by,
+            User.full_name.label("evaluated_by_name"),
+            DailyPerformance.work_date,
+            DailyPerformance.productivity,
+            DailyPerformance.notes,
+            DailyPerformance.created_at,
+        )
+        .join(Prisoner, Prisoner.prisoner_id == DailyPerformance.prisoner_id)
+        .join(LaborProject, LaborProject.project_id == DailyPerformance.project_id)
+        .outerjoin(User, User.user_id == DailyPerformance.evaluated_by)
+    )
+
+    if prisoner_id is not None:
+        query = query.filter(DailyPerformance.prisoner_id == prisoner_id)
+    if project_id is not None:
+        query = query.filter(DailyPerformance.project_id == project_id)
+
+    offset = (page - 1) * page_size
+    rows = query.order_by(DailyPerformance.work_date.desc(), DailyPerformance.performance_id.desc()).offset(offset).limit(page_size).all()
+    return [_performance_read_from_row(row) for row in rows]
+
+
+@router.post("/performance", response_model=DailyPerformanceRead, status_code=status.HTTP_201_CREATED)
 def create_performance(
-    payload: PerformanceCreate,
+    payload: DailyPerformanceCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> PerformanceRead:
+) -> DailyPerformanceRead:
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
+    _validate_prisoner_available(prisoner)
 
-    project = db.query(LaborProject).filter(LaborProject.project_id == payload.project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
+    project = _get_project_or_404(db, payload.project_id)
+    _validate_project_active(project)
 
     performance = DailyPerformance(
         prisoner_id=payload.prisoner_id,
@@ -155,6 +538,7 @@ def create_performance(
         productivity=payload.productivity,
         notes=payload.notes,
     )
+    performance.created_at = _now_utc()
     db.add(performance)
     db.flush()
 
@@ -164,23 +548,55 @@ def create_performance(
         .scalar()
     )
     if avg_score is not None:
-        prisoner.productivity_score = avg_score
+        prisoner.productivity_score = Decimal(str(avg_score))
 
     db.commit()
     db.refresh(performance)
-    return PerformanceRead.model_validate(performance)
+
+    return DailyPerformanceRead(
+        performance_id=performance.performance_id,
+        prisoner_id=prisoner.prisoner_id,
+        prisoner_name=prisoner.full_name,
+        project_id=project.project_id,
+        project_name=project.project_name,
+        evaluated_by=current_user.user_id,
+        evaluated_by_name=current_user.full_name,
+        work_date=performance.work_date,
+        productivity=performance.productivity,
+        notes=performance.notes,
+        created_at=performance.created_at,
+    )
 
 
-@router.get("/performance/{performance_id}", response_model=PerformanceRead)
+@router.get("/performance/{performance_id}", response_model=DailyPerformanceRead)
 def get_performance(
     performance_id: int,
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> PerformanceRead:
-    performance = db.query(DailyPerformance).filter(DailyPerformance.performance_id == performance_id).first()
-    if not performance:
+) -> DailyPerformanceRead:
+    row = (
+        db.query(
+            DailyPerformance.performance_id,
+            DailyPerformance.prisoner_id,
+            Prisoner.full_name.label("prisoner_name"),
+            DailyPerformance.project_id,
+            LaborProject.project_name.label("project_name"),
+            DailyPerformance.evaluated_by,
+            User.full_name.label("evaluated_by_name"),
+            DailyPerformance.work_date,
+            DailyPerformance.productivity,
+            DailyPerformance.notes,
+            DailyPerformance.created_at,
+        )
+        .join(Prisoner, Prisoner.prisoner_id == DailyPerformance.prisoner_id)
+        .join(LaborProject, LaborProject.project_id == DailyPerformance.project_id)
+        .outerjoin(User, User.user_id == DailyPerformance.evaluated_by)
+        .filter(DailyPerformance.performance_id == performance_id)
+        .first()
+    )
+    if not row:
         raise HTTPException(status_code=404, detail="Performance not found")
-    return PerformanceRead.model_validate(performance)
+    return _performance_read_from_row(row)
 
 
 @router.get("/performance/prisoner/{prisoner_id}", response_model=list[PrisonerPerformancePoint])
