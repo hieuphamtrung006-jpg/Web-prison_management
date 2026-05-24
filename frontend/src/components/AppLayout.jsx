@@ -15,6 +15,7 @@ const fullNavItems = [
 
 const viewerNavItems = [
   { to: "/prisoners", label: "Prisoners" },
+  { to: "/labor", label: "Labor" },
   { to: "/schedules", label: "Schedules" },
   { to: "/visits", label: "Visits" },
 ];
