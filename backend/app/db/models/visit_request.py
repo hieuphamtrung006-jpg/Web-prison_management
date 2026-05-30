@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -14,3 +14,10 @@ class VisitRequest(Base):
     viewer_id: Mapped[int] = mapped_column("ViewerID", ForeignKey("Users.UserID"), nullable=False)
     requested_date: Mapped[datetime] = mapped_column("RequestedDate", DateTime, nullable=False)
     status: Mapped[str] = mapped_column("Status", String(20), default="Pending")
+    created_at: Mapped[datetime] = mapped_column(
+        "CreatedAt",
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime | None] = mapped_column("UpdatedAt", DateTime, nullable=True)

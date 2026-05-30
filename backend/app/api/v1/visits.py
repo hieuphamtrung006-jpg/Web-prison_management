@@ -79,10 +79,30 @@ def approve_visit_request(
     )
 
     request.status = "Approved"
+    request.updated_at = datetime.now(timezone.utc)
     db.add(visit)
     db.commit()
     db.refresh(visit)
     return VisitRead.model_validate(visit)
+
+
+@router.put("/requests/{request_id}/reject", response_model=VisitRequestRead)
+def reject_visit_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles("Warden", "Guard")),
+) -> VisitRequestRead:
+    request = db.query(VisitRequest).filter(VisitRequest.request_id == request_id).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Visit request not found")
+    if request.status != "Pending":
+        raise HTTPException(status_code=400, detail="Request is not pending")
+
+    request.status = "Rejected"
+    request.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(request)
+    return VisitRequestRead.model_validate(request)
 
 
 @router.get("/", response_model=list[VisitRead])

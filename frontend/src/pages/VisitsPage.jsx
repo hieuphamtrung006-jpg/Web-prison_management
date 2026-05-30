@@ -82,6 +82,19 @@ export default function VisitsPage() {
     }
   };
 
+  const reject = async (requestId) => {
+    const confirmed = window.confirm("Reject this visit request?");
+    if (!confirmed) return;
+
+    try {
+      await api.put(`/visits/requests/${requestId}/reject`);
+      await load();
+      await loadPendingRequests();
+    } catch (err) {
+      setError(parseApiError(err));
+    }
+  };
+
   const requestVisit = async (event) => {
     event.preventDefault();
     setError("");
@@ -163,7 +176,7 @@ export default function VisitsPage() {
                     <tr key={row.request_id}>
                       <td>{row.request_id}</td><td>{row.prisoner_id}</td><td>{row.viewer_id}</td><td>{row.status}</td>
                       <td><button className="secondary-btn" onClick={() => approve(row.request_id)}>Approve</button></td>
-                      <td></td>
+                      <td><button className="secondary-btn" onClick={() => reject(row.request_id)}>Reject</button></td>
                     </tr>
                   ))}
             </tbody>

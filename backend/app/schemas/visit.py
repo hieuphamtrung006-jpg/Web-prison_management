@@ -43,5 +43,7 @@ class VisitRequestRead(BaseModel):
     viewer_id: int
     requested_date: datetime
     status: str
+    created_at: datetime
+    updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}

@@ -3579,3 +3579,36 @@ INSERT INTO Incidents (PrisonerID, LocationID, IncidentDate, IncidentType, Sever
 INSERT INTO Incidents (PrisonerID, LocationID, IncidentDate, IncidentType, Severity, PenaltyPoints, Description, CreatedBy) VALUES (64, 88, '2025-11-13 15:15:34', N'Gây gổ đánh nhau', 'Medium', 20, N'Xô xát nhẹ tại khu vực sinh hoạt chung.', 9);
 INSERT INTO Incidents (PrisonerID, LocationID, IncidentDate, IncidentType, Severity, PenaltyPoints, Description, CreatedBy) VALUES (66, 39, '2026-03-01 03:53:34', N'Chống đối quản giáo', 'High', 100, N'Có hành vi thách thức và không chấp hành lệnh tập hợp.', 19);
 INSERT INTO Incidents (PrisonerID, LocationID, IncidentDate, IncidentType, Severity, PenaltyPoints, Description, CreatedBy) VALUES (179, 31, '2026-03-17 21:41:34', N'Chống đối quản giáo', 'High', 100, N'Có hành vi thách thức và không chấp hành lệnh tập hợp.', 17);
+-- =============================================
+-- Bảng VisitRequest (Yêu cầu thăm gặp từ Viewer)
+-- =============================================
+CREATE TABLE [dbo].[VisitRequests] (
+    [RequestID]       INT            IDENTITY(1,1) NOT NULL,
+    [PrisonerID]      INT            NOT NULL,
+    [ViewerID]        INT            NOT NULL,
+    [RequestedDate]   DATETIME2(0)   NOT NULL,
+    [Status]          NVARCHAR(20)   NOT NULL DEFAULT 'Pending',   -- Pending, Approved, Rejected
+    [CreatedAt]       DATETIME2(0)   NOT NULL DEFAULT GETUTCDATE(),
+    [UpdatedAt]       DATETIME2(0)   NULL,
+
+    CONSTRAINT [PK_VisitRequests] PRIMARY KEY CLUSTERED ([RequestID] ASC),
+
+    CONSTRAINT [FK_VisitRequests_Prisoners] 
+        FOREIGN KEY ([PrisonerID]) REFERENCES [dbo].[Prisoners]([PrisonerID]),
+
+    CONSTRAINT [FK_VisitRequests_Users] 
+        FOREIGN KEY ([ViewerID]) REFERENCES [dbo].[Users]([UserID]),
+
+    CONSTRAINT [CHK_VisitRequests_Status] 
+        CHECK ([Status] IN ('Pending', 'Approved', 'Rejected'))
+);
+
+-- Index hỗ trợ query nhanh theo Prisoner và Status
+CREATE NONCLUSTERED INDEX [IX_VisitRequests_PrisonerID] 
+    ON [dbo].[VisitRequests] ([PrisonerID] ASC);
+
+CREATE NONCLUSTERED INDEX [IX_VisitRequests_ViewerID] 
+    ON [dbo].[VisitRequests] ([ViewerID] ASC);
+
+CREATE NONCLUSTERED INDEX [IX_VisitRequests_Status] 
+    ON [dbo].[VisitRequests] ([Status] ASC);
