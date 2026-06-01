@@ -37,8 +37,9 @@ export default function AppLayout({ children }) {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      <header className="site-header">
         <Link className="brand" to="/">
+          <span className="brand-mark">PC</span>
           Prison Command
         </Link>
         <nav className="nav-list">
@@ -54,19 +55,29 @@ export default function AppLayout({ children }) {
             </NavLink>
           ))}
         </nav>
-      </aside>
-
-      <main className="content">
-        <header className="topbar">
-          <div>
-            <h1>Operations Console</h1>
-            <p>
-              Signed in as <strong>{user?.full_name}</strong> ({user?.role})
-            </p>
+        <div className="nav-actions">
+          <div className="user-chip">
+            <span>{user?.full_name || "User"}</span>
+            <span className="user-role">{user?.role || "Unknown"}</span>
           </div>
-          <button className="danger-btn" onClick={handleLogout}>
+          <button className="primary-btn" onClick={handleLogout}>
             Sign out
           </button>
+        </div>
+      </header>
+
+      <main className="content">
+        <header className="page-header">
+          <div>
+            <p className="eyebrow">Prison operations platform</p>
+            <h1>Operations Console</h1>
+            <p className="muted">
+              Secure visibility into staffing, incidents, and schedules across your facility.
+            </p>
+          </div>
+          <div className="header-actions">
+            <span className="status-pill">Protected access</span>
+          </div>
         </header>
         <section className="page-area">{children}</section>
       </main>
