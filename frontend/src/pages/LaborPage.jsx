@@ -348,6 +348,7 @@ export default function LaborPage() {
   const { user } = useAuth();
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
+  const canCreateAssignment = canManageProjects;
 
   const [projects, setProjects] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -378,6 +379,8 @@ export default function LaborPage() {
   const [savingProject, setSavingProject] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [savingPerformance, setSavingPerformance] = useState(false);
+  const [isPerformanceOpen, setIsPerformanceOpen] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
@@ -545,7 +548,7 @@ export default function LaborPage() {
 
   const handleCreateAssignment = async (event) => {
     event.preventDefault();
-    if (!canManageLabor) return;
+    if (!canCreateAssignment) return;
 
     setSavingAssignment(true);
     setError("");
@@ -949,57 +952,57 @@ export default function LaborPage() {
             </form>
           </section>
 
-          <section className="panel form-card">
-            <div className="section-head">
-              <div>
-                <h2>Create Assignment</h2>
-                <p>Pick a prisoner from the searchable dropdown instead of typing IDs.</p>
+          {canCreateAssignment && (
+            <section className="panel form-card">
+              <div className="section-head">
+                <div>
+                  <h2>Create Assignment</h2>
+                  <p>Pick a prisoner from the searchable dropdown instead of typing IDs.</p>
+                </div>
               </div>
-              {!canManageLabor && <span className="status-badge status-neutral">Read only</span>}
-            </div>
-            {!canManageLabor && <div className="readonly-note">Assignments are limited to Admin, Warden, and Guard.</div>}
-            <form className="form-grid" onSubmit={handleCreateAssignment}>
-              <label>
-                Search prisoner
-                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" disabled={!canManageLabor} />
-              </label>
-              <div className="searchable-picker">
-                <div className="search-status">
-                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+              <form className="form-grid" onSubmit={handleCreateAssignment}>
+                <label>
+                  Search prisoner
+                  <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" />
+                </label>
+                <div className="searchable-picker">
+                  <div className="search-status">
+                    {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+                  </div>
+                  <label>
+                    Prisoner
+                    <select value={assignmentForm.prisoner_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, prisoner_id: e.target.value })} required disabled={loadingPrisoners}>
+                      <option value="">Select prisoner by name</option>
+                      {prisonerOptions.map((prisoner) => (
+                        <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                          {prisoner.full_name} (#{prisoner.prisoner_id})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
                 </div>
                 <label>
-                  Prisoner
-                  <select value={assignmentForm.prisoner_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
-                    <option value="">Select prisoner by name</option>
-                    {prisonerOptions.map((prisoner) => (
-                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                        {prisoner.full_name} (#{prisoner.prisoner_id})
-                      </option>
+                  Project
+                  <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required>
+                    <option value="">Select a project</option>
+                    {projects.map((project) => (
+                      <option key={project.project_id} value={project.project_id}>{project.project_name} ({project.current_workers}/{project.max_workers})</option>
                     ))}
                   </select>
                 </label>
-                <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
-              </div>
-              <label>
-                Project
-                <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required disabled={!canManageLabor}>
-                  <option value="">Select a project</option>
-                  {projects.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>{project.project_name} ({project.current_workers}/{project.max_workers})</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Assignment Date
-                <input type="date" value={assignmentForm.assignment_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, assignment_date: e.target.value })} required disabled={!canManageLabor} />
-              </label>
-              <label>
-                Hours Assigned
-                <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required disabled={!canManageLabor} />
-              </label>
-              <button className="primary-btn" type="submit" disabled={!canManageLabor || savingAssignment}>{savingAssignment ? "Assigning..." : "Assign Prisoner"}</button>
-            </form>
-          </section>
+                <label>
+                  Assignment Date
+                  <input type="date" value={assignmentForm.assignment_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, assignment_date: e.target.value })} required />
+                </label>
+                <label>
+                  Hours Assigned
+                  <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required />
+                </label>
+                <button className="primary-btn" type="submit" disabled={savingAssignment}>{savingAssignment ? "Assigning..." : "Assign Prisoner"}</button>
+              </form>
+            </section>
+          )}
 
           <section className="panel form-card">
             <div className="section-head">
@@ -1007,54 +1010,57 @@ export default function LaborPage() {
                 <h2>Daily Performance</h2>
                 <p>Recording a score updates the prisoner productivity average automatically.</p>
               </div>
-              {!canManageLabor && <span className="status-badge status-neutral">Read only</span>}
+              <div className="toolbar-row">
+                {!canManageLabor && <span className="status-badge status-neutral">Read only</span>}
+                <button className="secondary-btn" type="button" onClick={() => setIsPerformanceOpen((open) => !open)}>
+                  {isPerformanceOpen ? "[-]" : "[+]"}
+                </button>
+              </div>
             </div>
             {!canManageLabor && <div className="readonly-note">Performance scoring is limited to Admin, Warden, and Guard.</div>}
-            <form className="form-grid" onSubmit={handleCreatePerformance}>
-              <label>
-                Search prisoner
-                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" disabled={!canManageLabor} />
-              </label>
-              <div className="searchable-picker">
-                <div className="search-status">
-                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+            {isPerformanceOpen && (
+              <form className="form-grid" onSubmit={handleCreatePerformance}>
+                <div className="searchable-picker">
+                  <div className="search-status">
+                    {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+                  </div>
+                  <label>
+                    Prisoner
+                    <select value={performanceForm.prisoner_id} onChange={(e) => setPerformanceForm({ ...performanceForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
+                      <option value="">Select prisoner by name</option>
+                      {prisonerOptions.map((prisoner) => (
+                        <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                          {prisoner.full_name} (#{prisoner.prisoner_id})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
                 </div>
                 <label>
-                  Prisoner
-                  <select value={performanceForm.prisoner_id} onChange={(e) => setPerformanceForm({ ...performanceForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
-                    <option value="">Select prisoner by name</option>
-                    {prisonerOptions.map((prisoner) => (
-                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                        {prisoner.full_name} (#{prisoner.prisoner_id})
-                      </option>
+                  Project
+                  <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
+                    <option value="">Select a project</option>
+                    {projects.map((project) => (
+                      <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
                     ))}
                   </select>
                 </label>
-                <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
-              </div>
-              <label>
-                Project
-                <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
-                  <option value="">Select a project</option>
-                  {projects.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Work Date
-                <input type="date" value={performanceForm.work_date} onChange={(e) => setPerformanceForm({ ...performanceForm, work_date: e.target.value })} required disabled={!canManageLabor} />
-              </label>
-              <label>
-                Productivity
-                <input type="number" step="0.01" min="0" max="100" value={performanceForm.productivity} onChange={(e) => setPerformanceForm({ ...performanceForm, productivity: e.target.value })} required disabled={!canManageLabor} />
-              </label>
-              <label>
-                Notes
-                <textarea value={performanceForm.notes} onChange={(e) => setPerformanceForm({ ...performanceForm, notes: e.target.value })} disabled={!canManageLabor} />
-              </label>
-              <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Saving..." : "Save Performance"}</button>
-            </form>
+                <label>
+                  Work Date
+                  <input type="date" value={performanceForm.work_date} onChange={(e) => setPerformanceForm({ ...performanceForm, work_date: e.target.value })} required disabled={!canManageLabor} />
+                </label>
+                <label>
+                  Productivity
+                  <input type="number" step="0.01" min="0" max="100" value={performanceForm.productivity} onChange={(e) => setPerformanceForm({ ...performanceForm, productivity: e.target.value })} required disabled={!canManageLabor} />
+                </label>
+                <label>
+                  Notes
+                  <textarea value={performanceForm.notes} onChange={(e) => setPerformanceForm({ ...performanceForm, notes: e.target.value })} disabled={!canManageLabor} />
+                </label>
+                <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Saving..." : "Save Performance"}</button>
+              </form>
+            )}
           </section>
 
           <section className="panel">
@@ -1063,89 +1069,97 @@ export default function LaborPage() {
                 <h2>Performance History</h2>
                 <p>Search, filter, sort and page through daily performance records.</p>
               </div>
-              <button className="secondary-btn" type="button" onClick={() => loadPerformance(performancePage, performanceFilters)} disabled={loadingPerformance}>Refresh</button>
-            </div>
-
-            <div className="top-search-row">
-              <label>
-                Search records
-                <input value={performanceSearch} onChange={(e) => setPerformanceSearch(e.target.value)} placeholder="Prisoner, project, notes" />
-              </label>
-              <label>
-                Sort
-                <select value={performanceSort} onChange={(e) => setPerformanceSort(e.target.value)}>
-                  {performanceSortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="history-filters">
-              <label>
-                Prisoner ID
-                <input type="number" min="1" value={performanceFilters.prisoner_id} onChange={(e) => setPerformanceFilters({ ...performanceFilters, prisoner_id: e.target.value })} placeholder="Prisoner ID" />
-              </label>
-              <label>
-                Project
-                <select value={performanceFilters.project_id} onChange={(e) => setPerformanceFilters({ ...performanceFilters, project_id: e.target.value })}>
-                  <option value="">All projects</option>
-                  {projects.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
-                  ))}
-                </select>
-              </label>
               <div className="toolbar-row">
-                <button className="primary-btn" type="button" onClick={applyPerformanceFilters}>Apply</button>
-                <button className="secondary-btn" type="button" onClick={clearPerformanceFilters}>Clear</button>
+                <button className="secondary-btn" type="button" onClick={() => loadPerformance(performancePage, performanceFilters)} disabled={loadingPerformance}>Refresh</button>
+                <button className="secondary-btn" type="button" onClick={() => setIsHistoryOpen((open) => !open)}>
+                  {isHistoryOpen ? "[-]" : "[+]"}
+                </button>
               </div>
             </div>
+            {isHistoryOpen && (
+              <>
+                <div className="top-search-row">
+                  <label>
+                    Search records
+                    <input value={performanceSearch} onChange={(e) => setPerformanceSearch(e.target.value)} placeholder="Prisoner, project, notes" />
+                  </label>
+                  <label>
+                    Sort
+                    <select value={performanceSort} onChange={(e) => setPerformanceSort(e.target.value)}>
+                      {performanceSortOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
 
-            <div className="pagination-bar">
-              <div className="search-status">Page {performancePage} {loadingPerformance ? "• loading" : ""}</div>
-              <div className="controls">
-                <button className="secondary-btn" type="button" disabled={performancePage <= 1 || loadingPerformance} onClick={async () => {
-                  const nextPage = Math.max(1, performancePage - 1);
-                  setPerformancePage(nextPage);
-                  await loadPerformance(nextPage, performanceFilters);
-                }}>Prev</button>
-                <button className="secondary-btn" type="button" disabled={!performanceHasNext || loadingPerformance} onClick={async () => {
-                  const nextPage = performancePage + 1;
-                  setPerformancePage(nextPage);
-                  await loadPerformance(nextPage, performanceFilters);
-                }}>Next</button>
-              </div>
-            </div>
+                <div className="history-filters">
+                  <label>
+                    Prisoner ID
+                    <input type="number" min="1" value={performanceFilters.prisoner_id} onChange={(e) => setPerformanceFilters({ ...performanceFilters, prisoner_id: e.target.value })} placeholder="Prisoner ID" />
+                  </label>
+                  <label>
+                    Project
+                    <select value={performanceFilters.project_id} onChange={(e) => setPerformanceFilters({ ...performanceFilters, project_id: e.target.value })}>
+                      <option value="">All projects</option>
+                      {projects.map((project) => (
+                        <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="toolbar-row">
+                    <button className="primary-btn" type="button" onClick={applyPerformanceFilters}>Apply</button>
+                    <button className="secondary-btn" type="button" onClick={clearPerformanceFilters}>Clear</button>
+                  </div>
+                </div>
 
-            {loadingPerformance ? (
-              <SectionLoading label="Loading performance history..." />
-            ) : sortedPerformance.length === 0 ? (
-              <div className="loading-state"><p>No performance records found</p></div>
-            ) : (
-              <div className="table-wrap compact-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Prisoner</th>
-                      <th>Project</th>
-                      <th>Date</th>
-                      <th>Score</th>
-                      <th>Evaluated By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedPerformance.map((record) => (
-                      <tr key={record.performance_id}>
-                        <td>{record.prisoner_name || `#${record.prisoner_id}`}</td>
-                        <td>{record.project_name || `#${record.project_id}`}</td>
-                        <td>{formatDateOnly(record.work_date)}</td>
-                        <td><span className={`status-badge score-pill ${productivityBadge(record.productivity)}`}>{formatDecimal(record.productivity)}</span></td>
-                        <td>{record.evaluated_by_name || record.evaluated_by || "-"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                <div className="pagination-bar">
+                  <div className="search-status">Page {performancePage} {loadingPerformance ? "• loading" : ""}</div>
+                  <div className="controls">
+                    <button className="secondary-btn" type="button" disabled={performancePage <= 1 || loadingPerformance} onClick={async () => {
+                      const nextPage = Math.max(1, performancePage - 1);
+                      setPerformancePage(nextPage);
+                      await loadPerformance(nextPage, performanceFilters);
+                    }}>Prev</button>
+                    <button className="secondary-btn" type="button" disabled={!performanceHasNext || loadingPerformance} onClick={async () => {
+                      const nextPage = performancePage + 1;
+                      setPerformancePage(nextPage);
+                      await loadPerformance(nextPage, performanceFilters);
+                    }}>Next</button>
+                  </div>
+                </div>
+
+                {loadingPerformance ? (
+                  <SectionLoading label="Loading performance history..." />
+                ) : sortedPerformance.length === 0 ? (
+                  <div className="loading-state"><p>No performance records found</p></div>
+                ) : (
+                  <div className="table-wrap compact-table">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Prisoner</th>
+                          <th>Project</th>
+                          <th>Date</th>
+                          <th>Score</th>
+                          <th>Evaluated By</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedPerformance.map((record) => (
+                          <tr key={record.performance_id}>
+                            <td>{record.prisoner_name || `#${record.prisoner_id}`}</td>
+                            <td>{record.project_name || `#${record.project_id}`}</td>
+                            <td>{formatDateOnly(record.work_date)}</td>
+                            <td><span className={`status-badge score-pill ${productivityBadge(record.productivity)}`}>{formatDecimal(record.productivity)}</span></td>
+                            <td>{record.evaluated_by_name || record.evaluated_by || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </section>
         </div>

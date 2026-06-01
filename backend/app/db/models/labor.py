@@ -37,6 +37,7 @@ class LaborAssignment(Base):
 
 class DailyPerformance(Base):
     __tablename__ = "DailyPerformance"
+    __table_args__ = {"implicit_returning": False}
 
     performance_id: Mapped[int] = mapped_column("PerformanceID", Integer, primary_key=True, index=True)
     prisoner_id: Mapped[int] = mapped_column("PrisonerID", ForeignKey("Prisoners.PrisonerID"), nullable=False)
