@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import ActionSidebar from "../components/ActionSidebar";
 
 const today = new Date().toISOString().slice(0, 10);
 const pageSize = 10;
@@ -385,6 +386,9 @@ export default function LaborPage() {
   const [toast, setToast] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
+  const [showLogPerformance, setShowLogPerformance] = useState(false);
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
@@ -718,7 +722,16 @@ export default function LaborPage() {
   }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
 
   return (
-    <div className="labor-page">
+    <div className="page-with-sidebar">
+      <ActionSidebar
+        title="Actions"
+        actions={[
+          ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
+          ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
+          { label: "Log Performance", onClick: () => setShowLogPerformance(true) },
+        ]}
+      />
+      <div className="labor-page">
       <div className="labor-columns">
         <div className="labor-stack">
           <section className="panel">
@@ -1194,6 +1207,7 @@ export default function LaborPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

@@ -865,3 +865,92 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Left action sidebar layout for CRUD pages */
+.page-with-sidebar {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.three-col-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.action-sidebar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px 14px;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 110px;
+  align-self: start;
+}
+
+.sidebar-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px 6px;
+}
+
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-btn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.89rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-btn.create {
+  background: #e8f0ff;
+}
+
+.action-btn.update {
+  background: #fff4e6;
+  color: #c46a1f;
+}
+
+.action-btn.update:hover:not(:disabled) {
+  background: #f5a15f;
+  color: #fff;
+}
+
+@media (max-width: 980px) {
+  .page-with-sidebar,
+  .three-col-layout {
+    grid-template-columns: 1fr;
+  }
+  .action-sidebar {
+    position: static;
+    order: 2; /* put actions after main on mobile? or keep first */
+  }
+}

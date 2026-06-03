@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import ActionSidebar from "../components/ActionSidebar";
 
 const pageSize = 20;
 
@@ -265,6 +266,144 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
   );
 }
 
+function CreatePrisonerModal({ locations, onClose, onSaved, showToast }) {
+  const [form, setForm] = useState(initialCreateForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const payload = {
+        full_name: form.full_name,
+        date_of_birth: form.date_of_birth,
+        gender: form.gender || null,
+        crime_type: form.crime_type || null,
+        risk_level: form.risk_level || null,
+        rehab_hours: Number(form.rehab_hours),
+        current_location_id: normalizeLocationId(form.current_location_id),
+        sentence_start: form.sentence_start || null,
+        sentence_end: form.sentence_end || null,
+      };
+
+      Object.keys(payload).forEach((key) => {
+        if (payload[key] === "") {
+          delete payload[key];
+        }
+      });
+
+      await api.post("/prisoners", payload);
+      showToast("Prisoner created", "success");
+      setForm(initialCreateForm);
+      onSaved();
+      onClose();
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Create new prisoner</h3>
+          <button className="close-btn" type="button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            Full name
+            <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
+          </label>
+
+          <label>
+            Date of birth
+            <input type="date" value={form.date_of_birth} onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })} required />
+          </label>
+
+          <label>
+            Gender
+            <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+
+          <label>
+            Crime type
+            <input value={form.crime_type} onChange={(e) => setForm({ ...form, crime_type: e.target.value })} />
+          </label>
+
+          <label>
+            Risk level
+            <select value={form.risk_level} onChange={(e) => setForm({ ...form, risk_level: e.target.value })}>
+              <option value="Low">Low</option>
+              <option value="Medium">Medium</option>
+              <option value="High">High</option>
+            </select>
+          </label>
+
+          <label>
+            Rehab hours
+            <input
+              type="number"
+              min={0}
+              value={form.rehab_hours}
+              onChange={(e) => setForm({ ...form, rehab_hours: e.target.value })}
+            />
+          </label>
+
+          <label>
+            Current location
+            <select
+              value={form.current_location_id}
+              onChange={(e) => setForm({ ...form, current_location_id: e.target.value })}
+            >
+              <option value="">Unassigned</option>
+              {locations.map((location) => (
+                <option key={location.location_id} value={location.location_id}>
+                  {location.location_name} ({location.current_occupancy}/{location.capacity})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Sentence start
+            <input type="date" value={form.sentence_start} onChange={(e) => setForm({ ...form, sentence_start: e.target.value })} />
+          </label>
+
+          <label>
+            Sentence end
+            <input type="date" value={form.sentence_end} onChange={(e) => setForm({ ...form, sentence_end: e.target.value })} />
+          </label>
+
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create"}
+            </button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function PrisonersPage() {
   const { user } = useAuth();
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
@@ -272,19 +411,17 @@ export default function PrisonersPage() {
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
   const [rows, setRows] = useState([]);
   const [locations, setLocations] = useState([]);
-  const [createForm, setCreateForm] = useState(initialCreateForm);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [filterDraft, setFilterDraft] = useState(initialFilters);
   const [filters, setFilters] = useState(initialFilters);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editingPrisoner, setEditingPrisoner] = useState(null);
   const [selectedPrisoner, setSelectedPrisoner] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const locationById = useMemo(() => {
     return new Map(locations.map((location) => [location.location_id, location]));
@@ -377,44 +514,6 @@ export default function PrisonersPage() {
     setFilters(initialFilters);
   };
 
-  const handleCreate = async (event) => {
-    event.preventDefault();
-    setSaving(true);
-    setError("");
-
-    try {
-      const payload = {
-        full_name: createForm.full_name,
-        date_of_birth: createForm.date_of_birth,
-        gender: createForm.gender || null,
-        crime_type: createForm.crime_type || null,
-        risk_level: createForm.risk_level || null,
-        rehab_hours: Number(createForm.rehab_hours),
-        current_location_id: normalizeLocationId(createForm.current_location_id),
-        sentence_start: createForm.sentence_start || null,
-        sentence_end: createForm.sentence_end || null,
-      };
-
-      Object.keys(payload).forEach((key) => {
-        if (payload[key] === "") {
-          delete payload[key];
-        }
-      });
-
-      await api.post("/prisoners", payload);
-      setCreateForm(initialCreateForm);
-      showToast("Prisoner created", "success");
-      setPage(1);
-      await loadPrisoners(1, filters);
-    } catch (err) {
-      const message = parseApiError(err);
-      setError(message);
-      showToast(message, "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleDelete = async (prisoner) => {
     const confirmed = window.confirm(`Delete prisoner "${prisoner.full_name}" permanently?`);
     if (!confirmed) {
@@ -440,8 +539,21 @@ export default function PrisonersPage() {
     ? locationById.get(selectedPrisoner.current_location_id)
     : null;
 
+  const createActions = canCreate
+    ? [
+        {
+          label: "+ Create Prisoner",
+          onClick: () => setShowCreateModal(true),
+          variant: "create",
+          title: "Open form to register a new prisoner",
+        },
+      ]
+    : [];
+
   return (
-    <div className="split-grid prisoners-page">
+    <div className="three-col-layout">
+      <ActionSidebar title="Actions" actions={createActions} />
+
       <section className="panel">
         <h2>Prisoners</h2>
         <p className="hint-text">Search by name, risk level, or location. Click a row to inspect sentence, productivity, and active labor projects.</p>
@@ -642,99 +754,6 @@ export default function PrisonersPage() {
             </div>
           )}
         </section>
-
-        {canCreate ? (
-          <section className="panel">
-            <div className="section-head">
-              <h2>Create prisoner</h2>
-              <button className="secondary-btn" type="button" onClick={() => setShowCreateForm((open) => !open)}>
-                {showCreateForm ? "Hide" : "Show"}
-              </button>
-            </div>
-            <p className="hint-text">Capacity is checked on submit. If a cell is full, creation will fail before saving.</p>
-            {showCreateForm && (
-              <form className="form-grid" onSubmit={handleCreate}>
-                <label>
-                  Full name
-                  <input value={createForm.full_name} onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })} required />
-                </label>
-
-                <label>
-                  Date of birth
-                  <input type="date" value={createForm.date_of_birth} onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })} required />
-                </label>
-
-                <label>
-                  Gender
-                  <select value={createForm.gender} onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}>
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </label>
-
-                <label>
-                  Crime type
-                  <input value={createForm.crime_type} onChange={(e) => setCreateForm({ ...createForm, crime_type: e.target.value })} />
-                </label>
-
-                <label>
-                  Risk level
-                  <select value={createForm.risk_level} onChange={(e) => setCreateForm({ ...createForm, risk_level: e.target.value })}>
-                    <option value="Low">Low</option>
-                    <option value="Medium">Medium</option>
-                    <option value="High">High</option>
-                  </select>
-                </label>
-
-                <label>
-                  Rehab hours
-                  <input
-                    type="number"
-                    min={0}
-                    value={createForm.rehab_hours}
-                    onChange={(e) => setCreateForm({ ...createForm, rehab_hours: e.target.value })}
-                  />
-                </label>
-
-                <label>
-                  Current location
-                  <select
-                    value={createForm.current_location_id}
-                    onChange={(e) => setCreateForm({ ...createForm, current_location_id: e.target.value })}
-                    disabled={locationLoading}
-                  >
-                    <option value="">Unassigned</option>
-                    {locations.map((location) => (
-                      <option key={location.location_id} value={location.location_id}>
-                        {location.location_name} ({location.current_occupancy}/{location.capacity})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  Sentence start
-                  <input type="date" value={createForm.sentence_start} onChange={(e) => setCreateForm({ ...createForm, sentence_start: e.target.value })} />
-                </label>
-
-                <label>
-                  Sentence end
-                  <input type="date" value={createForm.sentence_end} onChange={(e) => setCreateForm({ ...createForm, sentence_end: e.target.value })} />
-                </label>
-
-                <button className="primary-btn" type="submit" disabled={saving || locationLoading}>
-                  {saving ? "Creating..." : "Create"}
-                </button>
-              </form>
-            )}
-          </section>
-        ) : (
-          <section className="panel">
-            <h2>Access</h2>
-            <p className="hint-text">Your role can view prisoner data.</p>
-          </section>
-        )}
       </div>
 
       {editingPrisoner && canEdit ? (
@@ -746,6 +765,18 @@ export default function PrisonersPage() {
           onSaved={async () => {
             await loadPrisoners(page, filters);
             await loadPrisonerDetail(editingPrisoner.prisoner_id);
+          }}
+          showToast={showToast}
+        />
+      ) : null}
+
+      {showCreateModal && canCreate ? (
+        <CreatePrisonerModal
+          locations={locations}
+          onClose={() => setShowCreateModal(false)}
+          onSaved={async () => {
+            setPage(1);
+            await loadPrisoners(1, filters);
           }}
           showToast={showToast}
         />
