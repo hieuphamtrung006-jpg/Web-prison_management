@@ -338,6 +338,28 @@ button {
   align-items: start;
 }
 
+.visits-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.visits-form-panel,
+.visits-table-panel {
+  min-width: 0;
+}
+
+.visits-form-panel-single {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 920px) {
+  .visits-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .users-page {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));

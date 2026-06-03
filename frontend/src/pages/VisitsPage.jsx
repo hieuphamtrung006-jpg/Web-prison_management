@@ -32,6 +32,9 @@ export default function VisitsPage() {
     notes: "",
   });
   const [page, setPage] = useState(1);
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
   const pageSize = 20;
   const [error, setError] = useState("");
 
@@ -147,8 +150,66 @@ export default function VisitsPage() {
   };
 
   return (
-    <div className="split-grid">
-      <section className="panel">
+    <div className="split-grid visits-page">
+      {isViewer ? (
+        <section className="panel visits-form-panel visits-form-panel-single">
+          <div className="section-head">
+            <h2>Request Visit</h2>
+            <button className="secondary-btn" type="button" onClick={() => setShowRequestForm((open) => !open)}>
+              {showRequestForm ? "Hide" : "Show"}
+            </button>
+          </div>
+          {showRequestForm && (
+            <form className="form-grid" onSubmit={requestVisit}>
+              <label>Prisoner ID<input type="number" value={requestForm.prisoner_id} onChange={(e) => setRequestForm({ ...requestForm, prisoner_id: e.target.value })} required /></label>
+              <label>Date<input type="datetime-local" value={requestForm.requested_date} onChange={(e) => setRequestForm({ ...requestForm, requested_date: e.target.value })} required /></label>
+              <button className="primary-btn" type="submit">Request</button>
+            </form>
+          )}
+        </section>
+      ) : isGuard ? null : (
+        <section className="visits-form-row">
+          <section className="panel visits-form-panel">
+            <div className="section-head">
+              <h2>Create Visit</h2>
+              <button className="secondary-btn" type="button" onClick={() => setShowCreateForm((open) => !open)}>
+                {showCreateForm ? "Hide" : "Show"}
+              </button>
+            </div>
+            {showCreateForm && (
+              <form className="form-grid" onSubmit={create}>
+                <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+                <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
+                <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
+                <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
+                <button className="primary-btn" type="submit">Create</button>
+              </form>
+            )}
+          </section>
+
+          <section className="panel visits-form-panel">
+            <div className="section-head">
+              <h2>Update Visit</h2>
+              <button className="secondary-btn" type="button" onClick={() => setShowUpdateForm((open) => !open)}>
+                {showUpdateForm ? "Hide" : "Show"}
+              </button>
+            </div>
+            {showUpdateForm && (
+              <form className="form-grid" onSubmit={updateVisit}>
+                <label>Visit ID<input type="number" value={updateForm.visit_id} onChange={(e) => setUpdateForm({ ...updateForm, visit_id: e.target.value })} required /></label>
+                <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
+                <label>Visitor<input value={updateForm.visitor_name} onChange={(e) => setUpdateForm({ ...updateForm, visitor_name: e.target.value })} /></label>
+                <label>Date<input type="datetime-local" value={updateForm.visit_date} onChange={(e) => setUpdateForm({ ...updateForm, visit_date: e.target.value })} /></label>
+                <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
+                <label>Notes<textarea value={updateForm.notes} onChange={(e) => setUpdateForm({ ...updateForm, notes: e.target.value })} /></label>
+                <button className="primary-btn" type="submit">Update</button>
+              </form>
+            )}
+          </section>
+        </section>
+      )}
+
+      <section className="panel visits-table-panel">
         <h2>{isReadOnly ? "Visits" : "Pending Visit Requests"}</h2>
         {error && <p className="error-msg">{error}</p>}
         <div className="inline-form">
@@ -183,42 +244,6 @@ export default function VisitsPage() {
           </table>
         </div>
       </section>
-      {isViewer ? (
-        <section className="panel">
-          <h2>Request Visit</h2>
-          <form className="form-grid" onSubmit={requestVisit}>
-            <label>Prisoner ID<input type="number" value={requestForm.prisoner_id} onChange={(e) => setRequestForm({ ...requestForm, prisoner_id: e.target.value })} required /></label>
-            <label>Date<input type="datetime-local" value={requestForm.requested_date} onChange={(e) => setRequestForm({ ...requestForm, requested_date: e.target.value })} required /></label>
-            <button className="primary-btn" type="submit">Request</button>
-          </form>
-        </section>
-      ) : isGuard ? null : (
-        <>
-          <section className="panel">
-            <h2>Create Visit</h2>
-            <form className="form-grid" onSubmit={create}>
-              <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
-              <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
-              <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
-              <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
-              <button className="primary-btn" type="submit">Create</button>
-            </form>
-          </section>
-
-          <section className="panel">
-            <h2>Update Visit</h2>
-            <form className="form-grid" onSubmit={updateVisit}>
-              <label>Visit ID<input type="number" value={updateForm.visit_id} onChange={(e) => setUpdateForm({ ...updateForm, visit_id: e.target.value })} required /></label>
-              <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-              <label>Visitor<input value={updateForm.visitor_name} onChange={(e) => setUpdateForm({ ...updateForm, visitor_name: e.target.value })} /></label>
-              <label>Date<input type="datetime-local" value={updateForm.visit_date} onChange={(e) => setUpdateForm({ ...updateForm, visit_date: e.target.value })} /></label>
-              <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
-              <label>Notes<textarea value={updateForm.notes} onChange={(e) => setUpdateForm({ ...updateForm, notes: e.target.value })} /></label>
-              <button className="primary-btn" type="submit">Update</button>
-            </form>
-          </section>
-        </>
-      )}
     </div>
   );
 }

@@ -136,6 +136,7 @@ export default function LocationsPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const pageSize = 20;
 
@@ -277,38 +278,45 @@ export default function LocationsPage() {
 
       {!isGuard && (
         <section className="panel">
-          <h2>Create location</h2>
-          <form className="form-grid" onSubmit={createLocation}>
-            <label>
-              Name
-              <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
-            </label>
-
-            <label>
-              Type
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                <option>Cell</option>
-                <option>Workshop</option>
-                <option>Dining</option>
-                <option>Yard</option>
-                <option>Hospital</option>
-              </select>
-            </label>
-
-            <label>
-              Capacity
-              <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
-            </label>
-
-            <label>
-              Security
-              <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
-            </label>
-
-            <button className="primary-btn" type="submit" disabled={!canWrite || creating}>
-              {creating ? "Creating..." : "Create"}
+          <div className="section-head">
+            <h2>Create location</h2>
+            <button className="secondary-btn" type="button" onClick={() => setShowCreateForm((open) => !open)}>
+              {showCreateForm ? "Hide" : "Show"}
             </button>
-          </form>
+          </div>
+          {showCreateForm && (
+            <form className="form-grid" onSubmit={createLocation}>
+              <label>
+                Name
+                <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
+              </label>
+
+              <label>
+                Type
+                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                  <option>Cell</option>
+                  <option>Workshop</option>
+                  <option>Dining</option>
+                  <option>Yard</option>
+                  <option>Hospital</option>
+                </select>
+              </label>
+
+              <label>
+                Capacity
+                <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
+              </label>
+
+              <label>
+                Security
+                <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
+              </label>
+
+              <button className="primary-btn" type="submit" disabled={!canWrite || creating}>
+                {creating ? "Creating..." : "Create"}
+              </button>
+            </form>
+          )}
         </section>
       )}
 

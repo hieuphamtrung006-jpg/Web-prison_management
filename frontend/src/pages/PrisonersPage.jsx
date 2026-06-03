@@ -273,6 +273,7 @@ export default function PrisonersPage() {
   const [rows, setRows] = useState([]);
   const [locations, setLocations] = useState([]);
   const [createForm, setCreateForm] = useState(initialCreateForm);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [filterDraft, setFilterDraft] = useState(initialFilters);
   const [filters, setFilters] = useState(initialFilters);
   const [page, setPage] = useState(1);
@@ -644,82 +645,89 @@ export default function PrisonersPage() {
 
         {canCreate ? (
           <section className="panel">
-            <h2>Create prisoner</h2>
-            <p className="hint-text">Capacity is checked on submit. If a cell is full, creation will fail before saving.</p>
-            <form className="form-grid" onSubmit={handleCreate}>
-              <label>
-                Full name
-                <input value={createForm.full_name} onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })} required />
-              </label>
-
-              <label>
-                Date of birth
-                <input type="date" value={createForm.date_of_birth} onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })} required />
-              </label>
-
-              <label>
-                Gender
-                <select value={createForm.gender} onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}>
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Other">Other</option>
-                </select>
-              </label>
-
-              <label>
-                Crime type
-                <input value={createForm.crime_type} onChange={(e) => setCreateForm({ ...createForm, crime_type: e.target.value })} />
-              </label>
-
-              <label>
-                Risk level
-                <select value={createForm.risk_level} onChange={(e) => setCreateForm({ ...createForm, risk_level: e.target.value })}>
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </select>
-              </label>
-
-              <label>
-                Rehab hours
-                <input
-                  type="number"
-                  min={0}
-                  value={createForm.rehab_hours}
-                  onChange={(e) => setCreateForm({ ...createForm, rehab_hours: e.target.value })}
-                />
-              </label>
-
-              <label>
-                Current location
-                <select
-                  value={createForm.current_location_id}
-                  onChange={(e) => setCreateForm({ ...createForm, current_location_id: e.target.value })}
-                  disabled={locationLoading}
-                >
-                  <option value="">Unassigned</option>
-                  {locations.map((location) => (
-                    <option key={location.location_id} value={location.location_id}>
-                      {location.location_name} ({location.current_occupancy}/{location.capacity})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                Sentence start
-                <input type="date" value={createForm.sentence_start} onChange={(e) => setCreateForm({ ...createForm, sentence_start: e.target.value })} />
-              </label>
-
-              <label>
-                Sentence end
-                <input type="date" value={createForm.sentence_end} onChange={(e) => setCreateForm({ ...createForm, sentence_end: e.target.value })} />
-              </label>
-
-              <button className="primary-btn" type="submit" disabled={saving || locationLoading}>
-                {saving ? "Creating..." : "Create"}
+            <div className="section-head">
+              <h2>Create prisoner</h2>
+              <button className="secondary-btn" type="button" onClick={() => setShowCreateForm((open) => !open)}>
+                {showCreateForm ? "Hide" : "Show"}
               </button>
-            </form>
+            </div>
+            <p className="hint-text">Capacity is checked on submit. If a cell is full, creation will fail before saving.</p>
+            {showCreateForm && (
+              <form className="form-grid" onSubmit={handleCreate}>
+                <label>
+                  Full name
+                  <input value={createForm.full_name} onChange={(e) => setCreateForm({ ...createForm, full_name: e.target.value })} required />
+                </label>
+
+                <label>
+                  Date of birth
+                  <input type="date" value={createForm.date_of_birth} onChange={(e) => setCreateForm({ ...createForm, date_of_birth: e.target.value })} required />
+                </label>
+
+                <label>
+                  Gender
+                  <select value={createForm.gender} onChange={(e) => setCreateForm({ ...createForm, gender: e.target.value })}>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </label>
+
+                <label>
+                  Crime type
+                  <input value={createForm.crime_type} onChange={(e) => setCreateForm({ ...createForm, crime_type: e.target.value })} />
+                </label>
+
+                <label>
+                  Risk level
+                  <select value={createForm.risk_level} onChange={(e) => setCreateForm({ ...createForm, risk_level: e.target.value })}>
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                  </select>
+                </label>
+
+                <label>
+                  Rehab hours
+                  <input
+                    type="number"
+                    min={0}
+                    value={createForm.rehab_hours}
+                    onChange={(e) => setCreateForm({ ...createForm, rehab_hours: e.target.value })}
+                  />
+                </label>
+
+                <label>
+                  Current location
+                  <select
+                    value={createForm.current_location_id}
+                    onChange={(e) => setCreateForm({ ...createForm, current_location_id: e.target.value })}
+                    disabled={locationLoading}
+                  >
+                    <option value="">Unassigned</option>
+                    {locations.map((location) => (
+                      <option key={location.location_id} value={location.location_id}>
+                        {location.location_name} ({location.current_occupancy}/{location.capacity})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  Sentence start
+                  <input type="date" value={createForm.sentence_start} onChange={(e) => setCreateForm({ ...createForm, sentence_start: e.target.value })} />
+                </label>
+
+                <label>
+                  Sentence end
+                  <input type="date" value={createForm.sentence_end} onChange={(e) => setCreateForm({ ...createForm, sentence_end: e.target.value })} />
+                </label>
+
+                <button className="primary-btn" type="submit" disabled={saving || locationLoading}>
+                  {saving ? "Creating..." : "Create"}
+                </button>
+              </form>
+            )}
           </section>
         ) : (
           <section className="panel">

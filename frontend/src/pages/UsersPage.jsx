@@ -153,6 +153,7 @@ export default function UsersPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const pageSize = 20;
 
@@ -293,55 +294,62 @@ export default function UsersPage() {
       </section>
 
       <section className="panel">
-        <h2>Create User</h2>
-        {error && <div className="error-msg">{error}</div>}
-        <form className="form-grid" onSubmit={createUser}>
-          <label>
-            Username
-            <input
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Full Name
-            <input
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Role
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Admin</option>
-              <option>Warden</option>
-              <option>Guard</option>
-              <option>Viewer</option>
-            </select>
-          </label>
-          <label>
-            Email
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </label>
-          <label>
-            Phone
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-          </label>
-          <button className="primary-btn" type="submit" disabled={creating}>
-            {creating ? "Creating..." : "Create"}
+        <div className="section-head">
+          <h2>Create User</h2>
+          <button className="secondary-btn" type="button" onClick={() => setShowCreateForm((open) => !open)}>
+            {showCreateForm ? "Hide" : "Show"}
           </button>
-        </form>
+        </div>
+        {error && <div className="error-msg">{error}</div>}
+        {showCreateForm && (
+          <form className="form-grid" onSubmit={createUser}>
+            <label>
+              Username
+              <input
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Full Name
+              <input
+                value={form.full_name}
+                onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Role
+              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+                <option>Admin</option>
+                <option>Warden</option>
+                <option>Guard</option>
+                <option>Viewer</option>
+              </select>
+            </label>
+            <label>
+              Email
+              <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </label>
+            <label>
+              Phone
+              <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required
+              />
+            </label>
+            <button className="primary-btn" type="submit" disabled={creating}>
+              {creating ? "Creating..." : "Create"}
+            </button>
+          </form>
+        )}
       </section>
 
       {editingUser && (

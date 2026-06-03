@@ -15,6 +15,7 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState([]);
   const [schedulePage, setSchedulePage] = useState(1);
   const schedulePageSize = 20;
+  const [showUpdateForm, setShowUpdateForm] = useState(false);
   const [updateForm, setUpdateForm] = useState({
     schedule_id: "",
     prisoner_id: "",
@@ -220,18 +221,25 @@ export default function SchedulesPage() {
       </section>
       {!isReadOnly && (
         <section className="panel">
-          <h2>Update schedule</h2>
-          <form className="form-grid" onSubmit={updateSchedule}>
-            <label>Schedule ID<input type="number" value={updateForm.schedule_id} onChange={(e) => setUpdateForm({ ...updateForm, schedule_id: e.target.value })} required /></label>
-            <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-            <label>Project ID<input type="number" value={updateForm.project_id} onChange={(e) => setUpdateForm({ ...updateForm, project_id: e.target.value })} /></label>
-            <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
-            <label>Shift ID<input type="number" value={updateForm.shift_id} onChange={(e) => setUpdateForm({ ...updateForm, shift_id: e.target.value })} /></label>
-            <label>Start<input type="datetime-local" value={updateForm.start_time} onChange={(e) => setUpdateForm({ ...updateForm, start_time: e.target.value })} /></label>
-            <label>End<input type="datetime-local" value={updateForm.end_time} onChange={(e) => setUpdateForm({ ...updateForm, end_time: e.target.value })} /></label>
-            <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Active</option><option>Cancelled</option><option>Completed</option></select></label>
-            <button className="primary-btn" type="submit">Update</button>
-          </form>
+          <div className="section-head">
+            <h2>Update schedule</h2>
+            <button className="secondary-btn" type="button" onClick={() => setShowUpdateForm((open) => !open)}>
+              {showUpdateForm ? "Hide" : "Show"}
+            </button>
+          </div>
+          {showUpdateForm && (
+            <form className="form-grid" onSubmit={updateSchedule}>
+              <label>Schedule ID<input type="number" value={updateForm.schedule_id} onChange={(e) => setUpdateForm({ ...updateForm, schedule_id: e.target.value })} required /></label>
+              <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
+              <label>Project ID<input type="number" value={updateForm.project_id} onChange={(e) => setUpdateForm({ ...updateForm, project_id: e.target.value })} /></label>
+              <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
+              <label>Shift ID<input type="number" value={updateForm.shift_id} onChange={(e) => setUpdateForm({ ...updateForm, shift_id: e.target.value })} /></label>
+              <label>Start<input type="datetime-local" value={updateForm.start_time} onChange={(e) => setUpdateForm({ ...updateForm, start_time: e.target.value })} /></label>
+              <label>End<input type="datetime-local" value={updateForm.end_time} onChange={(e) => setUpdateForm({ ...updateForm, end_time: e.target.value })} /></label>
+              <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Active</option><option>Cancelled</option><option>Completed</option></select></label>
+              <button className="primary-btn" type="submit">Update</button>
+            </form>
+          )}
         </section>
       )}
     </div>
