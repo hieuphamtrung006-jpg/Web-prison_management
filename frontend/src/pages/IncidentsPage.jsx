@@ -199,9 +199,10 @@ export default function IncidentsPage() {
   const showToast = (message, type = "info") => setToast({ message, type });
 
   return (
-    <div className="page-with-sidebar">
-      <ActionSidebar title="Actions" actions={createActions} />
+    <div>
+      <ActionSidebar title="Actions" actions={createActions} position="left-rail" />
 
+      <div className="content-with-rail">
       <section className="panel">
         <h2>Incidents</h2>
         {error && <p className="error-msg">{error}</p>}
@@ -245,6 +246,7 @@ export default function IncidentsPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

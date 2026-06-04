@@ -173,8 +173,9 @@ export default function SchedulesPage() {
     : [];
 
   return (
-    <div className="page-with-sidebar">
-      <ActionSidebar title="Actions" actions={scheduleActions} />
+    <div>
+      <ActionSidebar title="Actions" actions={scheduleActions} position="left-rail" />
+      <div className="content-with-rail">
       <div className="stack-grid">
       {!isReadOnly && (
         <section className="panel">
@@ -276,6 +277,7 @@ export default function SchedulesPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
       </div>
     </div>
   );

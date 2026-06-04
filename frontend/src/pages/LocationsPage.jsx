@@ -265,9 +265,10 @@ export default function LocationsPage() {
     : [];
 
   return (
-    <div className="page-with-sidebar">
-      <ActionSidebar title="Actions" actions={createActions} />
+    <div>
+      <ActionSidebar title="Actions" actions={createActions} position="left-rail" />
 
+      <div className="content-with-rail">
       <section className="panel">
         <h2>Locations</h2>
         {error && <div className="error-msg">{error}</div>}
@@ -365,6 +366,7 @@ export default function LocationsPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

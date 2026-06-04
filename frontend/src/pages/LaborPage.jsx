@@ -730,7 +730,9 @@ export default function LaborPage() {
           ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
           { label: "Log Performance", onClick: () => setShowLogPerformance(true) },
         ]}
+      position="left-rail"
       />
+      <div className="content-with-rail">
       <div style={{ display: 'block' }}>
         <div className="labor-stack">
           <section className="panel">
@@ -1209,6 +1211,7 @@ export default function LaborPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
       </div>
   );
 }

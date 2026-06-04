@@ -237,9 +237,10 @@ export default function VisitsPage() {
   }
 
   return (
-    <div className="page-with-sidebar">
-      <ActionSidebar title="Actions" actions={actions} />
+    <div>
+      <ActionSidebar title="Actions" actions={actions} position="left-rail" />
 
+      <div className="content-with-rail">
       <section className="panel">
         <h2>Visits</h2>
         {error && <p className="error-msg">{error}</p>}
@@ -324,6 +325,7 @@ export default function VisitsPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

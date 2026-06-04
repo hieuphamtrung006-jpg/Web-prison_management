@@ -551,9 +551,11 @@ export default function PrisonersPage() {
     : [];
 
   return (
-    <div className="three-col-layout">
-      <ActionSidebar title="Actions" actions={createActions} />
+    <div>
+      <ActionSidebar title="Actions" actions={createActions} position="left-rail" />
 
+      <div className="content-with-rail">
+      <div className="three-col-layout">
       <section className="panel">
         <h2>Prisoners</h2>
         <p className="hint-text">Search by name, risk level, or location. Click a row to inspect sentence, productivity, and active labor projects.</p>
@@ -755,6 +757,8 @@ export default function PrisonersPage() {
           )}
         </section>
       </div>
+      </div> {/* close three-col-layout */}
+      </div> {/* close content-with-rail */}
 
       {editingPrisoner && canEdit ? (
         <PrisonerEditModal
