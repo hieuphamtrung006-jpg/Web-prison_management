@@ -12,6 +12,7 @@ from app.db.models.prisoner import Prisoner
 from app.db.models.schedule import Schedule
 from app.db.models.user import User
 from app.db.models.visit import Visit
+from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
 from app.schemas.prisoner import PrisonerCreate, PrisonerDetail, PrisonerRead, PrisonerUpdate
 
@@ -151,21 +152,12 @@ def delete_prisoner(
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
 
-    has_incidents = db.query(Incident.incident_id).filter(Incident.prisoner_id == prisoner_id).first()
-    has_visits = db.query(Visit.visit_id).filter(Visit.prisoner_id == prisoner_id).first()
-    has_assignments = (
-        db.query(LaborAssignment.assignment_id)
-        .filter(LaborAssignment.prisoner_id == prisoner_id)
-        .first()
-    )
-    has_performance = (
-        db.query(DailyPerformance.performance_id)
-        .filter(DailyPerformance.prisoner_id == prisoner_id)
-        .first()
-    )
-    has_schedules = db.query(Schedule.schedule_id).filter(Schedule.prisoner_id == prisoner_id).first()
-    if has_incidents or has_visits or has_assignments or has_performance or has_schedules:
-        raise HTTPException(status_code=400, detail="Prisoner has related records and cannot be deleted")
+    db.query(VisitRequest).filter(VisitRequest.prisoner_id == prisoner_id).delete(synchronize_session=False)
+    db.query(Visit).filter(Visit.prisoner_id == prisoner_id).delete(synchronize_session=False)
+    db.query(Incident).filter(Incident.prisoner_id == prisoner_id).delete(synchronize_session=False)
+    db.query(LaborAssignment).filter(LaborAssignment.prisoner_id == prisoner_id).delete(synchronize_session=False)
+    db.query(DailyPerformance).filter(DailyPerformance.prisoner_id == prisoner_id).delete(synchronize_session=False)
+    db.query(Schedule).filter(Schedule.prisoner_id == prisoner_id).delete(synchronize_session=False)
 
     db.delete(prisoner)
     db.commit()
