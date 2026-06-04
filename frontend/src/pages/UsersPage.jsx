@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import ActionSidebar from "../components/ActionSidebar";
 
 const initialForm = {
   username: "",
@@ -129,6 +130,96 @@ function UserEditModal({ user, onClose, onSave }) {
   );
 }
 
+function CreateUserModal({ onClose, onSave, showToast }) {
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      await api.post("/users", form);
+      showToast("User created successfully", "success");
+      setForm(initialForm);
+      onSave();
+      onClose();
+    } catch (err) {
+      setError(parseApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Create User</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label>
+            Username
+            <input
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Full Name
+            <input
+              value={form.full_name}
+              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Role
+            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              <option>Admin</option>
+              <option>Warden</option>
+              <option>Guard</option>
+              <option>Viewer</option>
+            </select>
+          </label>
+          <label>
+            Email
+            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </label>
+          <label>
+            Phone
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required
+            />
+          </label>
+          <div className="modal-buttons">
+            <button type="submit" className="primary-btn" disabled={loading}>
+              {loading ? "Creating..." : "Create"}
+            </button>
+            <button type="button" className="secondary-btn" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function Toast({ message, type = "info", onClose }) {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -146,13 +237,12 @@ export default function UsersPage() {
   const { user } = useAuth();
   const isGuard = user?.role === "Guard";
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(initialForm);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const pageSize = 20;
 
@@ -179,26 +269,6 @@ export default function UsersPage() {
     load();
   }, [page]);
 
-  const createUser = async (event) => {
-    event.preventDefault();
-    setCreating(true);
-    setError("");
-
-    try {
-      await api.post("/users", form);
-      setForm(initialForm);
-      showToast("User created successfully", "success");
-      setPage(1);
-      await load();
-    } catch (err) {
-      const errorMsg = parseApiError(err);
-      setError(errorMsg);
-      showToast(errorMsg, "error");
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const deleteUser = async (userId, username) => {
     const confirmed = window.confirm(`Delete user "${username}" permanently? This cannot be undone.`);
     if (!confirmed) return;
@@ -216,8 +286,24 @@ export default function UsersPage() {
 
   const visibleRows = isGuard ? rows.filter((row) => row.role === "Viewer") : rows;
 
+  const canCreateUser = !isGuard;
+  const createActions = canCreateUser
+    ? [
+        {
+          label: "+ Create User",
+          onClick: () => setShowCreateModal(true),
+          variant: "create",
+        },
+      ]
+    : [];
+
   return (
-    <div className="users-page">
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={createActions} />
+      </div>
+
+      <div className="page-main-data">
       <section className="panel">
         <h2>Users</h2>
         {error && <div className="error-msg">{error}</div>}
@@ -292,58 +378,6 @@ export default function UsersPage() {
         )}
       </section>
 
-      <section className="panel">
-        <h2>Create User</h2>
-        {error && <div className="error-msg">{error}</div>}
-        <form className="form-grid" onSubmit={createUser}>
-          <label>
-            Username
-            <input
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Full Name
-            <input
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              required
-            />
-          </label>
-          <label>
-            Role
-            <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Admin</option>
-              <option>Warden</option>
-              <option>Guard</option>
-              <option>Viewer</option>
-            </select>
-          </label>
-          <label>
-            Email
-            <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          </label>
-          <label>
-            Phone
-            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-          </label>
-          <button className="primary-btn" type="submit" disabled={creating}>
-            {creating ? "Creating..." : "Create"}
-          </button>
-        </form>
-      </section>
-
       {editingUser && (
         <UserEditModal
           user={editingUser}
@@ -355,6 +389,17 @@ export default function UsersPage() {
         />
       )}
 
+      {showCreateModal && canCreateUser && (
+        <CreateUserModal
+          onClose={() => setShowCreateModal(false)}
+          onSave={() => {
+            setPage(1);
+            load();
+          }}
+          showToast={showToast}
+        />
+      )}
+
       {toast && (
         <Toast
           message={toast.message}
@@ -362,6 +407,7 @@ export default function UsersPage() {
           onClose={() => setToast(null)}
         />
       )}
+      </div>
     </div>
   );
 }

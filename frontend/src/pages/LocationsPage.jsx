@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import ActionSidebar from "../components/ActionSidebar";
 
 const initialForm = {
   location_name: "",
@@ -125,17 +126,91 @@ function LocationEditModal({ location, onClose, onSaved, showToast }) {
   );
 }
 
+function CreateLocationModal({ onClose, onSaved, showToast }) {
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/locations", {
+        location_name: form.location_name,
+        type: form.type,
+        capacity: Number(form.capacity),
+        security_level: form.security_level || null,
+        is_active: form.is_active,
+      });
+      showToast("Location created", "success");
+      setForm(initialForm);
+      onSaved();
+      onClose();
+    } catch (err) {
+      const message = parseApiError(err);
+      setError(message);
+      showToast(message, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Create Location</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        {error && <div className="error-msg">{error}</div>}
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>
+            Name
+            <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
+          </label>
+          <label>
+            Type
+            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <option>Cell</option>
+              <option>Workshop</option>
+              <option>Dining</option>
+              <option>Yard</option>
+              <option>Hospital</option>
+            </select>
+          </label>
+          <label>
+            Capacity
+            <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
+          </label>
+          <label>
+            Security
+            <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
+          </label>
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? "Creating..." : "Create"}
+            </button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function LocationsPage() {
   const { user } = useAuth();
   const isGuard = user?.role === "Guard";
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(initialForm);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const pageSize = 20;
 
@@ -160,25 +235,6 @@ export default function LocationsPage() {
     load(page);
   }, [page]);
 
-  const createLocation = async (e) => {
-    e.preventDefault();
-    setCreating(true);
-    setError("");
-    try {
-      await api.post("/locations", { ...form, capacity: Number(form.capacity) });
-      setForm(initialForm);
-      showToast("Location created", "success");
-      setPage(1);
-      await load(1);
-    } catch (err) {
-      const message = parseApiError(err);
-      setError(message);
-      showToast(message, "error");
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const deleteLocation = async (loc) => {
     const confirmed = window.confirm(`Delete location "${loc.location_name}" permanently?`);
     if (!confirmed) return;
@@ -197,8 +253,24 @@ export default function LocationsPage() {
   const canWrite = user?.role === "Admin" || user?.role === "Warden";
   const showActions = !isGuard;
 
+  const canCreateLoc = !isGuard;
+  const createActions = canCreateLoc
+    ? [
+        {
+          label: "+ Create Location",
+          onClick: () => setShowCreateModal(true),
+          variant: "create",
+        },
+      ]
+    : [];
+
   return (
-    <div className="split-grid users-page">
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={createActions} />
+      </div>
+
+      <div className="page-main-data">
       <section className="panel">
         <h2>Locations</h2>
         {error && <div className="error-msg">{error}</div>}
@@ -275,43 +347,6 @@ export default function LocationsPage() {
         )}
       </section>
 
-      {!isGuard && (
-        <section className="panel">
-          <h2>Create location</h2>
-          <form className="form-grid" onSubmit={createLocation}>
-            <label>
-              Name
-              <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
-            </label>
-
-            <label>
-              Type
-              <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-                <option>Cell</option>
-                <option>Workshop</option>
-                <option>Dining</option>
-                <option>Yard</option>
-                <option>Hospital</option>
-              </select>
-            </label>
-
-            <label>
-              Capacity
-              <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
-            </label>
-
-            <label>
-              Security
-              <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
-            </label>
-
-            <button className="primary-btn" type="submit" disabled={!canWrite || creating}>
-              {creating ? "Creating..." : "Create"}
-            </button>
-          </form>
-        </section>
-      )}
-
       {editing && (
         <LocationEditModal
           location={editing}
@@ -321,7 +356,19 @@ export default function LocationsPage() {
         />
       )}
 
+      {showCreateModal && canCreateLoc && (
+        <CreateLocationModal
+          onClose={() => setShowCreateModal(false)}
+          onSaved={() => {
+            setPage(1);
+            load(1);
+          }}
+          showToast={showToast}
+        />
+      )}
+
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

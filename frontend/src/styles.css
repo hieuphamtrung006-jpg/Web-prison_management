@@ -338,6 +338,28 @@ button {
   align-items: start;
 }
 
+.visits-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.visits-form-panel,
+.visits-table-panel {
+  min-width: 0;
+}
+
+.visits-form-panel-single {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 920px) {
+  .visits-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .users-page {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -841,5 +863,144 @@ button {
 @media (max-width: 1080px) {
   .prisoners-toolbar {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Left action sidebar layout for CRUD pages */
+.page-with-sidebar {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.three-col-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+.action-sidebar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px 14px;
+  box-shadow: var(--shadow);
+  position: sticky;
+  top: 110px;
+  align-self: start;
+}
+
+.sidebar-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px 6px;
+}
+
+.action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-btn {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.89rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.action-btn.create {
+  background: #e8f0ff;
+}
+
+.action-btn.update {
+  background: #fff4e6;
+  color: #c46a1f;
+}
+
+.action-btn.update:hover:not(:disabled) {
+  background: #f5a15f;
+  color: #fff;
+}
+
+@media (max-width: 980px) {
+  .page-with-sidebar,
+  .three-col-layout {
+    grid-template-columns: 1fr;
+  }
+  .action-sidebar {
+    position: static;
+    order: 2; /* put actions after main on mobile? or keep first */
+  }
+}
+
+/* Left action column layout - aligned with main data panels, snug to the left */
+.page-action-layout {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.page-action-column {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 12px;
+  align-self: flex-start;
+  z-index: 10;
+}
+
+/* The action box itself inside the column - make it taller and more substantial to fit snugly */
+.page-action-column .action-sidebar {
+  width: 100%;
+  min-height: 320px; /* make the box taller so it feels substantial next to data */
+  padding: 14px 12px;
+  border-radius: 16px;
+}
+
+/* Expand the main data area now that actions are in their own left column */
+.page-main-data {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Make sure panels and tables inside the main data use the full available width */
+.page-main-data .panel,
+.page-main-data .table-wrap {
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .page-action-layout {
+    flex-direction: column;
+  }
+  .page-action-column {
+    position: static;
+    width: 100%;
+    min-height: auto;
+  }
+  .page-action-column .action-sidebar {
+    min-height: auto;
   }
 }

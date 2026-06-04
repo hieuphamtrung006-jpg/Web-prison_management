@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
+import ActionSidebar from "../components/ActionSidebar";
 import { useAuth } from "../context/AuthContext";
 
 const initialForm = {
@@ -14,26 +15,155 @@ const initialRequestForm = {
   requested_date: new Date().toISOString().slice(0, 16),
 };
 
+function Toast({ message, type = "info", onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+  return <div className={`toast toast-${type}`}>{message}</div>;
+}
+
+function RequestVisitModal({ onClose, onSaved, showToast }) {
+  const [form, setForm] = useState(initialRequestForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true); setError("");
+    try {
+      await api.post("/visits/request", {
+        prisoner_id: Number(form.prisoner_id),
+        requested_date: form.requested_date,
+      });
+      showToast("Visit request submitted", "success");
+      setForm(initialRequestForm);
+      onSaved();
+      onClose();
+    } catch (err) {
+      const m = parseApiError(err); setError(m); showToast(m, "error");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header"><h3>Request a Visit</h3><button className="close-btn" onClick={onClose}>×</button></div>
+        {error && <div className="error-msg">{error}</div>}
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+          <label>Requested date<input type="datetime-local" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} required /></label>
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Request"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CreateVisitModal({ onClose, onSaved, showToast }) {
+  const [form, setForm] = useState(initialForm);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true); setError("");
+    try {
+      await api.post("/visits", { ...form, prisoner_id: Number(form.prisoner_id) });
+      showToast("Visit created", "success");
+      setForm(initialForm);
+      onSaved();
+      onClose();
+    } catch (err) {
+      const m = parseApiError(err); setError(m); showToast(m, "error");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header"><h3>Create Visit</h3><button className="close-btn" onClick={onClose}>×</button></div>
+        {error && <div className="error-msg">{error}</div>}
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+          <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
+          <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
+          <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Creating..." : "Create"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function UpdateVisitModal({ onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({ visit_id: "", prisoner_id: "", visitor_name: "", visit_date: "", status: "", notes: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true); setError("");
+    if (!form.visit_id) { setError("Visit ID required"); setLoading(false); return; }
+    const payload = {};
+    if (form.prisoner_id) payload.prisoner_id = Number(form.prisoner_id);
+    if (form.visitor_name) payload.visitor_name = form.visitor_name;
+    if (form.visit_date) payload.visit_date = form.visit_date;
+    if (form.status) payload.status = form.status;
+    if (form.notes) payload.notes = form.notes;
+    try {
+      await api.put(`/visits/${Number(form.visit_id)}`, payload);
+      showToast("Visit updated", "success");
+      setForm({ visit_id: "", prisoner_id: "", visitor_name: "", visit_date: "", status: "", notes: "" });
+      onSaved();
+      onClose();
+    } catch (err) {
+      const m = parseApiError(err); setError(m); showToast(m, "error");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header"><h3>Update Visit</h3><button className="close-btn" onClick={onClose}>×</button></div>
+        {error && <div className="error-msg">{error}</div>}
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>Visit ID<input type="number" value={form.visit_id} onChange={(e) => setForm({ ...form, visit_id: e.target.value })} required /></label>
+          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} /></label>
+          <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} /></label>
+          <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} /></label>
+          <label>Status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="">(no change)</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
+          <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Update"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function VisitsPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
   const isReadOnly = isViewer || isGuard;
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState(initialForm);
-  const [requestForm, setRequestForm] = useState(initialRequestForm);
   const [pendingRequests, setPendingRequests] = useState([]);
-  const [updateForm, setUpdateForm] = useState({
-    visit_id: "",
-    prisoner_id: "",
-    visitor_name: "",
-    visit_date: "",
-    status: "",
-    notes: "",
-  });
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   const load = async () => {
     try {
@@ -60,18 +190,6 @@ export default function VisitsPage() {
     loadPendingRequests();
   }, [page, isReadOnly]);
 
-  const create = async (event) => {
-    event.preventDefault();
-    setError("");
-    try {
-      await api.post("/visits", { ...form, prisoner_id: Number(form.prisoner_id) });
-      setForm(initialForm);
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
   const approve = async (visitId) => {
     try {
       await api.put(`/visits/requests/${visitId}/approve`);
@@ -95,45 +213,6 @@ export default function VisitsPage() {
     }
   };
 
-  const requestVisit = async (event) => {
-    event.preventDefault();
-    setError("");
-    try {
-      await api.post("/visits/request", {
-        prisoner_id: Number(requestForm.prisoner_id),
-        requested_date: requestForm.requested_date,
-      });
-      setRequestForm(initialRequestForm);
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
-  const updateVisit = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (!updateForm.visit_id) {
-      setError("Visit ID is required");
-      return;
-    }
-
-    const payload = {};
-    if (updateForm.prisoner_id) payload.prisoner_id = Number(updateForm.prisoner_id);
-    if (updateForm.visitor_name) payload.visitor_name = updateForm.visitor_name;
-    if (updateForm.visit_date) payload.visit_date = updateForm.visit_date;
-    if (updateForm.status) payload.status = updateForm.status;
-    if (updateForm.notes) payload.notes = updateForm.notes;
-
-    try {
-      await api.put(`/visits/${Number(updateForm.visit_id)}`, payload);
-      setUpdateForm({ visit_id: "", prisoner_id: "", visitor_name: "", visit_date: "", status: "", notes: "" });
-      await load();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
   const deleteVisit = async (visitId) => {
     const confirmed = window.confirm("Delete this visit permanently?");
     if (!confirmed) return;
@@ -146,10 +225,26 @@ export default function VisitsPage() {
     }
   };
 
+  const showToast = (message, type = "info") => setToast({ message, type });
+
+  const canRequest = isViewer;
+  const canManageVisits = !isReadOnly;
+  const actions = [];
+  if (canRequest) actions.push({ label: "Request Visit", onClick: () => setShowRequestModal(true) });
+  if (canManageVisits) {
+    actions.push({ label: "+ Create Visit", onClick: () => setShowCreateModal(true), variant: "create" });
+    actions.push({ label: "✎ Update Visit", onClick: () => setShowUpdateModal(true), variant: "update" });
+  }
+
   return (
-    <div className="split-grid">
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={actions} />
+      </div>
+
+      <div className="page-main-data">
       <section className="panel">
-        <h2>{isReadOnly ? "Visits" : "Pending Visit Requests"}</h2>
+        <h2>Visits</h2>
         {error && <p className="error-msg">{error}</p>}
         <div className="inline-form">
           <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
@@ -159,66 +254,80 @@ export default function VisitsPage() {
         <div className="table-wrap">
           <table>
             <thead>
-              {isReadOnly ? (
-                <tr><th>ID</th><th>Prisoner</th><th>Visitor</th><th>Status</th></tr>
-              ) : (
-                <tr><th>ID</th><th>Prisoner</th><th>Visitor</th><th>Status</th><th></th><th></th></tr>
-              )}
+              <tr>
+                <th>ID</th>
+                <th>Prisoner</th>
+                <th>Visitor</th>
+                <th>Date</th>
+                <th>Status</th>
+                {!isReadOnly && <th></th>}
+              </tr>
             </thead>
             <tbody>
-              {isReadOnly
-                ? rows.map((row) => (
-                    <tr key={row.visit_id}>
-                      <td>{row.visit_id}</td><td>{row.prisoner_id}</td><td>{row.visitor_name}</td><td>{row.status}</td>
-                    </tr>
-                  ))
-                : pendingRequests.map((row) => (
-                    <tr key={row.request_id}>
-                      <td>{row.request_id}</td><td>{row.prisoner_id}</td><td>{row.viewer_id}</td><td>{row.status}</td>
-                      <td><button className="secondary-btn" onClick={() => approve(row.request_id)}>Approve</button></td>
-                      <td><button className="secondary-btn" onClick={() => reject(row.request_id)}>Reject</button></td>
-                    </tr>
-                  ))}
+              {rows.map((row) => (
+                <tr key={row.visit_id}>
+                  <td>{row.visit_id}</td>
+                  <td>{row.prisoner_id}</td>
+                  <td>{row.visitor_name}</td>
+                  <td>{String(row.visit_date || "").slice(0, 16)}</td>
+                  <td>{row.status}</td>
+                  {!isReadOnly && (
+                    <td>
+                      <button className="btn-sm btn-delete" onClick={() => deleteVisit(row.visit_id)}>Delete</button>
+                    </td>
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </section>
-      {isViewer ? (
-        <section className="panel">
-          <h2>Request Visit</h2>
-          <form className="form-grid" onSubmit={requestVisit}>
-            <label>Prisoner ID<input type="number" value={requestForm.prisoner_id} onChange={(e) => setRequestForm({ ...requestForm, prisoner_id: e.target.value })} required /></label>
-            <label>Date<input type="datetime-local" value={requestForm.requested_date} onChange={(e) => setRequestForm({ ...requestForm, requested_date: e.target.value })} required /></label>
-            <button className="primary-btn" type="submit">Request</button>
-          </form>
-        </section>
-      ) : isGuard ? null : (
-        <>
-          <section className="panel">
-            <h2>Create Visit</h2>
-            <form className="form-grid" onSubmit={create}>
-              <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
-              <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
-              <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
-              <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
-              <button className="primary-btn" type="submit">Create</button>
-            </form>
-          </section>
 
-          <section className="panel">
-            <h2>Update Visit</h2>
-            <form className="form-grid" onSubmit={updateVisit}>
-              <label>Visit ID<input type="number" value={updateForm.visit_id} onChange={(e) => setUpdateForm({ ...updateForm, visit_id: e.target.value })} required /></label>
-              <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-              <label>Visitor<input value={updateForm.visitor_name} onChange={(e) => setUpdateForm({ ...updateForm, visitor_name: e.target.value })} /></label>
-              <label>Date<input type="datetime-local" value={updateForm.visit_date} onChange={(e) => setUpdateForm({ ...updateForm, visit_date: e.target.value })} /></label>
-              <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Pending</option><option>Approved</option><option>Rejected</option></select></label>
-              <label>Notes<textarea value={updateForm.notes} onChange={(e) => setUpdateForm({ ...updateForm, notes: e.target.value })} /></label>
-              <button className="primary-btn" type="submit">Update</button>
-            </form>
-          </section>
-        </>
+      {!isReadOnly && pendingRequests.length > 0 && (
+        <section className="panel">
+          <h3>Pending visit requests</h3>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Prisoner</th>
+                  <th>Requested</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingRequests.map((r) => (
+                  <tr key={r.request_id}>
+                    <td>{r.request_id}</td>
+                    <td>{r.prisoner_id}</td>
+                    <td>{String(r.requested_date || "").slice(0, 16)}</td>
+                    <td>
+                      <div className="table-actions">
+                        <button className="btn-sm btn-edit" onClick={() => approve(r.request_id)}>Approve</button>
+                        <button className="btn-sm btn-delete" onClick={() => reject(r.request_id)}>Reject</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
+
+      {showRequestModal && (
+        <RequestVisitModal onClose={() => setShowRequestModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
+      )}
+      {showCreateModal && canManageVisits && (
+        <CreateVisitModal onClose={() => setShowCreateModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
+      )}
+      {showUpdateModal && canManageVisits && (
+        <UpdateVisitModal onClose={() => setShowUpdateModal(false)} onSaved={() => load()} showToast={showToast} />
+      )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
     </div>
   );
 }

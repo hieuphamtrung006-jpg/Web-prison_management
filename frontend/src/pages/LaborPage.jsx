@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import ActionSidebar from "../components/ActionSidebar";
 
 const today = new Date().toISOString().slice(0, 10);
 const pageSize = 10;
@@ -385,6 +386,9 @@ export default function LaborPage() {
   const [toast, setToast] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [showCreateProject, setShowCreateProject] = useState(false);
+  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
+  const [showLogPerformance, setShowLogPerformance] = useState(false);
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
@@ -718,8 +722,21 @@ export default function LaborPage() {
   }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
 
   return (
-    <div className="labor-page">
-      <div className="labor-columns">
+    <>
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar
+          title="Actions"
+          actions={[
+            ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
+            ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
+            { label: "Log Performance", onClick: () => setShowLogPerformance(true) },
+          ]}
+        />
+      </div>
+
+      <div className="page-main-data">
+      <div style={{ display: 'block' }}>
         <div className="labor-stack">
           <section className="panel">
             <div className="section-head">
@@ -903,165 +920,6 @@ export default function LaborPage() {
               </div>
             )}
           </section>
-        </div>
-
-        <div className="labor-stack">
-          <section className="panel form-card">
-            <div className="section-head">
-              <div>
-                <h2>Create Project</h2>
-                <p>Project capacity is capped by the selected location.</p>
-              </div>
-              {!canManageProjects && <span className="status-badge status-neutral">Read only</span>}
-            </div>
-            {!canManageProjects && <div className="readonly-note">Admin and Warden can create and edit projects. Guard and Viewer are read-only here.</div>}
-            <form className="form-grid" onSubmit={handleCreateProject}>
-              <label>
-                Name
-                <input value={projectForm.project_name} onChange={(e) => setProjectForm({ ...projectForm, project_name: e.target.value })} required disabled={!canManageProjects} />
-              </label>
-              <label>
-                Location
-                <select value={projectForm.location_id} onChange={(e) => setProjectForm({ ...projectForm, location_id: e.target.value })} disabled={!canManageProjects || loadingLocations}>
-                  <option value="">Unassigned</option>
-                  {locations.map((location) => (
-                    <option key={location.location_id} value={location.location_id}>{location.location_name} ({location.capacity})</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Revenue / Hour
-                <input type="number" step="0.01" min="0" value={projectForm.revenue_per_hour} onChange={(e) => setProjectForm({ ...projectForm, revenue_per_hour: e.target.value })} required disabled={!canManageProjects} />
-              </label>
-              <label>
-                Priority Score
-                <input type="number" min="0" value={projectForm.priority_score} onChange={(e) => setProjectForm({ ...projectForm, priority_score: e.target.value })} disabled={!canManageProjects} />
-              </label>
-              <label>
-                Max Workers
-                <input type="number" min="1" value={projectForm.max_workers} onChange={(e) => setProjectForm({ ...projectForm, max_workers: e.target.value })} required disabled={!canManageProjects} />
-              </label>
-              <label>
-                Required Skills
-                <textarea value={projectForm.required_skills} onChange={(e) => setProjectForm({ ...projectForm, required_skills: e.target.value })} disabled={!canManageProjects} />
-              </label>
-              <label>
-                <input type="checkbox" checked={projectForm.is_active} onChange={(e) => setProjectForm({ ...projectForm, is_active: e.target.checked })} disabled={!canManageProjects} /> Active
-              </label>
-              <button className="primary-btn" type="submit" disabled={!canManageProjects || savingProject}>{savingProject ? "Creating..." : "Create Project"}</button>
-            </form>
-          </section>
-
-          {canCreateAssignment && (
-            <section className="panel form-card">
-              <div className="section-head">
-                <div>
-                  <h2>Create Assignment</h2>
-                  <p>Pick a prisoner from the searchable dropdown instead of typing IDs.</p>
-                </div>
-              </div>
-              <form className="form-grid" onSubmit={handleCreateAssignment}>
-                <label>
-                  Search prisoner
-                  <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" />
-                </label>
-                <div className="searchable-picker">
-                  <div className="search-status">
-                    {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
-                  </div>
-                  <label>
-                    Prisoner
-                    <select value={assignmentForm.prisoner_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, prisoner_id: e.target.value })} required disabled={loadingPrisoners}>
-                      <option value="">Select prisoner by name</option>
-                      {prisonerOptions.map((prisoner) => (
-                        <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                          {prisoner.full_name} (#{prisoner.prisoner_id})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
-                </div>
-                <label>
-                  Project
-                  <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required>
-                    <option value="">Select a project</option>
-                    {projects.map((project) => (
-                      <option key={project.project_id} value={project.project_id}>{project.project_name} ({project.current_workers}/{project.max_workers})</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Assignment Date
-                  <input type="date" value={assignmentForm.assignment_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, assignment_date: e.target.value })} required />
-                </label>
-                <label>
-                  Hours Assigned
-                  <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required />
-                </label>
-                <button className="primary-btn" type="submit" disabled={savingAssignment}>{savingAssignment ? "Assigning..." : "Assign Prisoner"}</button>
-              </form>
-            </section>
-          )}
-
-          <section className="panel form-card">
-            <div className="section-head">
-              <div>
-                <h2>Daily Performance</h2>
-                <p>Recording a score updates the prisoner productivity average automatically.</p>
-              </div>
-              <div className="toolbar-row">
-                {!canManageLabor && <span className="status-badge status-neutral">Read only</span>}
-                <button className="secondary-btn" type="button" onClick={() => setIsPerformanceOpen((open) => !open)}>
-                  {isPerformanceOpen ? "[-]" : "[+]"}
-                </button>
-              </div>
-            </div>
-            {!canManageLabor && <div className="readonly-note">Performance scoring is limited to Admin, Warden, and Guard.</div>}
-            {isPerformanceOpen && (
-              <form className="form-grid" onSubmit={handleCreatePerformance}>
-                <div className="searchable-picker">
-                  <div className="search-status">
-                    {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
-                  </div>
-                  <label>
-                    Prisoner
-                    <select value={performanceForm.prisoner_id} onChange={(e) => setPerformanceForm({ ...performanceForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
-                      <option value="">Select prisoner by name</option>
-                      {prisonerOptions.map((prisoner) => (
-                        <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                          {prisoner.full_name} (#{prisoner.prisoner_id})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
-                </div>
-                <label>
-                  Project
-                  <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
-                    <option value="">Select a project</option>
-                    {projects.map((project) => (
-                      <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Work Date
-                  <input type="date" value={performanceForm.work_date} onChange={(e) => setPerformanceForm({ ...performanceForm, work_date: e.target.value })} required disabled={!canManageLabor} />
-                </label>
-                <label>
-                  Productivity
-                  <input type="number" step="0.01" min="0" max="100" value={performanceForm.productivity} onChange={(e) => setPerformanceForm({ ...performanceForm, productivity: e.target.value })} required disabled={!canManageLabor} />
-                </label>
-                <label>
-                  Notes
-                  <textarea value={performanceForm.notes} onChange={(e) => setPerformanceForm({ ...performanceForm, notes: e.target.value })} disabled={!canManageLabor} />
-                </label>
-                <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Saving..." : "Save Performance"}</button>
-              </form>
-            )}
-          </section>
 
           <section className="panel">
             <div className="history-header">
@@ -1162,8 +1020,170 @@ export default function LaborPage() {
               </>
             )}
           </section>
+        </div> {/* close labor-stack */}
+      </div> {/* close style block */}
+
+      {/* Create modals as popups from left sidebar */}
+      {showCreateProject && (
+        <div className="modal-overlay" onClick={() => setShowCreateProject(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Create Project</h3>
+              <button className="close-btn" onClick={() => setShowCreateProject(false)}>×</button>
+            </div>
+            {!canManageProjects && <div className="readonly-note">Admin and Warden only.</div>}
+            <form className="form-grid" onSubmit={handleCreateProject}>
+              <label>
+                Name
+                <input value={projectForm.project_name} onChange={(e) => setProjectForm({ ...projectForm, project_name: e.target.value })} required disabled={!canManageProjects} />
+              </label>
+              <label>
+                Location
+                <select value={projectForm.location_id} onChange={(e) => setProjectForm({ ...projectForm, location_id: e.target.value })} disabled={!canManageProjects || loadingLocations}>
+                  <option value="">Unassigned</option>
+                  {locations.map((location) => (
+                    <option key={location.location_id} value={location.location_id}>{location.location_name} ({location.capacity})</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Revenue / Hour
+                <input type="number" step="0.01" min="0" value={projectForm.revenue_per_hour} onChange={(e) => setProjectForm({ ...projectForm, revenue_per_hour: e.target.value })} required disabled={!canManageProjects} />
+              </label>
+              <label>
+                Priority Score
+                <input type="number" min="0" value={projectForm.priority_score} onChange={(e) => setProjectForm({ ...projectForm, priority_score: e.target.value })} disabled={!canManageProjects} />
+              </label>
+              <label>
+                Max Workers
+                <input type="number" min="1" value={projectForm.max_workers} onChange={(e) => setProjectForm({ ...projectForm, max_workers: e.target.value })} required disabled={!canManageProjects} />
+              </label>
+              <label>
+                Required Skills
+                <textarea value={projectForm.required_skills} onChange={(e) => setProjectForm({ ...projectForm, required_skills: e.target.value })} disabled={!canManageProjects} />
+              </label>
+              <label>
+                <input type="checkbox" checked={projectForm.is_active} onChange={(e) => setProjectForm({ ...projectForm, is_active: e.target.checked })} disabled={!canManageProjects} /> Active
+              </label>
+              <div className="modal-buttons">
+                <button className="primary-btn" type="submit" disabled={!canManageProjects || savingProject}>{savingProject ? "Creating..." : "Create Project"}</button>
+                <button className="secondary-btn" type="button" onClick={() => setShowCreateProject(false)} disabled={savingProject}>Cancel</button>
+              </div>
+            </form>
+          </div>
         </div>
-      </div>
+      )}
+
+      {showCreateAssignment && canManageLabor && (
+        <div className="modal-overlay" onClick={() => setShowCreateAssignment(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Create Assignment</h3>
+              <button className="close-btn" onClick={() => setShowCreateAssignment(false)}>×</button>
+            </div>
+            <form className="form-grid" onSubmit={handleCreateAssignment}>
+              <label>
+                Search prisoner
+                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" />
+              </label>
+              <div className="searchable-picker">
+                <div className="search-status">
+                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+                </div>
+                <label>
+                  Prisoner
+                  <select value={assignmentForm.prisoner_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, prisoner_id: e.target.value })} required disabled={loadingPrisoners}>
+                    <option value="">Select prisoner by name</option>
+                    {prisonerOptions.map((prisoner) => (
+                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                        {prisoner.full_name} (#{prisoner.prisoner_id})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
+              </div>
+              <label>
+                Project
+                <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required>
+                  <option value="">Select a project</option>
+                  {projects.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>{project.project_name} ({project.current_workers}/{project.max_workers})</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Assignment Date
+                <input type="date" value={assignmentForm.assignment_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, assignment_date: e.target.value })} required />
+              </label>
+              <label>
+                Hours Assigned
+                <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required />
+              </label>
+              <div className="modal-buttons">
+                <button className="primary-btn" type="submit" disabled={savingAssignment}>{savingAssignment ? "Assigning..." : "Assign Prisoner"}</button>
+                <button className="secondary-btn" type="button" onClick={() => setShowCreateAssignment(false)} disabled={savingAssignment}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showLogPerformance && (
+        <div className="modal-overlay" onClick={() => setShowLogPerformance(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Log Performance</h3>
+              <button className="close-btn" onClick={() => setShowLogPerformance(false)}>×</button>
+            </div>
+            {!canManageLabor && <div className="readonly-note">Limited to Admin, Warden, Guard.</div>}
+            <form className="form-grid" onSubmit={handleCreatePerformance}>
+              <div className="searchable-picker">
+                <div className="search-status">
+                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+                </div>
+                <label>
+                  Prisoner
+                  <select value={performanceForm.prisoner_id} onChange={(e) => setPerformanceForm({ ...performanceForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
+                    <option value="">Select prisoner by name</option>
+                    {prisonerOptions.map((prisoner) => (
+                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
+                        {prisoner.full_name} (#{prisoner.prisoner_id})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
+              </div>
+              <label>
+                Project
+                <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
+                  <option value="">Select a project</option>
+                  {projects.map((project) => (
+                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Work Date
+                <input type="date" value={performanceForm.work_date} onChange={(e) => setPerformanceForm({ ...performanceForm, work_date: e.target.value })} required disabled={!canManageLabor} />
+              </label>
+              <label>
+                Productivity
+                <input type="number" step="0.01" min="0" max="100" value={performanceForm.productivity} onChange={(e) => setPerformanceForm({ ...performanceForm, productivity: e.target.value })} required disabled={!canManageLabor} />
+              </label>
+              <label>
+                Notes
+                <textarea value={performanceForm.notes} onChange={(e) => setPerformanceForm({ ...performanceForm, notes: e.target.value })} disabled={!canManageLabor} />
+              </label>
+              <div className="modal-buttons">
+                <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Saving..." : "Save Performance"}</button>
+                <button className="secondary-btn" type="button" onClick={() => setShowLogPerformance(false)} disabled={savingPerformance}>Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {editingProject && (
         <ProjectEditModal
@@ -1194,6 +1214,8 @@ export default function LaborPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+    </div> {/* close page-main-data */}
+  </div> {/* close page-action-layout */}
+    </>
   );
 }

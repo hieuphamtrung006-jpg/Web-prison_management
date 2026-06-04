@@ -1,6 +1,88 @@
 import { useEffect, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+import ActionSidebar from "../components/ActionSidebar";
+
+function Toast({ message, type = "info", onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+  return <div className={`toast toast-${type}`}>{message}</div>;
+}
+
+function UpdateScheduleModal({ onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    schedule_id: "",
+    prisoner_id: "",
+    project_id: "",
+    location_id: "",
+    shift_id: "",
+    start_time: "",
+    end_time: "",
+    status: "",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    if (!form.schedule_id) {
+      setError("Schedule ID is required");
+      setLoading(false);
+      return;
+    }
+    const payload = {};
+    if (form.prisoner_id) payload.prisoner_id = Number(form.prisoner_id);
+    if (form.project_id) payload.project_id = Number(form.project_id);
+    if (form.location_id) payload.location_id = Number(form.location_id);
+    if (form.shift_id) payload.shift_id = Number(form.shift_id);
+    if (form.start_time) payload.start_time = form.start_time;
+    if (form.end_time) payload.end_time = form.end_time;
+    if (form.status) payload.status = form.status;
+    try {
+      await api.put(`/schedules/${Number(form.schedule_id)}`, payload);
+      showToast("Schedule updated", "success");
+      setForm({ schedule_id: "", prisoner_id: "", project_id: "", location_id: "", shift_id: "", start_time: "", end_time: "", status: "" });
+      onSaved();
+      onClose();
+    } catch (err) {
+      const msg = parseApiError(err);
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Update Schedule</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        {error && <div className="error-msg">{error}</div>}
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>Schedule ID<input type="number" value={form.schedule_id} onChange={(e) => setForm({ ...form, schedule_id: e.target.value })} required /></label>
+          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} /></label>
+          <label>Project ID<input type="number" value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} /></label>
+          <label>Location ID<input type="number" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })} /></label>
+          <label>Shift ID<input type="number" value={form.shift_id} onChange={(e) => setForm({ ...form, shift_id: e.target.value })} /></label>
+          <label>Start<input type="datetime-local" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} /></label>
+          <label>End<input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} /></label>
+          <label>Status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="">(no change)</option><option>Active</option><option>Cancelled</option><option>Completed</option></select></label>
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Update"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 export default function SchedulesPage() {
   const { user } = useAuth();
@@ -15,17 +97,9 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState([]);
   const [schedulePage, setSchedulePage] = useState(1);
   const schedulePageSize = 20;
-  const [updateForm, setUpdateForm] = useState({
-    schedule_id: "",
-    prisoner_id: "",
-    project_id: "",
-    location_id: "",
-    shift_id: "",
-    start_time: "",
-    end_time: "",
-    status: "",
-  });
   const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
 
   const loadConfigs = async () => {
     try {
@@ -79,41 +153,6 @@ export default function SchedulesPage() {
     }
   };
 
-  const updateSchedule = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (!updateForm.schedule_id) {
-      setError("Schedule ID is required");
-      return;
-    }
-
-    const payload = {};
-    if (updateForm.prisoner_id) payload.prisoner_id = Number(updateForm.prisoner_id);
-    if (updateForm.project_id) payload.project_id = Number(updateForm.project_id);
-    if (updateForm.location_id) payload.location_id = Number(updateForm.location_id);
-    if (updateForm.shift_id) payload.shift_id = Number(updateForm.shift_id);
-    if (updateForm.start_time) payload.start_time = updateForm.start_time;
-    if (updateForm.end_time) payload.end_time = updateForm.end_time;
-    if (updateForm.status) payload.status = updateForm.status;
-
-    try {
-      await api.put(`/schedules/${Number(updateForm.schedule_id)}`, payload);
-      setUpdateForm({
-        schedule_id: "",
-        prisoner_id: "",
-        project_id: "",
-        location_id: "",
-        shift_id: "",
-        start_time: "",
-        end_time: "",
-        status: "",
-      });
-      await loadSchedules();
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
-
   const deleteSchedule = async (scheduleId) => {
     const confirmed = window.confirm("Delete this schedule permanently?");
     if (!confirmed) return;
@@ -126,8 +165,21 @@ export default function SchedulesPage() {
     }
   };
 
+  const showToast = (message, type = "info") => setToast({ message, type });
+
+  const canUpdate = !isReadOnly;
+  const scheduleActions = canUpdate
+    ? [{ label: "✎ Update Schedule", onClick: () => setShowUpdateModal(true), variant: "update" }]
+    : [];
+
   return (
-    <div className="stack-grid">
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={scheduleActions} />
+      </div>
+
+      <div className="page-main-data">
+      <div className="stack-grid">
       {!isReadOnly && (
         <section className="panel">
           <h2>Schedule Generator (Optimizer)</h2>
@@ -218,22 +270,18 @@ export default function SchedulesPage() {
           </table>
         </div>
       </section>
-      {!isReadOnly && (
-        <section className="panel">
-          <h2>Update schedule</h2>
-          <form className="form-grid" onSubmit={updateSchedule}>
-            <label>Schedule ID<input type="number" value={updateForm.schedule_id} onChange={(e) => setUpdateForm({ ...updateForm, schedule_id: e.target.value })} required /></label>
-            <label>Prisoner ID<input type="number" value={updateForm.prisoner_id} onChange={(e) => setUpdateForm({ ...updateForm, prisoner_id: e.target.value })} /></label>
-            <label>Project ID<input type="number" value={updateForm.project_id} onChange={(e) => setUpdateForm({ ...updateForm, project_id: e.target.value })} /></label>
-            <label>Location ID<input type="number" value={updateForm.location_id} onChange={(e) => setUpdateForm({ ...updateForm, location_id: e.target.value })} /></label>
-            <label>Shift ID<input type="number" value={updateForm.shift_id} onChange={(e) => setUpdateForm({ ...updateForm, shift_id: e.target.value })} /></label>
-            <label>Start<input type="datetime-local" value={updateForm.start_time} onChange={(e) => setUpdateForm({ ...updateForm, start_time: e.target.value })} /></label>
-            <label>End<input type="datetime-local" value={updateForm.end_time} onChange={(e) => setUpdateForm({ ...updateForm, end_time: e.target.value })} /></label>
-            <label>Status<select value={updateForm.status} onChange={(e) => setUpdateForm({ ...updateForm, status: e.target.value })}><option value="">(no change)</option><option>Active</option><option>Cancelled</option><option>Completed</option></select></label>
-            <button className="primary-btn" type="submit">Update</button>
-          </form>
-        </section>
+
+      {showUpdateModal && canUpdate && (
+        <UpdateScheduleModal
+          onClose={() => setShowUpdateModal(false)}
+          onSaved={() => loadSchedules()}
+          showToast={showToast}
+        />
       )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
+      </div>
     </div>
   );
 }
