@@ -722,17 +722,20 @@ export default function LaborPage() {
   }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
 
   return (
-    <div className="page-with-sidebar">
-      <ActionSidebar
-        title="Actions"
-        actions={[
-          ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
-          ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
-          { label: "Log Performance", onClick: () => setShowLogPerformance(true) },
-        ]}
-      position="left-rail"
-      />
-      <div className="content-with-rail">
+    <>
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar
+          title="Actions"
+          actions={[
+            ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
+            ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
+            { label: "Log Performance", onClick: () => setShowLogPerformance(true) },
+          ]}
+        />
+      </div>
+
+      <div className="page-main-data">
       <div style={{ display: 'block' }}>
         <div className="labor-stack">
           <section className="panel">
@@ -1017,8 +1020,8 @@ export default function LaborPage() {
               </>
             )}
           </section>
-        </div>
-      </div>
+        </div> {/* close labor-stack */}
+      </div> {/* close style block */}
 
       {/* Create modals as popups from left sidebar */}
       {showCreateProject && (
@@ -1211,7 +1214,8 @@ export default function LaborPage() {
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
-      </div>
+    </div> {/* close page-main-data */}
+  </div> {/* close page-action-layout */}
+    </>
   );
 }

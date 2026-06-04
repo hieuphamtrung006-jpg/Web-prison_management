@@ -173,9 +173,12 @@ export default function SchedulesPage() {
     : [];
 
   return (
-    <div>
-      <ActionSidebar title="Actions" actions={scheduleActions} position="left-rail" />
-      <div className="content-with-rail">
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={scheduleActions} />
+      </div>
+
+      <div className="page-main-data">
       <div className="stack-grid">
       {!isReadOnly && (
         <section className="panel">

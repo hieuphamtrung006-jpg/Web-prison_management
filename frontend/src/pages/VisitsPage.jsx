@@ -237,10 +237,12 @@ export default function VisitsPage() {
   }
 
   return (
-    <div>
-      <ActionSidebar title="Actions" actions={actions} position="left-rail" />
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={actions} />
+      </div>
 
-      <div className="content-with-rail">
+      <div className="page-main-data">
       <section className="panel">
         <h2>Visits</h2>
         {error && <p className="error-msg">{error}</p>}

@@ -265,10 +265,12 @@ export default function LocationsPage() {
     : [];
 
   return (
-    <div>
-      <ActionSidebar title="Actions" actions={createActions} position="left-rail" />
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={createActions} />
+      </div>
 
-      <div className="content-with-rail">
+      <div className="page-main-data">
       <section className="panel">
         <h2>Locations</h2>
         {error && <div className="error-msg">{error}</div>}

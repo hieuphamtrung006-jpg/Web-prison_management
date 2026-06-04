@@ -551,10 +551,13 @@ export default function PrisonersPage() {
     : [];
 
   return (
-    <div>
-      <ActionSidebar title="Actions" actions={createActions} position="left-rail" />
+    <>
+    <div className="page-action-layout">
+      <div className="page-action-column">
+        <ActionSidebar title="Actions" actions={createActions} />
+      </div>
 
-      <div className="content-with-rail">
+      <div className="page-main-data">
       <div className="three-col-layout">
       <section className="panel">
         <h2>Prisoners</h2>
@@ -757,8 +760,9 @@ export default function PrisonersPage() {
           )}
         </section>
       </div>
-      </div> {/* close three-col-layout */}
-      </div> {/* close content-with-rail */}
+    </div> {/* close three-col-layout */}
+  </div> {/* close page-main-data */}
+</div> {/* close page-action-layout */}
 
       {editingPrisoner && canEdit ? (
         <PrisonerEditModal
@@ -787,6 +791,6 @@ export default function PrisonersPage() {
       ) : null}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+      </>
   );
 }
