@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, cast, Date as SQLDate
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
@@ -50,14 +50,11 @@ def _current_worker_count(
     db: Session,
     project_id: int,
     target_date: date,
-    exclude_assignment_id: int | None = None,
 ) -> int:
-    query = db.query(func.count(LaborAssignment.assignment_id)).filter(
-        LaborAssignment.project_id == project_id,
-        LaborAssignment.assignment_date == target_date,
+    query = db.query(func.count(func.distinct(Schedule.prisoner_id))).filter(
+        Schedule.project_id == project_id,
+        cast(Schedule.start_time, SQLDate) == target_date,
     )
-    if exclude_assignment_id is not None:
-        query = query.filter(LaborAssignment.assignment_id != exclude_assignment_id)
     return query.scalar() or 0
 
 
@@ -144,13 +141,16 @@ def list_projects(
     target_date = on_date or date.today()
     offset = (page - 1) * page_size
 
-    assignment_subquery = (
+    schedule_subquery = (
         db.query(
-            LaborAssignment.project_id.label("project_id"),
-            func.count(LaborAssignment.assignment_id).label("current_workers"),
+            Schedule.project_id.label("project_id"),
+            func.count(func.distinct(Schedule.prisoner_id)).label("current_workers"),
         )
-        .filter(LaborAssignment.assignment_date == target_date)
-        .group_by(LaborAssignment.project_id)
+        .filter(
+            cast(Schedule.start_time, SQLDate) == target_date,
+            Schedule.project_id.isnot(None),
+        )
+        .group_by(Schedule.project_id)
         .subquery()
     )
 
@@ -163,14 +163,14 @@ def list_projects(
             LaborProject.revenue_per_hour,
             LaborProject.priority_score,
             LaborProject.max_workers,
-            func.coalesce(assignment_subquery.c.current_workers, 0).label("current_workers"),
+            func.coalesce(schedule_subquery.c.current_workers, 0).label("current_workers"),
             LaborProject.required_skills,
             LaborProject.is_active,
             LaborProject.created_at,
             LaborProject.updated_at,
         )
         .outerjoin(Location, Location.location_id == LaborProject.location_id)
-        .outerjoin(assignment_subquery, assignment_subquery.c.project_id == LaborProject.project_id)
+        .outerjoin(schedule_subquery, schedule_subquery.c.project_id == LaborProject.project_id)
         .order_by(LaborProject.project_id.desc())
         .offset(offset)
         .limit(page_size)
@@ -198,7 +198,7 @@ def get_project(
             LaborProject.revenue_per_hour,
             LaborProject.priority_score,
             LaborProject.max_workers,
-            func.count(LaborAssignment.assignment_id).label("current_workers"),
+            func.count(func.distinct(Schedule.prisoner_id)).label("current_workers"),
             LaborProject.required_skills,
             LaborProject.is_active,
             LaborProject.created_at,
@@ -206,9 +206,9 @@ def get_project(
         )
         .outerjoin(Location, Location.location_id == LaborProject.location_id)
         .outerjoin(
-            LaborAssignment,
-            (LaborAssignment.project_id == LaborProject.project_id)
-            & (LaborAssignment.assignment_date == target_date),
+            Schedule,
+            (Schedule.project_id == LaborProject.project_id)
+            & (cast(Schedule.start_time, SQLDate) == target_date),
         )
         .filter(LaborProject.project_id == project.project_id)
         .group_by(
@@ -447,7 +447,6 @@ def update_assignment(
         db,
         next_project_id,
         next_assignment_date,
-        exclude_assignment_id=assignment_id,
     )
     if current_workers >= project.max_workers:
         raise HTTPException(status_code=400, detail="Project has reached MaxWorkers")

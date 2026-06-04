@@ -1,7 +1,7 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, cast, Date as SQLDate
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_roles
@@ -95,8 +95,12 @@ def get_prisoner(
     )
     projects = (
         db.query(LaborProject.project_name)
-        .join(LaborAssignment, LaborAssignment.project_id == LaborProject.project_id)
-        .filter(LaborAssignment.prisoner_id == prisoner_id)
+        .join(Schedule, Schedule.project_id == LaborProject.project_id)
+        .filter(
+            Schedule.prisoner_id == prisoner_id,
+            Schedule.status == "Active",
+            cast(Schedule.start_time, SQLDate) == date.today(),
+        )
         .distinct()
         .all()
     )

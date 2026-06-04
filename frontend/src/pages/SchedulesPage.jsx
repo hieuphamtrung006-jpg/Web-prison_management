@@ -148,6 +148,7 @@ export default function SchedulesPage() {
       });
       setResult(response.data);
       await loadDaily();
+      await loadSchedules();
     } catch (err) {
       setError(parseApiError(err));
     }
@@ -160,6 +161,7 @@ export default function SchedulesPage() {
     try {
       await api.delete(`/schedules/${scheduleId}`);
       await loadSchedules();
+      await loadDaily();
     } catch (err) {
       setError(parseApiError(err));
     }
@@ -274,7 +276,10 @@ export default function SchedulesPage() {
       {showUpdateModal && canUpdate && (
         <UpdateScheduleModal
           onClose={() => setShowUpdateModal(false)}
-          onSaved={() => loadSchedules()}
+          onSaved={async () => {
+            await loadSchedules();
+            await loadDaily();
+          }}
           showToast={showToast}
         />
       )}
