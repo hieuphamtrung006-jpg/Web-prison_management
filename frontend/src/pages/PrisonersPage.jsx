@@ -404,11 +404,129 @@ function CreatePrisonerModal({ locations, onClose, onSaved, showToast }) {
   );
 }
 
+// ============================================
+// Prisoner Detail Modal (replaces the old right sidebar)
+// ============================================
+function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, canDelete, locationById }) {
+  if (!prisoner) return null;
+
+  const location = prisoner.current_location_id 
+    ? locationById.get(prisoner.current_location_id) 
+    : null;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Prisoner Detail</h3>
+          <button className="close-btn" type="button" onClick={onClose}>×</button>
+        </div>
+
+        <div className="detail-grid" style={{ marginTop: 8 }}>
+          <div className="detail-item">
+            <span>Full name</span>
+            <strong>{prisoner.full_name}</strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Date of birth</span>
+            <strong>{formatDateOnly(prisoner.date_of_birth)}</strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Gender</span>
+            <strong>{prisoner.gender || "-"}</strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Crime type</span>
+            <strong>{prisoner.crime_type || "-"}</strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Risk level</span>
+            <div><RiskBadge value={prisoner.risk_level} /></div>
+          </div>
+
+          <div className="detail-item">
+            <span>Productivity score</span>
+            <strong>{prisoner.productivity_score ?? 0}</strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Current location</span>
+            <strong>
+              {prisoner.current_location_name || location?.location_name || "Unassigned"}
+            </strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Sentence</span>
+            <strong>
+              {formatDateOnly(prisoner.sentence_start)} — {formatDateOnly(prisoner.sentence_end)}
+            </strong>
+          </div>
+
+          <div className="detail-item">
+            <span>Status</span>
+            <div>
+              <span className={`status-badge ${statusClass(prisoner.status)}`}>
+                {prisoner.status}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Active labor projects */}
+        <div style={{ marginTop: 16 }}>
+          <h3 style={{ marginBottom: 8 }}>Active labor projects</h3>
+          {prisoner.projects?.length > 0 ? (
+            <div className="project-list">
+              {prisoner.projects.map((project, index) => (
+                <span key={index} className="project-pill">{project}</span>
+              ))}
+            </div>
+          ) : (
+            <p className="hint-text">No active labor projects.</p>
+          )}
+        </div>
+
+        {/* Action buttons in modal */}
+        <div className="modal-buttons" style={{ marginTop: 24 }}>
+          {canEdit && (
+            <button
+              className="primary-btn"
+              onClick={onEdit}
+            >
+              Edit
+            </button>
+          )}
+          {canDelete && (
+            <button
+              className="btn-delete"
+              onClick={onDelete}
+            >
+              Delete
+            </button>
+          )}
+          <button
+            className="secondary-btn"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PrisonersPage() {
   const { user } = useAuth();
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
   const canEdit = user?.role === "Admin" || user?.role === "Warden";
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
+
   const [rows, setRows] = useState([]);
   const [locations, setLocations] = useState([]);
   const [filterDraft, setFilterDraft] = useState(initialFilters);
@@ -418,9 +536,10 @@ export default function PrisonersPage() {
   const [locationLoading, setLocationLoading] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
-  const [editingPrisoner, setEditingPrisoner] = useState(null);
-  const [selectedPrisoner, setSelectedPrisoner] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+
+  // Modal states
+  const [selectedPrisoner, setSelectedPrisoner] = useState(null); // for detail modal
+  const [editingPrisoner, setEditingPrisoner] = useState(null);   // for edit modal
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const locationById = useMemo(() => {
@@ -473,8 +592,8 @@ export default function PrisonersPage() {
     }
   };
 
+  // Load prisoner detail for the modal
   const loadPrisonerDetail = async (prisonerId) => {
-    setDetailLoading(true);
     try {
       const response = await api.get(`/prisoners/${prisonerId}`);
       setSelectedPrisoner(response.data);
@@ -482,8 +601,6 @@ export default function PrisonersPage() {
       const message = parseApiError(err);
       setError(message);
       showToast(message, "error");
-    } finally {
-      setDetailLoading(false);
     }
   };
 
@@ -494,13 +611,6 @@ export default function PrisonersPage() {
   useEffect(() => {
     loadPrisoners(page, filters);
   }, [page, filters]);
-
-  useEffect(() => {
-    if (selectedPrisoner?.prisoner_id) {
-      loadPrisonerDetail(selectedPrisoner.prisoner_id);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locations]);
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -524,6 +634,8 @@ export default function PrisonersPage() {
     try {
       await api.delete(`/prisoners/${prisoner.prisoner_id}`);
       showToast("Prisoner deleted", "success");
+
+      // Close detail modal if the deleted prisoner was open
       if (selectedPrisoner?.prisoner_id === prisoner.prisoner_id) {
         setSelectedPrisoner(null);
       }
@@ -534,10 +646,6 @@ export default function PrisonersPage() {
       showToast(message, "error");
     }
   };
-
-  const selectedLocation = selectedPrisoner?.current_location_id
-    ? locationById.get(selectedPrisoner.current_location_id)
-    : null;
 
   const createActions = canCreate
     ? [
@@ -550,220 +658,201 @@ export default function PrisonersPage() {
       ]
     : [];
 
+  // Open detail modal for a prisoner
+  const openPrisonerDetail = async (prisonerId) => {
+    await loadPrisonerDetail(prisonerId);
+  };
+
+  // When clicking Edit from the detail modal
+  const handleEditFromDetail = () => {
+    if (selectedPrisoner) {
+      setEditingPrisoner(selectedPrisoner);
+      setSelectedPrisoner(null); // close detail modal
+    }
+  };
+
+  // When clicking Delete from the detail modal
+  const handleDeleteFromDetail = () => {
+    if (selectedPrisoner) {
+      handleDelete(selectedPrisoner);
+      // handleDelete will close the modal if needed
+    }
+  };
+
   return (
     <>
-    <div className="page-action-layout">
-      <div className="page-action-column">
-        <ActionSidebar title="Actions" actions={createActions} />
-      </div>
-
-      <div className="page-main-data">
-      <div className="three-col-layout">
-      <section className="panel">
-        <h2>Prisoners</h2>
-        <p className="hint-text">Search by name, risk level, or location. Click a row to inspect sentence, productivity, and active labor projects.</p>
-
-        {error && <div className="error-msg">{error}</div>}
-
-        <form className="prisoners-toolbar" onSubmit={handleSearch}>
-          <label>
-            Name
-            <input
-              value={filterDraft.name}
-              onChange={(e) => setFilterDraft({ ...filterDraft, name: e.target.value })}
-              placeholder="Search by prisoner name"
-            />
-          </label>
-
-          <label>
-            Risk level
-            <select value={filterDraft.risk_level} onChange={(e) => setFilterDraft({ ...filterDraft, risk_level: e.target.value })}>
-              <option value="">All</option>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
-          </label>
-
-          <label>
-            Location
-            <select value={filterDraft.location_id} onChange={(e) => setFilterDraft({ ...filterDraft, location_id: e.target.value })}>
-              <option value="">All</option>
-              {locations.map((location) => (
-                <option key={location.location_id} value={location.location_id}>
-                  {location.location_name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <button className="primary-btn" type="submit">
-            Search
-          </button>
-
-          <button className="secondary-btn" type="button" onClick={handleResetFilters}>
-            Reset
-          </button>
-        </form>
-
-        <div className="inline-form pagination">
-          <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-            Prev
-          </button>
-          <span className="muted">Page {page}</span>
-          <button className="secondary-btn" disabled={loading} onClick={() => setPage((current) => current + 1)}>
-            Next
-          </button>
+      <div className="page-action-layout">
+        <div className="page-action-column">
+          <ActionSidebar title="Actions" actions={createActions} />
         </div>
 
-        {loading ? (
-          <div className="loading-state">
-            <div className="spinner" />
-            <p>Loading prisoners...</p>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="loading-state">
-            <p>No prisoners found</p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>DOB</th>
-                  <th>Crime</th>
-                  <th>Risk Level</th>
-                  <th>Location</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const isSelected = selectedPrisoner?.prisoner_id === row.prisoner_id;
-                  const location = row.current_location_id ? locationById.get(row.current_location_id) : null;
+        <div className="page-main-data">
+          {/* Full width table (main content now takes the available space) */}
+          <section className="panel">
+            <h2>Prisoners</h2>
+            <p className="hint-text">
+              Search by name, risk level, or location. Click a row to view full details in a modal.
+            </p>
 
-                  return (
-                    <tr key={row.prisoner_id} className={isSelected ? "selected-row" : ""}>
-                      <td>{row.prisoner_id}</td>
-                      <td>{row.full_name}</td>
-                      <td>{formatDateOnly(row.date_of_birth)}</td>
-                      <td>{row.crime_type || "-"}</td>
-                      <td>
-                        <RiskBadge value={row.risk_level} />
-                      </td>
-                      <td>{location?.location_name || "Unassigned"}</td>
-                      <td>
-                        <span className={`status-badge ${statusClass(row.status)}`}>{row.status}</span>
-                      </td>
-                      <td>
-                        <div className="table-actions-inline">
-                          <button
-                            className="btn-sm btn-edit"
-                            type="button"
-                            onClick={() => loadPrisonerDetail(row.prisoner_id)}
-                          >
-                            View
-                          </button>
-                          {canEdit && (
-                            <button
-                              className="btn-sm btn-edit"
-                              type="button"
-                              onClick={async () => {
-                                await loadPrisonerDetail(row.prisoner_id);
-                                setEditingPrisoner(row);
-                              }}
-                            >
-                              Edit
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button className="btn-sm btn-delete" type="button" onClick={() => handleDelete(row)}>
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </td>
+            {error && <div className="error-msg">{error}</div>}
+
+            <form className="prisoners-toolbar" onSubmit={handleSearch}>
+              <label>
+                Name
+                <input
+                  value={filterDraft.name}
+                  onChange={(e) => setFilterDraft({ ...filterDraft, name: e.target.value })}
+                  placeholder="Search by prisoner name"
+                />
+              </label>
+
+              <label>
+                Risk level
+                <select value={filterDraft.risk_level} onChange={(e) => setFilterDraft({ ...filterDraft, risk_level: e.target.value })}>
+                  <option value="">All</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </label>
+
+              <label>
+                Location
+                <select value={filterDraft.location_id} onChange={(e) => setFilterDraft({ ...filterDraft, location_id: e.target.value })}>
+                  <option value="">All</option>
+                  {locations.map((location) => (
+                    <option key={location.location_id} value={location.location_id}>
+                      {location.location_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <button className="primary-btn" type="submit">
+                Search
+              </button>
+
+              <button className="secondary-btn" type="button" onClick={handleResetFilters}>
+                Reset
+              </button>
+            </form>
+
+            <div className="inline-form pagination">
+              <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                Prev
+              </button>
+              <span className="muted">Page {page}</span>
+              <button className="secondary-btn" disabled={loading} onClick={() => setPage((current) => current + 1)}>
+                Next
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="loading-state">
+                <div className="spinner" />
+                <p>Loading prisoners...</p>
+              </div>
+            ) : rows.length === 0 ? (
+              <div className="loading-state">
+                <p>No prisoners found</p>
+              </div>
+            ) : (
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Name</th>
+                      <th>DOB</th>
+                      <th>Crime</th>
+                      <th>Risk Level</th>
+                      <th>Location</th>
+                      <th>Status</th>
+                      <th>Actions</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => {
+                      const location = row.current_location_id ? locationById.get(row.current_location_id) : null;
 
-      <div className="stack-grid">
-        <section className="panel prisoner-detail">
-          <h2>Prisoner detail</h2>
-          {detailLoading ? (
-            <div className="loading-state">
-              <div className="spinner" />
-              <p>Loading prisoner detail...</p>
-            </div>
-          ) : selectedPrisoner ? (
-            <>
-              <div className="detail-grid">
-                <div className="detail-item">
-                  <span>Full name</span>
-                  <strong>{selectedPrisoner.full_name}</strong>
-                </div>
-                <div className="detail-item">
-                  <span>Sentence</span>
-                  <strong>
-                    {formatDateOnly(selectedPrisoner.sentence_start)} - {formatDateOnly(selectedPrisoner.sentence_end)}
-                  </strong>
-                </div>
-                <div className="detail-item">
-                  <span>Risk level</span>
-                  <strong>
-                    <RiskBadge value={selectedPrisoner.risk_level} />
-                  </strong>
-                </div>
-                <div className="detail-item">
-                  <span>Productivity</span>
-                  <strong>{selectedPrisoner.productivity_score ?? 0}</strong>
-                </div>
-                <div className="detail-item">
-                  <span>Current location</span>
-                  <strong>{selectedPrisoner.current_location_name || selectedLocation?.location_name || "Unassigned"}</strong>
-                </div>
-                <div className="detail-item">
-                  <span>Status</span>
-                  <strong>
-                    <span className={`status-badge ${statusClass(selectedPrisoner.status)}`}>{selectedPrisoner.status}</span>
-                  </strong>
-                </div>
+                      return (
+                        <tr 
+                          key={row.prisoner_id} 
+                          onClick={() => openPrisonerDetail(row.prisoner_id)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <td>{row.prisoner_id}</td>
+                          <td>{row.full_name}</td>
+                          <td>{formatDateOnly(row.date_of_birth)}</td>
+                          <td>{row.crime_type || "-"}</td>
+                          <td>
+                            <RiskBadge value={row.risk_level} />
+                          </td>
+                          <td>{location?.location_name || "Unassigned"}</td>
+                          <td>
+                            <span className={`status-badge ${statusClass(row.status)}`}>{row.status}</span>
+                          </td>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <div className="table-actions-inline">
+                              <button
+                                className="btn-sm btn-edit"
+                                type="button"
+                                onClick={() => openPrisonerDetail(row.prisoner_id)}
+                              >
+                                View
+                              </button>
+                              {canEdit && (
+                                <button
+                                  className="btn-sm btn-edit"
+                                  type="button"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    await loadPrisonerDetail(row.prisoner_id);
+                                    setEditingPrisoner(row);
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button 
+                                  className="btn-sm btn-delete" 
+                                  type="button" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDelete(row);
+                                  }}
+                                >
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
-
-              <div>
-                <h3>Active projects</h3>
-                {selectedPrisoner.projects?.length ? (
-                  <div className="project-list">
-                    {selectedPrisoner.projects.map((project) => (
-                      <span key={project} className="project-pill">
-                        {project}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="hint-text">No active labor projects.</p>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="loading-state">
-              <p>Select a prisoner to inspect details.</p>
-            </div>
-          )}
-        </section>
+            )}
+          </section>
+        </div>
       </div>
-    </div> {/* close three-col-layout */}
-  </div> {/* close page-main-data */}
-</div> {/* close page-action-layout */}
 
+      {/* Prisoner Detail Modal - replaces the old right sidebar */}
+      {selectedPrisoner && (
+        <PrisonerDetailModal
+          prisoner={selectedPrisoner}
+          onClose={() => setSelectedPrisoner(null)}
+          onEdit={handleEditFromDetail}
+          onDelete={handleDeleteFromDetail}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          locationById={locationById}
+        />
+      )}
+
+      {/* Existing Edit Modal */}
       {editingPrisoner && canEdit ? (
         <PrisonerEditModal
           prisoner={editingPrisoner}
@@ -772,12 +861,17 @@ export default function PrisonersPage() {
           onClose={() => setEditingPrisoner(null)}
           onSaved={async () => {
             await loadPrisoners(page, filters);
-            await loadPrisonerDetail(editingPrisoner.prisoner_id);
+            // If detail modal was open before, refresh the data in it
+            if (selectedPrisoner?.prisoner_id === editingPrisoner.prisoner_id) {
+              await loadPrisonerDetail(editingPrisoner.prisoner_id);
+            }
+            setEditingPrisoner(null);
           }}
           showToast={showToast}
         />
       ) : null}
 
+      {/* Create Modal */}
       {showCreateModal && canCreate ? (
         <CreatePrisonerModal
           locations={locations}
@@ -791,6 +885,6 @@ export default function PrisonersPage() {
       ) : null}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </>
+    </>
   );
 }

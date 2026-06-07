@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, cast, Date as SQLDate
 from sqlalchemy.orm import Session
 
+from app.core.audit import get_audit_context
 from app.core.deps import get_db, require_roles
+from app.db.models.user import User
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
@@ -338,7 +340,7 @@ def list_assignments(
 def create_assignment(
     payload: LaborAssignmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    current_user: User = Depends(get_audit_context),  # Sets context for INSERT trigger (also provides user)
 ) -> LaborAssignmentRead:
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
@@ -406,7 +408,7 @@ def update_assignment(
     assignment_id: int,
     payload: LaborAssignmentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    current_user: User = Depends(get_audit_context),  # Sets context for UPDATE trigger
 ) -> LaborAssignmentRead:
     assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
     if not assignment:
@@ -466,7 +468,7 @@ def update_assignment(
 def delete_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    _: User = Depends(get_audit_context),  # Sets context for DELETE trigger
 ) -> MessageResponse:
     assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
     if not assignment:
@@ -519,7 +521,7 @@ def list_performance(
 def create_performance(
     payload: DailyPerformanceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    current_user: User = Depends(get_audit_context),  # Sets context for INSERT + updates prisoner productivity_score
 ) -> DailyPerformanceRead:
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:

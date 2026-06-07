@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_roles
+from app.core.audit import get_audit_context
+from app.core.deps import get_db, require_roles
+from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
@@ -46,7 +48,7 @@ def get_incident(
 def create_incident(
     payload: IncidentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    current_user: User = Depends(get_audit_context),  # Sets context + provides user for created_by
 ) -> IncidentRead:
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
@@ -83,7 +85,7 @@ def update_incident(
     incident_id: int,
     payload: IncidentUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    _: User = Depends(get_audit_context),  # Sets context for UPDATE
 ) -> IncidentRead:
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
@@ -119,7 +121,7 @@ def update_incident(
 def delete_incident(
     incident_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden")),
+    _: User = Depends(get_audit_context),  # Sets context for DELETE
 ) -> MessageResponse:
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:

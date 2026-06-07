@@ -5,7 +5,9 @@ from sqlalchemy import cast
 from sqlalchemy import Date as SQLDate
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_roles
+from app.core.audit import get_audit_context
+from app.core.deps import get_db, require_roles
+from app.db.models.user import User
 from app.db.models.prisoner import Prisoner
 from app.db.models.user import User
 from app.db.models.visit import Visit
@@ -56,7 +58,7 @@ def list_pending_requests(
 def approve_visit_request(
     request_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("Warden", "Guard")),
+    current_user: User = Depends(get_audit_context),  # Sets context (this path creates a new Visit record)
 ) -> VisitRead:
     request = db.query(VisitRequest).filter(VisitRequest.request_id == request_id).first()
     if not request:
@@ -90,7 +92,7 @@ def approve_visit_request(
 def reject_visit_request(
     request_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Warden", "Guard")),
+    _: User = Depends(get_audit_context),  # Sets context for UPDATE on VisitRequest
 ) -> VisitRequestRead:
     request = db.query(VisitRequest).filter(VisitRequest.request_id == request_id).first()
     if not request:
@@ -161,7 +163,7 @@ def create_visit(
 def approve_visit(
     visit_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("Admin", "Warden")),
+    current_user: User = Depends(get_audit_context),  # Sets context for status UPDATE
 ) -> VisitRead:
     visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
     if not visit:
@@ -180,7 +182,7 @@ def update_visit(
     visit_id: int,
     payload: VisitUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
+    _: User = Depends(get_audit_context),  # Sets context for UPDATE (especially status changes)
 ) -> VisitRead:
     visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
     if not visit:
