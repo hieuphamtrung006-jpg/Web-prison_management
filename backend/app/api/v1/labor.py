@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, cast, Date as SQLDate
 from sqlalchemy.orm import Session
 
+from fastapi import Request
+
+from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
+from app.db.models.user import User
+from app.db.models.user import User
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
@@ -337,9 +342,13 @@ def list_assignments(
 @router.post("/assignments", response_model=LaborAssignmentRead, status_code=status.HTTP_201_CREATED)
 def create_assignment(
     payload: LaborAssignmentCreate,
-    db: Session = Depends(get_db),
+    request: Request,
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> LaborAssignmentRead:
+    db: Session = Depends(get_db),
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
@@ -405,9 +414,13 @@ def get_assignment(
 def update_assignment(
     assignment_id: int,
     payload: LaborAssignmentUpdate,
-    db: Session = Depends(get_db),
+    request: Request,
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> LaborAssignmentRead:
+    db: Session = Depends(get_db),
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -465,9 +478,13 @@ def update_assignment(
 @router.delete("/assignments/{assignment_id}", response_model=MessageResponse)
 def delete_assignment(
     assignment_id: int,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> MessageResponse:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     assignment = db.query(LaborAssignment).filter(LaborAssignment.assignment_id == assignment_id).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -518,9 +535,13 @@ def list_performance(
 @router.post("/performance", response_model=DailyPerformanceRead, status_code=status.HTTP_201_CREATED)
 def create_performance(
     payload: DailyPerformanceCreate,
-    db: Session = Depends(get_db),
+    request: Request,
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> DailyPerformanceRead:
+    db: Session = Depends(get_db),
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")

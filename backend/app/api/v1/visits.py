@@ -5,9 +5,12 @@ from sqlalchemy import cast
 from sqlalchemy import Date as SQLDate
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, get_db, require_roles
-from app.db.models.prisoner import Prisoner
+from fastapi import Request
+
+from app.core.audit import set_audit_context
+from app.core.deps import get_db, require_roles
 from app.db.models.user import User
+from app.db.models.prisoner import Prisoner
 from app.db.models.visit import Visit
 from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
@@ -55,9 +58,13 @@ def list_pending_requests(
 @router.put("/requests/{request_id}/approve", response_model=VisitRead)
 def approve_visit_request(
     request_id: int,
-    db: Session = Depends(get_db),
+    request: Request,
     current_user: User = Depends(require_roles("Warden", "Guard")),
-) -> VisitRead:
+    db: Session = Depends(get_db),
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     request = db.query(VisitRequest).filter(VisitRequest.request_id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="Visit request not found")
@@ -89,9 +96,13 @@ def approve_visit_request(
 @router.put("/requests/{request_id}/reject", response_model=VisitRequestRead)
 def reject_visit_request(
     request_id: int,
+    request: Request,
+    current_user: User = Depends(require_roles("Warden", "Guard")),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Warden", "Guard")),
-) -> VisitRequestRead:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     request = db.query(VisitRequest).filter(VisitRequest.request_id == request_id).first()
     if not request:
         raise HTTPException(status_code=404, detail="Visit request not found")
@@ -160,9 +171,13 @@ def create_visit(
 @router.put("/{visit_id}/approve", response_model=VisitRead)
 def approve_visit(
     visit_id: int,
-    db: Session = Depends(get_db),
+    request: Request,
     current_user: User = Depends(require_roles("Admin", "Warden")),
-) -> VisitRead:
+    db: Session = Depends(get_db),
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")
@@ -179,9 +194,13 @@ def approve_visit(
 def update_visit(
     visit_id: int,
     payload: VisitUpdate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
-) -> VisitRead:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
     if not visit:
         raise HTTPException(status_code=404, detail="Visit not found")

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
+
+// Lucide icons for clarity (core functionality first)
 import {
   Users,
   MapPin,
@@ -16,7 +18,10 @@ import {
   Clock,
 } from "lucide-react";
 
-const OVERVIEW_CARDS = [
+// ============================================
+// CONFIG: Key Indicators - 4 core metrics
+// ============================================
+const KEY_INDICATORS = [
   {
     key: "users",
     title: "Active Staff",
@@ -51,17 +56,124 @@ const OVERVIEW_CARDS = [
   },
 ];
 
+// ============================================
+// CONFIG: Quick Actions (role-based, priority order)
+// ============================================
+const QUICK_ACTIONS = [
+  {
+    label: "Duyệt Visit Requests",
+    desc: "Approve or reject pending visitor requests",
+    to: "/visits",
+    icon: UserCheck,
+    roles: ["Warden", "Guard", "Admin"],
+  },
+  {
+    label: "Overloaded Locations",
+    desc: "View facilities near or at capacity",
+    to: "/locations",
+    icon: MapPin,
+    roles: ["Warden", "Admin"],
+  },
+  {
+    label: "Log Daily Performance",
+    desc: "Record prisoner work productivity score",
+    to: "/labor",
+    icon: ClipboardList,
+    roles: ["Guard", "Admin", "Warden"],
+  },
+  {
+    label: "Report Incident",
+    desc: "Quickly log a new security or disciplinary event",
+    to: "/incidents",
+    icon: AlertTriangle,
+    roles: ["Guard", "Admin", "Warden"],
+  },
+  {
+    label: "Today's Assignments",
+    desc: "View current labor and schedule assignments",
+    to: "/schedules",
+    icon: Activity,
+    roles: ["Guard", "Admin", "Warden", "Viewer"],
+  },
+  {
+    label: "Labor Productivity",
+    desc: "Review daily performance and reports",
+    to: "/labor",
+    icon: TrendingUp,
+    roles: ["Warden", "Guard", "Admin", "Viewer"],
+  },
+];
+
+// ============================================
+// Small reusable component: Key Indicator Card
+// Focus on data + clarity first
+// ============================================
+function KeyIndicatorCard({ title, value, sub, icon: Icon, accent, loading }) {
+  if (loading) {
+    return (
+      <div className="metric-card">
+        <div className="metric-icon" style={{ background: "#f1f3f9" }} />
+        <div>
+          <div className="metric-title">{title}</div>
+          <div className="metric-value">...</div>
+          <div className="metric-sub">{sub}</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="metric-card">
+      <div
+        className="metric-icon"
+        style={{ background: `${accent}15`, color: accent }}
+      >
+        <Icon size={22} />
+      </div>
+      <div>
+        <div className="metric-title">{title}</div>
+        <div className="metric-value">{value}</div>
+        <div className="metric-sub">{sub}</div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// Small reusable component: Quick Action Card
+// Clickable via Link (navigation first, modals can be added later)
+// ============================================
+function QuickActionCard({ label, desc, to, icon: Icon }) {
+  return (
+    <Link to={to} className="quick-action">
+      <div className="icon-wrap">
+        <Icon size={20} />
+      </div>
+      <div className="qa-content">
+        <div className="qa-label">{label}</div>
+        <div className="qa-desc">{desc}</div>
+      </div>
+    </Link>
+  );
+}
+
 export default function DashboardPage() {
   const { user } = useAuth();
   const role = user?.role || "Viewer";
 
+  // State for core data
   const [stats, setStats] = useState({});
   const [recentIncidents, setRecentIncidents] = useState([]);
   const [highOccupancy, setHighOccupancy] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
 
+  // ============================================
+  // Data fetching - Core functionality
+  // Fetches Key Indicators + supporting alert data
+  // ============================================
   const loadDashboard = useCallback(async (isRefresh = false) => {
     setLoading(true);
     if (!isRefresh) setError("");
@@ -69,9 +181,9 @@ export default function DashboardPage() {
     try {
       const result = {};
 
-      // Overview counts
+      // 1. Key Indicators - parallel fetch
       await Promise.all(
-        OVERVIEW_CARDS.map(async (card) => {
+        KEY_INDICATORS.map(async (card) => {
           try {
             const res = await api.get(card.endpoint);
             result[card.key] = Array.isArray(res.data) ? res.data.length : 0;
@@ -82,7 +194,7 @@ export default function DashboardPage() {
       );
       setStats(result);
 
-      // Recent incidents for alerts
+      // 2. Recent incidents (for Operational Alerts)
       try {
         const incRes = await api.get("/incidents?page=1&page_size=6");
         const incidents = Array.isArray(incRes.data) ? incRes.data : [];
@@ -91,10 +203,11 @@ export default function DashboardPage() {
         setRecentIncidents([]);
       }
 
-      // High occupancy locations (client-side computation)
+      // 3. High occupancy locations (client-side calculation for alerts)
       try {
         const locRes = await api.get("/locations?page=1&page_size=100");
         const locations = Array.isArray(locRes.data) ? locRes.data : [];
+
         const high = locations
           .map((loc) => {
             const occ = loc.current_occupancy || 0;
@@ -105,6 +218,7 @@ export default function DashboardPage() {
           .filter((loc) => loc.occupancyPct >= 80)
           .sort((a, b) => b.occupancyPct - a.occupancyPct)
           .slice(0, 4);
+
         setHighOccupancy(high);
       } catch {
         setHighOccupancy([]);
@@ -127,60 +241,12 @@ export default function DashboardPage() {
     loadDashboard(true);
   };
 
-  // Role-based Quick Actions
-  const allActions = [
-    {
-      label: "Duyệt Visit Requests",
-      desc: "Approve or reject pending visitor requests",
-      to: "/visits",
-      icon: UserCheck,
-      roles: ["Warden", "Guard", "Admin"],
-    },
-    {
-      label: "Overloaded Locations",
-      desc: "View facilities near capacity",
-      to: "/locations",
-      icon: MapPin,
-      roles: ["Warden", "Admin"],
-    },
-    {
-      label: "Labor Productivity",
-      desc: "Review daily performance & reports",
-      to: "/labor",
-      icon: TrendingUp,
-      roles: ["Warden", "Guard", "Admin", "Viewer"],
-    },
-    {
-      label: "Log Daily Performance",
-      desc: "Record prisoner work productivity",
-      to: "/labor",
-      icon: ClipboardList,
-      roles: ["Guard", "Admin", "Warden"],
-    },
-    {
-      label: "Report Incident",
-      desc: "Quickly log a new security event",
-      to: "/incidents",
-      icon: AlertTriangle,
-      roles: ["Guard", "Admin", "Warden"],
-    },
-    {
-      label: "Today's Assignments",
-      desc: "View current labor & schedule",
-      to: "/schedules",
-      icon: Activity,
-      roles: ["Guard", "Admin", "Warden", "Viewer"],
-    },
-  ];
-
-  const visibleActions = allActions.filter(
-    (a) => a.roles.includes(role) || role === "Admin"
+  // Role-based filtering for Quick Actions
+  const visibleActions = QUICK_ACTIONS.filter(
+    (action) => action.roles.includes(role) || role === "Admin"
   );
 
-  const isWardenOrAdmin = ["Warden", "Admin"].includes(role);
-  const isGuard = role === "Guard";
-
-  // Format short date for incidents
+  // Simple date formatter for alerts
   const formatShortDate = (dateStr) => {
     if (!dateStr) return "";
     try {
@@ -193,15 +259,18 @@ export default function DashboardPage() {
 
   return (
     <div className="ops-console">
-      {/* Small context header for the console */}
+      {/* ============================================
+          HEADER - Operations Console
+          ============================================ */}
       <div className="ops-header">
         <div>
           <div className="eyebrow">Facility Operations</div>
-          <h2>Real-time Overview</h2>
+          <h2>Operations Console</h2>
           <p className="muted" style={{ marginTop: 4 }}>
-            Live snapshot of staffing, population, capacity, and critical alerts.
+            Real-time overview and quick actions for daily prison operations.
           </p>
         </div>
+
         <button
           className="refresh-btn"
           onClick={handleRefresh}
@@ -212,6 +281,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
+      {/* Error state (core feedback) */}
       {error && (
         <div className="error-banner">
           <AlertCircle size={18} />
@@ -219,12 +289,13 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* OVERVIEW CARDS */}
+      {/* ============================================
+          KEY INDICATORS (4 core cards)
+          Real-time data from backend
+          ============================================ */}
       <section>
         <div className="section-head" style={{ marginBottom: 12 }}>
-          <div>
-            <span className="eyebrow">Key Indicators</span>
-          </div>
+          <span className="eyebrow">Key Indicators</span>
           {lastUpdated && (
             <div className="last-updated">
               <Clock size={14} /> Last updated {lastUpdated.toLocaleTimeString()}
@@ -233,6 +304,7 @@ export default function DashboardPage() {
         </div>
 
         {loading ? (
+          // Simple loading placeholders (structure first)
           <div className="loading-grid">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="loading-card" />
@@ -240,84 +312,73 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="metric-grid">
-            {OVERVIEW_CARDS.map((card) => {
-              const Icon = card.icon;
-              const value = stats[card.key] ?? 0;
-              return (
-                <div key={card.key} className="metric-card">
-                  <div
-                    className="metric-icon"
-                    style={{ background: card.accent + "15", color: card.accent }}
-                  >
-                    <Icon size={22} />
-                  </div>
-                  <div>
-                    <div className="metric-title">{card.title}</div>
-                    <div className="metric-value">{value}</div>
-                    <div className="metric-sub">{card.sub}</div>
-                  </div>
-                </div>
-              );
-            })}
+            {KEY_INDICATORS.map((card) => (
+              <KeyIndicatorCard
+                key={card.key}
+                title={card.title}
+                value={stats[card.key] ?? 0}
+                sub={card.sub}
+                icon={card.icon}
+                accent={card.accent}
+                loading={false}
+              />
+            ))}
           </div>
         )}
       </section>
 
+      {/* ============================================
+          QUICK ACTIONS + OPERATIONAL ALERTS
+          Two-column layout for core ops view
+          ============================================ */}
       <div className="split-grid" style={{ alignItems: "start" }}>
-        {/* QUICK ACTIONS */}
+        {/* QUICK ACTIONS - Role aware, actionable */}
         <section className="panel">
           <div className="section-head">
             <div>
               <span className="eyebrow">Quick Actions</span>
-              <h3 style={{ marginTop: 2 }}>What do you need to do?</h3>
+              <h3 style={{ marginTop: 2 }}>Common daily tasks</h3>
             </div>
           </div>
 
           {visibleActions.length > 0 ? (
             <div className="quick-actions">
-              {visibleActions.map((action, idx) => {
-                const Icon = action.icon;
-                return (
-                  <Link key={idx} to={action.to} className="quick-action">
-                    <div className="icon-wrap">
-                      <Icon size={20} />
-                    </div>
-                    <div className="qa-content">
-                      <div className="qa-label">{action.label}</div>
-                      <div className="qa-desc">{action.desc}</div>
-                    </div>
-                  </Link>
-                );
-              })}
+              {visibleActions.map((action, idx) => (
+                <QuickActionCard
+                  key={idx}
+                  label={action.label}
+                  desc={action.desc}
+                  to={action.to}
+                  icon={action.icon}
+                />
+              ))}
             </div>
           ) : (
             <p className="muted">No quick actions available for your role.</p>
           )}
 
           <div style={{ marginTop: 16, fontSize: "0.8rem", color: "var(--muted)" }}>
-            {isWardenOrAdmin && "Warden tools prioritized • "}
-            {isGuard && "Guard tools prioritized • "}
-            Actions open the relevant module with your permissions applied.
+            Actions respect your current role permissions.
           </div>
         </section>
 
-        {/* ALERTS + RECENT ACTIVITY */}
+        {/* OPERATIONAL ALERTS - Important signals */}
         <section className="panel alerts-panel">
           <div className="section-head">
             <div>
               <span className="eyebrow">Operational Alerts</span>
-              <h3 style={{ marginTop: 2 }}>Attention required</h3>
+              <h3 style={{ marginTop: 2 }}>Requires attention</h3>
             </div>
             <Link to="/incidents" className="muted-link" style={{ fontSize: "0.85rem" }}>
-              View all incidents →
+              View incidents →
             </Link>
           </div>
 
-          {/* High occupancy warnings */}
+          {/* Near capacity warnings */}
           {highOccupancy.length > 0 && (
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#8a6f3a", marginBottom: 6 }}>
-                NEAR CAPACITY
+                NEAR OR AT CAPACITY
               </div>
               <div className="alert-list">
                 {highOccupancy.map((loc, i) => (
@@ -331,7 +392,7 @@ export default function DashboardPage() {
                         {loc.current_occupancy || 0} / {loc.capacity} inmates
                       </div>
                     </div>
-                    <div className="alert-meta">Action needed</div>
+                    <div className="alert-meta">Review needed</div>
                   </div>
                 ))}
               </div>
@@ -403,10 +464,10 @@ export default function DashboardPage() {
         </section>
       </div>
 
-      {/* Footer note */}
+      {/* Footer / status note */}
       <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>
-        Data is fetched live from the prison backend. Use Refresh for the latest snapshot.
-        {role === "Viewer" && " (Read-only access)"}
+        Data refreshed from backend. Use the Refresh button for the latest snapshot.
+        {role === "Viewer" && " (Read-only mode)"}
       </div>
     </div>
   );
