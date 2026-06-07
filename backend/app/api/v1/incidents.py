@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.core.audit import get_audit_context
+from fastapi import Request
+
+from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
+from app.db.models.user import User
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.location import Location
@@ -47,9 +50,13 @@ def get_incident(
 @router.post("/", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)
 def create_incident(
     payload: IncidentCreate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_audit_context),  # Sets context + provides user for created_by
-) -> IncidentRead:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
@@ -84,9 +91,13 @@ def create_incident(
 def update_incident(
     incident_id: int,
     payload: IncidentUpdate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    _: User = Depends(get_audit_context),  # Sets context for UPDATE
-) -> IncidentRead:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")
@@ -120,9 +131,13 @@ def update_incident(
 @router.delete("/{incident_id}", response_model=MessageResponse)
 def delete_incident(
     incident_id: int,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden")),
     db: Session = Depends(get_db),
-    _: User = Depends(get_audit_context),  # Sets context for DELETE
-) -> MessageResponse:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
     incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
     if not incident:
         raise HTTPException(status_code=404, detail="Incident not found")

@@ -4,8 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, cast, Date as SQLDate
 from sqlalchemy.orm import Session
 
-from app.core.audit import get_audit_context
+from fastapi import Request
+
+from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
+from app.db.models.user import User
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
@@ -67,9 +70,14 @@ def list_prisoners(
 @router.post("/", response_model=PrisonerRead, status_code=status.HTTP_201_CREATED)
 def create_prisoner(
     payload: PrisonerCreate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden")),
     db: Session = Depends(get_db),
-    _: User = Depends(get_audit_context),  # Sets audit context for INSERT trigger
-) -> PrisonerRead:
+):
+    # Set audit context manually (safer, avoids dependency stacking issues with get_audit_context)
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
+
     if payload.current_location_id is not None:
         _ensure_location_capacity(db, payload.current_location_id)
 
@@ -119,9 +127,14 @@ def get_prisoner(
 def update_prisoner(
     prisoner_id: int,
     payload: PrisonerUpdate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_audit_context),  # Sets audit context + provides user for role checks
-) -> PrisonerRead:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
+
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")
@@ -151,9 +164,14 @@ def update_prisoner(
 @router.delete("/{prisoner_id}", response_model=MessageResponse)
 def delete_prisoner(
     prisoner_id: int,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden")),
     db: Session = Depends(get_db),
-    _: User = Depends(get_audit_context),  # Sets audit context for DELETE + cascading deletes
-) -> MessageResponse:
+):
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
+
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")

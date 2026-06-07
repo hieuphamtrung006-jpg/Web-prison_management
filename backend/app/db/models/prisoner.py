@@ -10,6 +10,13 @@ from app.db.base import Base
 class Prisoner(Base):
     __tablename__ = "Prisoners"
 
+    # === Thêm dòng này ===
+    __table_args__ = {"implicit_returning": False}
+
+    # Disable implicit returning (OUTPUT clause) because this table has AFTER triggers (for AuditLog).
+    # SQL Server does not allow OUTPUT on tables with enabled triggers.
+    # This forces SQLAlchemy to do a separate SELECT after INSERT/UPDATE instead of using OUTPUT.
+
     prisoner_id: Mapped[int] = mapped_column("PrisonerID", Integer, primary_key=True, index=True)
     full_name: Mapped[str] = mapped_column("FullName", String(100), nullable=False)
     date_of_birth: Mapped[date] = mapped_column("DateOfBirth", Date, nullable=False)
