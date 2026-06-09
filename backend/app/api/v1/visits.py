@@ -44,7 +44,7 @@ def request_visit(
 @router.get("/requests/pending", response_model=list[VisitRequestRead])
 def list_pending_requests(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Warden", "Guard")),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
 ) -> list[VisitRequestRead]:
     rows = (
         db.query(VisitRequest)

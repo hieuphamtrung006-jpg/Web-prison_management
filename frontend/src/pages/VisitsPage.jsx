@@ -124,30 +124,33 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Local prisoners list for the dropdown — fetch when modal opens
-  const [prisoners, setPrisoners] = useState([]);
+  // Dedicated state for the Prisoner dropdown inside this modal.
+  // Fetch when the modal opens (when `visit` prop is provided).
+  const [dropdownPrisoners, setDropdownPrisoners] = useState([]);
   const [loadingPrisoners, setLoadingPrisoners] = useState(false);
 
-  // Fetch prisoners list *when the Edit modal is opened* (when `visit` becomes available).
-  // This guarantees the dropdown is populated even if parent load was slow or failed.
+  // Load prisoners for the dropdown when Edit modal opens.
   useEffect(() => {
-    const fetchPrisonersForModal = async () => {
+    const loadDropdownPrisoners = async () => {
       if (!visit) return;
       setLoadingPrisoners(true);
       try {
-        const response = await api.get(`/prisoners?page=1&page_size=500`);
-        setPrisoners(response.data || []);
+        const response = await api.get(`/prisoners?page=1&page_size=100`);
+        const list = response.data || [];
+        setDropdownPrisoners(list);
+        console.log("[EditVisitModal] Prisoners loaded for dropdown:", list.length);
       } catch (err) {
-        console.error("Failed to load prisoners for Edit Visit modal:", err);
+        console.error("[EditVisitModal] Failed to load prisoners:", err);
       } finally {
         setLoadingPrisoners(false);
       }
     };
 
-    fetchPrisonersForModal();
+    loadDropdownPrisoners();
   }, [visit]);
 
-  // Reset form when a different visit is passed in
+  // Prefill form when the visit being edited changes.
+  // The prisoner_id set here will cause the <select> to pre-select the correct option.
   useEffect(() => {
     if (!visit) return;
     setForm({
@@ -212,19 +215,23 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
             <select
               value={form.prisoner_id}
               onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })}
+              required
               disabled={loadingPrisoners}
             >
               <option value="">Select prisoner</option>
-              {prisoners.length === 0 && !loadingPrisoners && (
-                <option value="" disabled>No prisoners loaded</option>
+              {loadingPrisoners && (
+                <option value="" disabled>Loading prisoners...</option>
               )}
-              {prisoners.map((p) => (
+              {!loadingPrisoners && dropdownPrisoners.length === 0 && (
+                <option value="" disabled>No prisoners loaded (check console for errors)</option>
+              )}
+              {dropdownPrisoners.map((p) => (
                 <option key={p.prisoner_id} value={p.prisoner_id}>
                   {p.full_name} (#{p.prisoner_id})
                 </option>
               ))}
             </select>
-            {loadingPrisoners && <span className="muted" style={{ fontSize: "0.8rem", marginLeft: 8 }}>Loading...</span>}
+            {loadingPrisoners && <span style={{ fontSize: "0.8rem", marginLeft: "8px", color: "var(--muted)" }}>Loading...</span>}
           </label>
 
           <label>
@@ -322,21 +329,37 @@ export default function VisitsPage() {
     }
   };
 
-  // Load prisoners (for name display + search + edit dropdown)
+  // Load prisoners (for name display in table + search + Edit modal dropdown).
+  // Loaded at page level following patterns from LaborPage etc.
   const loadPrisoners = async () => {
     try {
-      const response = await api.get(`/prisoners?page=1&page_size=300`);
+      const response = await api.get(`/prisoners?page=1&page_size=100`);
       setPrisoners(response.data || []);
+      console.log("[VisitsPage] Parent prisoners loaded:", (response.data || []).length);
     } catch (err) {
-      console.warn("Could not load prisoners for Visits page", err);
+      console.error("[VisitsPage] Failed to load prisoners for table:", err);
     }
   };
 
+  // Load visits rows (depends on page + role)
   useEffect(() => {
     load();
     loadPendingRequests();
-    loadPrisoners();
   }, [page, isReadOnly]);
+
+  // Load prisoners once on mount
+  useEffect(() => {
+    loadPrisoners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ensure we refresh the prisoners list (for table names + search) when Edit is opened.
+  // The Edit modal fetches its own list independently for the dropdown.
+  useEffect(() => {
+    if (editingVisit) {
+      loadPrisoners();
+    }
+  }, [editingVisit]);
 
   // prisoner_id → name map
   const prisonerNameById = useMemo(() => {
@@ -592,8 +615,7 @@ export default function VisitsPage() {
         <CreateVisitModal onClose={() => setShowCreateModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
       )}
 
-      {/* NEW: Per-row Edit Visit Modal (pre-filled).
-          Modal fetches its own prisoner list via useEffect when opened. */}
+      {/* Edit Visit Modal - fetches its own prisoners list on open via useEffect([visit]) */}
       {editingVisit && canManageVisits && (
         <EditVisitModal
           visit={editingVisit}

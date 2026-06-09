@@ -99,33 +99,34 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Local prisoners list for the dropdown — ensures it always loads when Edit modal opens
-  const [prisoners, setPrisoners] = useState([]);
+  // Dedicated state for the Prisoner dropdown inside the modal.
+  // We fetch fresh when the modal opens to guarantee the list is available.
+  const [dropdownPrisoners, setDropdownPrisoners] = useState([]);
   const [loadingPrisoners, setLoadingPrisoners] = useState(false);
 
-  // Fetch prisoners when the modal opens (i.e. when `incident` prop is provided)
-  // This is more reliable than relying only on parent page load.
+  // Load prisoners specifically for this Edit modal when it opens.
+  // Triggered by the `incident` prop changing (i.e. when user clicks Edit).
   useEffect(() => {
-    const fetchPrisonersForModal = async () => {
+    const loadDropdownPrisoners = async () => {
       if (!incident) return;
       setLoadingPrisoners(true);
       try {
-        // Use a generous page_size to get most/all prisoners for the select
-        const response = await api.get(`/prisoners?page=1&page_size=500`);
-        setPrisoners(response.data || []);
+        const response = await api.get(`/prisoners?page=1&page_size=100`);
+        const list = response.data || [];
+        setDropdownPrisoners(list);
+        console.log("[EditIncidentModal] Prisoners loaded for dropdown:", list.length);
       } catch (err) {
-        console.error("Failed to load prisoners for Edit Incident modal:", err);
-        // Non-fatal: user can still see the current prisoner_id if needed,
-        // but dropdown will be empty or partial.
+        console.error("[EditIncidentModal] Failed to load prisoners:", err);
+        // Keep empty list; the UI will show the disabled option.
       } finally {
         setLoadingPrisoners(false);
       }
     };
 
-    fetchPrisonersForModal();
+    loadDropdownPrisoners();
   }, [incident]);
 
-  // Prefill form when incident prop changes (important for modal reuse)
+  // Prefill form (and ensure prisoner is pre-selected) when the incident being edited changes
   useEffect(() => {
     if (!incident) return;
     setForm({
@@ -194,16 +195,19 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
               disabled={loadingPrisoners}
             >
               <option value="">Select prisoner</option>
-              {prisoners.length === 0 && !loadingPrisoners && (
-                <option value="" disabled>No prisoners loaded</option>
+              {loadingPrisoners && (
+                <option value="" disabled>Loading prisoners...</option>
               )}
-              {prisoners.map((p) => (
+              {!loadingPrisoners && dropdownPrisoners.length === 0 && (
+                <option value="" disabled>No prisoners loaded (check console for errors)</option>
+              )}
+              {dropdownPrisoners.map((p) => (
                 <option key={p.prisoner_id} value={p.prisoner_id}>
                   {p.full_name} (#{p.prisoner_id})
                 </option>
               ))}
             </select>
-            {loadingPrisoners && <span className="muted" style={{ fontSize: "0.8rem", marginLeft: 8 }}>Loading...</span>}
+            {loadingPrisoners && <span style={{ fontSize: "0.8rem", marginLeft: "8px", color: "var(--muted)" }}>Loading...</span>}
           </label>
 
           <label>
@@ -304,22 +308,37 @@ export default function IncidentsPage() {
     }
   };
 
-  // Load prisoners for name resolution + nice dropdown in Edit modal
+  // Load prisoners for name resolution in table + for the Edit modal dropdown.
+  // We load this data at page level (consistent with LaborPage / other pages pattern).
   const loadPrisoners = async () => {
     try {
-      // Load a reasonable number for mapping + selects (incidents don't have huge prisoner lists)
-      const response = await api.get(`/prisoners?page=1&page_size=300`);
+      const response = await api.get(`/prisoners?page=1&page_size=100`);
       setPrisoners(response.data || []);
+      console.log("[IncidentsPage] Parent prisoners loaded:", (response.data || []).length);
     } catch (err) {
-      // Non-fatal - we can still show IDs
-      console.warn("Could not load prisoners for name mapping", err);
+      console.error("[IncidentsPage] Failed to load prisoners for table:", err);
+      // Non-fatal for table name display; modal will show empty state if this fails.
     }
   };
 
+  // Load incident rows when page changes
   useEffect(() => {
     load();
-    loadPrisoners();
   }, [page]);
+
+  // Load prisoners once on initial mount
+  useEffect(() => {
+    loadPrisoners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ensure we refresh the prisoners list (for table names) when Edit is opened.
+  // The modal itself also fetches independently for its dropdown.
+  useEffect(() => {
+    if (editingIncident) {
+      loadPrisoners();
+    }
+  }, [editingIncident]);
 
   // Map prisoner_id -> full_name for display and search
   const prisonerNameById = useMemo(() => {
@@ -531,8 +550,7 @@ export default function IncidentsPage() {
         />
       )}
 
-      {/* NEW: Per-row Edit Modal with pre-filled data.
-          The modal now fetches its own prisoners list on open for reliable dropdown. */}
+      {/* Edit Modal - fetches its own prisoners list on open via useEffect([incident]) */}
       {editingIncident && canManage && (
         <EditIncidentModal
           incident={editingIncident}
