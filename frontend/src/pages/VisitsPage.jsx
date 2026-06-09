@@ -113,7 +113,7 @@ function CreateVisitModal({ onClose, onSaved, showToast }) {
  * Supports editing the most common fields: visitor, date, status, notes.
  * Prisoner can also be changed if needed.
  */
-function EditVisitModal({ visit, prisoners, onClose, onSaved, showToast }) {
+function EditVisitModal({ visit, onClose, onSaved, showToast }) {
   const [form, setForm] = useState({
     prisoner_id: "",
     visitor_name: "",
@@ -123,6 +123,29 @@ function EditVisitModal({ visit, prisoners, onClose, onSaved, showToast }) {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Local prisoners list for the dropdown — fetch when modal opens
+  const [prisoners, setPrisoners] = useState([]);
+  const [loadingPrisoners, setLoadingPrisoners] = useState(false);
+
+  // Fetch prisoners list *when the Edit modal is opened* (when `visit` becomes available).
+  // This guarantees the dropdown is populated even if parent load was slow or failed.
+  useEffect(() => {
+    const fetchPrisonersForModal = async () => {
+      if (!visit) return;
+      setLoadingPrisoners(true);
+      try {
+        const response = await api.get(`/prisoners?page=1&page_size=500`);
+        setPrisoners(response.data || []);
+      } catch (err) {
+        console.error("Failed to load prisoners for Edit Visit modal:", err);
+      } finally {
+        setLoadingPrisoners(false);
+      }
+    };
+
+    fetchPrisonersForModal();
+  }, [visit]);
 
   // Reset form when a different visit is passed in
   useEffect(() => {
@@ -189,14 +212,19 @@ function EditVisitModal({ visit, prisoners, onClose, onSaved, showToast }) {
             <select
               value={form.prisoner_id}
               onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })}
+              disabled={loadingPrisoners}
             >
               <option value="">Select prisoner</option>
+              {prisoners.length === 0 && !loadingPrisoners && (
+                <option value="" disabled>No prisoners loaded</option>
+              )}
               {prisoners.map((p) => (
                 <option key={p.prisoner_id} value={p.prisoner_id}>
                   {p.full_name} (#{p.prisoner_id})
                 </option>
               ))}
             </select>
+            {loadingPrisoners && <span className="muted" style={{ fontSize: "0.8rem", marginLeft: 8 }}>Loading...</span>}
           </label>
 
           <label>
@@ -564,11 +592,11 @@ export default function VisitsPage() {
         <CreateVisitModal onClose={() => setShowCreateModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
       )}
 
-      {/* NEW: Per-row Edit Visit Modal (pre-filled) */}
+      {/* NEW: Per-row Edit Visit Modal (pre-filled).
+          Modal fetches its own prisoner list via useEffect when opened. */}
       {editingVisit && canManageVisits && (
         <EditVisitModal
           visit={editingVisit}
-          prisoners={prisoners}
           onClose={() => setEditingVisit(null)}
           onSaved={() => load()}
           showToast={showToast}
