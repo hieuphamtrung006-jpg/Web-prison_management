@@ -7,27 +7,27 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.core.security import get_table_name_for_role
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
 from app.db.models.user import User
 from app.schemas.common import MessageResponse
-from app.schemas.incident import IncidentCreate, IncidentRead, IncidentUpdate
+from app.schemas.incident import IncidentCreate, IncidentRead, IncidentReadBasic, IncidentUpdate
 
-from sqlalchemy import text
+
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[IncidentRead])
+@router.get("/", response_model=list[IncidentRead] | list[IncidentReadBasic])
 def list_incidents(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[IncidentRead]:
+) -> list[IncidentRead] | list[IncidentReadBasic]:
     """
     List incidents.
     Viewer dùng vw_Incidents_Basic.
@@ -36,23 +36,17 @@ def list_incidents(
     offset = (page - 1) * page_size
 
     if table_name.startswith("vw_"):
-        sql = f"""
-            SELECT * FROM {table_name}
-            ORDER BY IncidentID DESC
-            OFFSET :offset ROWS
-            FETCH NEXT :limit ROWS ONLY
-        """
-        result = db.execute(text(sql), {"offset": offset, "limit": page_size})
-        rows = result.mappings().all()
+        order_by = "ORDER BY IncidentID DESC"
+        limit_clause = "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
 
-        def _normalize_row(row_dict: dict) -> dict:
-            normalized = {}
-            for k, v in row_dict.items():
-                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                normalized[snake] = v
-            return normalized
-
-        return [IncidentRead.model_validate(_normalize_row(dict(row))) for row in rows]
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            order_by=order_by,
+            limit_clause=limit_clause,
+            params={"offset": offset, "limit": page_size},
+        )
+        return [IncidentReadBasic.model_validate(row) for row in normalized_rows]
     else:
         rows = (
             db.query(Incident)
@@ -64,29 +58,23 @@ def list_incidents(
         return [IncidentRead.model_validate(row) for row in rows]
 
 
-@router.get("/{incident_id}", response_model=IncidentRead)
+@router.get("/{incident_id}", response_model=IncidentRead | IncidentReadBasic)
 def get_incident(
     incident_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> IncidentRead:
+) -> IncidentRead | IncidentReadBasic:
     table_name = get_table_name_for_role("Incidents", current_user.role)
 
     if table_name.startswith("vw_"):
-        sql = f"SELECT * FROM {table_name} WHERE IncidentID = :iid"
-        result = db.execute(text(sql), {"iid": incident_id})
-        row = result.mappings().first()
-        if not row:
+        normalized_rows = execute_viewer_query(
+            db, table_name, where_clause="IncidentID = :iid", params={"iid": incident_id}
+        )
+        if not normalized_rows:
             raise HTTPException(status_code=404, detail="Incident not found")
 
-        def _normalize_row(row_dict: dict) -> dict:
-            normalized = {}
-            for k, v in row_dict.items():
-                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                normalized[snake] = v
-            return normalized
-
-        return IncidentRead.model_validate(_normalize_row(dict(row)))
+        # Viewer: trả về Basic (thường thiếu description đầy đủ, created_by, location chi tiết)
+        return IncidentReadBasic.model_validate(normalized_rows[0])
     else:
         incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
         if not incident:

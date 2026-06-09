@@ -9,7 +9,7 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.core.security import get_table_name_for_role
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
 from app.db.models.location import Location
@@ -20,8 +20,10 @@ from app.schemas.common import MessageResponse
 from app.schemas.labor import (
     DailyPerformanceCreate,
     DailyPerformanceRead,
+    DailyPerformanceReadBasic,
     LaborAssignmentCreate,
     LaborAssignmentRead,
+    LaborAssignmentReadBasic,
     LaborAssignmentUpdate,
     LaborProjectCreate,
     LaborProjectRead,
@@ -336,17 +338,15 @@ def list_assignments(
             OFFSET :offset ROWS
             FETCH NEXT :limit ROWS ONLY
         """
-        result = db.execute(text(sql), params)
-        rows = result.mappings().all()
-
-        def _normalize(rowd: dict) -> dict:
-            n = {}
-            for k, v in rowd.items():
-                sn = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                n[sn] = v
-            return n
-
-        return [LaborAssignmentRead.model_validate(_normalize(dict(r))) for r in rows]
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where,
+            params=params,
+            order_by="ORDER BY AssignmentID DESC",
+            limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
+        )
+        return [LaborAssignmentReadBasic.model_validate(row) for row in normalized_rows]
 
     else:
         # Non-viewer: giữ logic join phức tạp như cũ
@@ -534,16 +534,42 @@ def delete_assignment(
     return MessageResponse(detail="Assignment deleted")
 
 
-@router.get("/performance", response_model=list[DailyPerformanceRead])
+@router.get("/performance", response_model=list[DailyPerformanceRead] | list[DailyPerformanceReadBasic])
 def list_performance(
     prisoner_id: int | None = Query(default=None, gt=0),
     project_id: int | None = Query(default=None, gt=0),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[DailyPerformanceRead]:
-    query = (
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[DailyPerformanceRead] | list[DailyPerformanceReadBasic]:
+    table_name = get_table_name_for_role("DailyPerformance", current_user.role)
+
+    if table_name.startswith("vw_"):
+        offset = (page - 1) * page_size
+        conditions = []
+        params = {"offset": offset, "limit": page_size}
+        if prisoner_id:
+            conditions.append("PrisonerID = :prisoner_id")
+            params["prisoner_id"] = prisoner_id
+        if project_id:
+            conditions.append("ProjectID = :project_id")
+            params["project_id"] = project_id
+
+        where = " AND ".join(conditions) if conditions else ""
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where,
+            params=params,
+            order_by="ORDER BY WorkDate DESC",
+            limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
+        )
+        return [DailyPerformanceReadBasic.model_validate(row) for row in normalized_rows]
+
+    else:
+        # Non-viewer full logic (original join logic)
+        query = (
         db.query(
             DailyPerformance.performance_id,
             DailyPerformance.prisoner_id,

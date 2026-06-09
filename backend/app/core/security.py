@@ -79,3 +79,44 @@ def get_table_name_for_role(base_table: str, user_role: str) -> str:
         }
         return view_mapping.get(base_table, base_table)
     return base_table
+
+
+def normalize_db_row(row_dict: dict) -> dict:
+    """
+    Chuyển key từ kiểu DB (PascalCase như PrisonerID, FullName) sang snake_case
+    để tương thích với Pydantic models.
+    Hỗ trợ linh hoạt hơn cho các View.
+    """
+    normalized = {}
+    for k, v in row_dict.items():
+        # PrisonerID -> prisoner_id
+        snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
+        normalized[snake] = v
+    return normalized
+
+
+def execute_viewer_query(
+    db: "Session",
+    view_name: str,
+    where_clause: str = "",
+    params: dict | None = None,
+    order_by: str = "",
+    limit_clause: str = "",
+) -> list[dict]:
+    """
+    Helper chung để thực thi raw query trên View cho role Viewer.
+    Trả về list of normalized dicts sẵn sàng cho .model_validate().
+    """
+    from sqlalchemy import text
+
+    sql = f"SELECT * FROM {view_name}"
+    if where_clause:
+        sql += f" WHERE {where_clause}"
+    if order_by:
+        sql += f" {order_by}"
+    if limit_clause:
+        sql += f" {limit_clause}"
+
+    result = db.execute(text(sql), params or {})
+    rows = result.mappings().all()
+    return [normalize_db_row(dict(row)) for row in rows]

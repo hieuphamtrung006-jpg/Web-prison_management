@@ -8,7 +8,7 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.core.security import get_table_name_for_role
+from app.core.security import execute_viewer_query, get_table_name_for_role, normalize_db_row
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
@@ -19,9 +19,15 @@ from app.db.models.user import User
 from app.db.models.visit import Visit
 from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
-from app.schemas.prisoner import PrisonerCreate, PrisonerDetail, PrisonerRead, PrisonerUpdate
+from app.schemas.prisoner import (
+    PrisonerCreate,
+    PrisonerDetail,
+    PrisonerRead,
+    PrisonerReadBasic,
+    PrisonerUpdate,
+)
 
-from sqlalchemy import text
+
 
 router = APIRouter()
 
@@ -48,7 +54,7 @@ def _ensure_location_capacity(db: Session, location_id: int, exclude_prisoner_id
         raise HTTPException(status_code=400, detail="Location is at full capacity")
 
 
-@router.get("/", response_model=list[PrisonerRead])
+@router.get("/", response_model=list[PrisonerRead] | list[PrisonerReadBasic])
 def list_prisoners(
     name: str | None = Query(default=None, min_length=1, max_length=100),
     risk_level: str | None = Query(default=None, max_length=20),
@@ -57,7 +63,7 @@ def list_prisoners(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[PrisonerRead]:
+) -> list[PrisonerRead] | list[PrisonerReadBasic]:
     """
     List prisoners.
     - Admin/Warden/Guard: query trực tiếp bảng Prisoners (full data).
@@ -68,13 +74,11 @@ def list_prisoners(
     offset = (page - 1) * page_size
 
     if table_name.startswith("vw_"):
-        # Viewer: dùng raw query trên View (không dùng ORM model)
-        # Xây dựng query động đơn giản (chỉ hỗ trợ một số filter cơ bản)
+        # Viewer: dùng raw query trên View thông qua helper chung (giảm lặp code)
         conditions = []
         params = {"offset": offset, "limit": page_size}
 
         if name:
-            # Giả sử view có cột FullName hoặc full_name
             conditions.append("FullName LIKE :name")
             params["name"] = f"%{name}%"
         if risk_level:
@@ -84,27 +88,19 @@ def list_prisoners(
             conditions.append("CurrentLocationID = :location_id")
             params["location_id"] = location_id
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        sql = f"""
-            SELECT * FROM {table_name}
-            {where_clause}
-            ORDER BY PrisonerID DESC
-            OFFSET :offset ROWS
-            FETCH NEXT :limit ROWS ONLY
-        """
-        result = db.execute(text(sql), params)
-        rows = result.mappings().all()
+        where_clause = " AND ".join(conditions) if conditions else ""
+        order_by = "ORDER BY PrisonerID DESC"
+        limit_clause = "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
 
-        def _normalize_row(row_dict: dict) -> dict:
-            """Chuyển key từ DB style (PrisonerID, FullName) sang snake_case cho Pydantic."""
-            normalized = {}
-            for k, v in row_dict.items():
-                # PrisonerID -> prisoner_id, FullName -> full_name, v.v.
-                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                normalized[snake] = v
-            return normalized
-
-        return [PrisonerRead.model_validate(_normalize_row(dict(row))) for row in rows]
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where_clause,
+            params=params,
+            order_by=order_by,
+            limit_clause=limit_clause,
+        )
+        return [PrisonerReadBasic.model_validate(row) for row in normalized_rows]
     else:
         # Admin/Warden/Guard: query ORM bình thường
         query = db.query(Prisoner)
@@ -138,12 +134,12 @@ def create_prisoner(
     return PrisonerRead.model_validate(prisoner)
 
 
-@router.get("/{prisoner_id}", response_model=PrisonerDetail)
+@router.get("/{prisoner_id}", response_model=PrisonerDetail | PrisonerReadBasic)
 def get_prisoner(
     prisoner_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> PrisonerDetail:
+) -> PrisonerDetail | PrisonerReadBasic:
     """
     Get single prisoner detail.
     - Non-Viewer: full data + enrichment (location, active projects).
@@ -152,27 +148,16 @@ def get_prisoner(
     table_name = get_table_name_for_role("Prisoners", current_user.role)
 
     if table_name.startswith("vw_"):
-        # Viewer: lấy từ View cơ bản
-        sql = f"SELECT * FROM {table_name} WHERE PrisonerID = :pid"
-        result = db.execute(text(sql), {"pid": prisoner_id})
-        row = result.mappings().first()
-        if not row:
+        # Viewer: lấy từ View cơ bản (dùng helper chung)
+        normalized_rows = execute_viewer_query(
+            db, table_name, where_clause="PrisonerID = :pid", params={"pid": prisoner_id}
+        )
+        if not normalized_rows:
             raise HTTPException(status_code=404, detail="Prisoner not found")
 
-        def _normalize_row(row_dict: dict) -> dict:
-            normalized = {}
-            for k, v in row_dict.items():
-                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                normalized[snake] = v
-            return normalized
-
-        base = PrisonerRead.model_validate(_normalize_row(dict(row)))
-        # Viewer có thể không có đầy đủ enrichment, trả về những gì view có
-        return PrisonerDetail(
-            **base.model_dump(),
-            current_location_name=None,
-            projects=[],
-        )
+        # Viewer: enrichment data (location_name, projects) thường bị ẩn hoặc trả None/[]
+        # vì vw_Prisoners_Basic chỉ cung cấp dữ liệu cơ bản (không join nhạy cảm).
+        return PrisonerReadBasic.model_validate(normalized_rows[0])
     else:
         # Full role
         prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == prisoner_id).first()

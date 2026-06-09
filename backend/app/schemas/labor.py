@@ -121,3 +121,26 @@ AssignmentCreate = LaborAssignmentCreate
 AssignmentRead = LaborAssignmentRead
 PerformanceCreate = DailyPerformanceCreate
 PerformanceRead = DailyPerformanceRead
+
+
+# --- Basic schemas for Viewer role ---
+class LaborAssignmentReadBasic(BaseModel):
+    assignment_id: int
+    prisoner_id: int
+    project_id: int
+    assignment_date: date
+    hours_assigned: Decimal
+
+    model_config = {"from_attributes": True}
+
+
+class DailyPerformanceReadBasic(BaseModel):
+    performance_id: int
+    prisoner_id: int
+    project_id: int
+    work_date: date
+    productivity: Decimal
+    notes: str | None = None
+
+    model_config = {"from_attributes": True}
+

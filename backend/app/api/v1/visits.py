@@ -9,15 +9,22 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.core.security import get_table_name_for_role
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.prisoner import Prisoner
 from app.db.models.visit import Visit
 from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
-from app.schemas.visit import VisitCreate, VisitRead, VisitRequestCreate, VisitRequestRead, VisitUpdate
+from app.schemas.visit import (
+    VisitCreate,
+    VisitRead,
+    VisitReadBasic,
+    VisitRequestCreate,
+    VisitRequestRead,
+    VisitUpdate,
+)
 
-from sqlalchemy import text
+
 
 router = APIRouter()
 
@@ -119,7 +126,7 @@ def reject_visit_request(
     return VisitRequestRead.model_validate(request)
 
 
-@router.get("/", response_model=list[VisitRead])
+@router.get("/", response_model=list[VisitRead] | list[VisitReadBasic])
 def list_visits(
     status_filter: str = Query(default="Pending", min_length=1, max_length=20),
     today_only: bool = True,
@@ -127,7 +134,7 @@ def list_visits(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[VisitRead]:
+) -> list[VisitRead] | list[VisitReadBasic]:
     """
     List visits.
     - Non-Viewer: query bảng Visits.
@@ -146,25 +153,19 @@ def list_visits(
         if today_only:
             conditions.append("CAST(VisitDate AS DATE) = CAST(GETDATE() AS DATE)")
 
-        where_clause = "WHERE " + " AND ".join(conditions)
-        sql = f"""
-            SELECT * FROM {table_name}
-            {where_clause}
-            ORDER BY VisitID DESC
-            OFFSET :offset ROWS
-            FETCH NEXT :limit ROWS ONLY
-        """
-        result = db.execute(text(sql), params)
-        rows = result.mappings().all()
+        where_clause = " AND ".join(conditions)
+        order_by = "ORDER BY VisitID DESC"
+        limit_clause = "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
 
-        def _normalize_row(row_dict: dict) -> dict:
-            normalized = {}
-            for k, v in row_dict.items():
-                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                normalized[snake] = v
-            return normalized
-
-        return [VisitRead.model_validate(_normalize_row(dict(row))) for row in rows]
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where_clause,
+            params=params,
+            order_by=order_by,
+            limit_clause=limit_clause,
+        )
+        return [VisitReadBasic.model_validate(row) for row in normalized_rows]
     else:
         # Full access
         query = db.query(Visit).filter(Visit.status == status_filter)
@@ -174,29 +175,23 @@ def list_visits(
         return [VisitRead.model_validate(row) for row in rows]
 
 
-@router.get("/{visit_id}", response_model=VisitRead)
+@router.get("/{visit_id}", response_model=VisitRead | VisitReadBasic)
 def get_visit(
     visit_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> VisitRead:
+) -> VisitRead | VisitReadBasic:
     table_name = get_table_name_for_role("Visits", current_user.role)
 
     if table_name.startswith("vw_"):
-        sql = f"SELECT * FROM {table_name} WHERE VisitID = :vid"
-        result = db.execute(text(sql), {"vid": visit_id})
-        row = result.mappings().first()
-        if not row:
+        normalized_rows = execute_viewer_query(
+            db, table_name, where_clause="VisitID = :vid", params={"vid": visit_id}
+        )
+        if not normalized_rows:
             raise HTTPException(status_code=404, detail="Visit not found")
 
-        def _normalize_row(row_dict: dict) -> dict:
-            normalized = {}
-            for k, v in row_dict.items():
-                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
-                normalized[snake] = v
-            return normalized
-
-        return VisitRead.model_validate(_normalize_row(dict(row)))
+        # Viewer: trả về Basic schema (có thể thiếu approved_by, notes, timestamps)
+        return VisitReadBasic.model_validate(normalized_rows[0])
     else:
         visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
         if not visit:

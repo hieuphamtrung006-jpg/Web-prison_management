@@ -40,3 +40,15 @@ class IncidentRead(BaseModel):
     created_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+# --- Basic schema for Viewer role (maps to vw_Incidents_Basic) ---
+class IncidentReadBasic(BaseModel):
+    incident_id: int
+    prisoner_id: int
+    incident_date: datetime
+    incident_type: str | None = None
+    severity: SeverityLevel | None = None
+    penalty_points: int
+
+    model_config = {"from_attributes": True}
