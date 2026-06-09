@@ -48,7 +48,7 @@ class PrisonerUpdate(BaseModel):
 
 class PrisonerRead(PrisonerBase):
     prisoner_id: int
-    productivity_score: Decimal
+    productivity_score: Decimal | None = None  # Có thể thiếu ở vw_Prisoners_Basic
 
     model_config = {"from_attributes": True}
 

@@ -61,3 +61,21 @@ def decode_access_token(token: str) -> dict:
         )
     except InvalidTokenError as exc:
         raise ValueError("Invalid token") from exc
+
+
+def get_table_name_for_role(base_table: str, user_role: str) -> str:
+    """
+    Trả về tên bảng hoặc View tương ứng dựa trên role của user.
+    Dùng cho các truy vấn SELECT để tận dụng DB-level row/column filtering qua View cho Viewer.
+    """
+    if user_role == "Viewer":
+        view_mapping = {
+            "Prisoners": "vw_Prisoners_Basic",
+            "Visits": "vw_Visits_Basic",
+            "Incidents": "vw_Incidents_Basic",
+            "LaborAssignments": "vw_LaborAssignments_Basic",
+            "DailyPerformance": "vw_DailyPerformance_Basic",
+            "Locations": "vw_Locations_Basic",
+        }
+        return view_mapping.get(base_table, base_table)
+    return base_table

@@ -7,7 +7,7 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.db.models.user import User
+from app.core.security import get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.location import Location
@@ -15,6 +15,8 @@ from app.db.models.prisoner import Prisoner
 from app.db.models.user import User
 from app.schemas.common import MessageResponse
 from app.schemas.incident import IncidentCreate, IncidentRead, IncidentUpdate
+
+from sqlalchemy import text
 
 router = APIRouter()
 
@@ -24,29 +26,72 @@ def list_incidents(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> list[IncidentRead]:
+    """
+    List incidents.
+    Viewer dùng vw_Incidents_Basic.
+    """
+    table_name = get_table_name_for_role("Incidents", current_user.role)
     offset = (page - 1) * page_size
-    rows = (
-        db.query(Incident)
-        .order_by(Incident.incident_id.desc())
-        .offset(offset)
-        .limit(page_size)
-        .all()
-    )
-    return [IncidentRead.model_validate(row) for row in rows]
+
+    if table_name.startswith("vw_"):
+        sql = f"""
+            SELECT * FROM {table_name}
+            ORDER BY IncidentID DESC
+            OFFSET :offset ROWS
+            FETCH NEXT :limit ROWS ONLY
+        """
+        result = db.execute(text(sql), {"offset": offset, "limit": page_size})
+        rows = result.mappings().all()
+
+        def _normalize_row(row_dict: dict) -> dict:
+            normalized = {}
+            for k, v in row_dict.items():
+                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
+                normalized[snake] = v
+            return normalized
+
+        return [IncidentRead.model_validate(_normalize_row(dict(row))) for row in rows]
+    else:
+        rows = (
+            db.query(Incident)
+            .order_by(Incident.incident_id.desc())
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
+        return [IncidentRead.model_validate(row) for row in rows]
 
 
 @router.get("/{incident_id}", response_model=IncidentRead)
 def get_incident(
     incident_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> IncidentRead:
-    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    return IncidentRead.model_validate(incident)
+    table_name = get_table_name_for_role("Incidents", current_user.role)
+
+    if table_name.startswith("vw_"):
+        sql = f"SELECT * FROM {table_name} WHERE IncidentID = :iid"
+        result = db.execute(text(sql), {"iid": incident_id})
+        row = result.mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Incident not found")
+
+        def _normalize_row(row_dict: dict) -> dict:
+            normalized = {}
+            for k, v in row_dict.items():
+                snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
+                normalized[snake] = v
+            return normalized
+
+        return IncidentRead.model_validate(_normalize_row(dict(row)))
+    else:
+        incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return IncidentRead.model_validate(incident)
 
 
 @router.post("/", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)
