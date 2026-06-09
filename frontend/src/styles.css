@@ -895,12 +895,27 @@ button {
   padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: #f8f9ff;
+  background: var(--panel);
+}
+
+/* Dark theme enhancement for detail items inside modals */
+.detail-item strong,
+.detail-item .value {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1.3;
 }
 
 .detail-item span {
   color: var(--muted);
   font-size: 0.82rem;
+}
+
+/* Ensure detail items look good in dark modals */
+.detail-item {
+  background: var(--panel);
+  border-color: var(--line);
 }
 
 .project-list {

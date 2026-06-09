@@ -418,57 +418,60 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Prisoner Detail</h3>
+          <h3>Prisoner: {prisoner.full_name}</h3>
           <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
 
-        <div className="detail-grid" style={{ marginTop: 8 }}>
+        <div className="px-5 pb-2">
+          {/* Prisoner details - dark theme friendly cards */}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
           <div className="detail-item">
-            <span>Full name</span>
-            <strong>{prisoner.full_name}</strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Full name</span>
+            <strong className="text-[#e2e8f0]">{prisoner.full_name}</strong>
           </div>
 
           <div className="detail-item">
-            <span>Date of birth</span>
-            <strong>{formatDateOnly(prisoner.date_of_birth)}</strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Date of birth</span>
+            <strong className="text-[#e2e8f0]">{formatDateOnly(prisoner.date_of_birth)}</strong>
           </div>
 
           <div className="detail-item">
-            <span>Gender</span>
-            <strong>{prisoner.gender || "-"}</strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Gender</span>
+            <strong className="text-[#e2e8f0]">{prisoner.gender || "-"}</strong>
           </div>
 
           <div className="detail-item">
-            <span>Crime type</span>
-            <strong>{prisoner.crime_type || "-"}</strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Crime type</span>
+            <strong className="text-[#e2e8f0]">{prisoner.crime_type || "-"}</strong>
           </div>
 
           <div className="detail-item">
-            <span>Risk level</span>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Risk level</span>
             <div><RiskBadge value={prisoner.risk_level} /></div>
           </div>
 
           <div className="detail-item">
-            <span>Productivity score</span>
-            <strong>{prisoner.productivity_score ?? 0}</strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Productivity score</span>
+            <strong className="text-[#e2e8f0]">{prisoner.productivity_score ?? 0}</strong>
           </div>
 
           <div className="detail-item">
-            <span>Current location</span>
-            <strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Current location</span>
+            <strong className="text-[#e2e8f0]">
               {prisoner.current_location_name || location?.location_name || "Unassigned"}
             </strong>
           </div>
 
           <div className="detail-item">
-            <span>Sentence</span>
-            <strong>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Sentence</span>
+            <strong className="text-[#e2e8f0]">
               {formatDateOnly(prisoner.sentence_start)} — {formatDateOnly(prisoner.sentence_end)}
             </strong>
           </div>
 
           <div className="detail-item">
-            <span>Status</span>
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Status</span>
             <div>
               <span className={`status-badge ${statusClass(prisoner.status)}`}>
                 {prisoner.status}
@@ -477,22 +480,31 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
           </div>
         </div>
 
-        {/* Active labor projects */}
-        <div style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 8 }}>Active labor projects</h3>
+        {/* Active labor projects - dark theme friendly */}
+        <div className="mt-5 pt-4 border-t border-[#1e293b]">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase font-medium">Active labor projects</span>
+          </div>
+
           {prisoner.projects?.length > 0 ? (
-            <div className="project-list">
+            <div className="flex flex-wrap gap-2">
               {prisoner.projects.map((project, index) => (
-                <span key={index} className="project-pill">{project}</span>
+                <span 
+                  key={index} 
+                  className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-[#0f172a] border border-[#1e293b] text-[#e2e8f0]"
+                >
+                  {project}
+                </span>
               ))}
             </div>
           ) : (
-            <p className="hint-text">No active labor projects.</p>
+            <p className="text-[#64748b] text-sm">No active labor projects.</p>
           )}
+        </div>
         </div>
 
         {/* Action buttons in modal */}
-        <div className="modal-buttons" style={{ marginTop: 24 }}>
+        <div className="modal-buttons px-5 pb-5" style={{ marginTop: 8 }}>
           {canEdit && (
             <button
               className="primary-btn"
