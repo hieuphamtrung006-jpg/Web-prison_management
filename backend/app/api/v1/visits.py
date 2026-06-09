@@ -148,9 +148,14 @@ def get_visit(
 @router.post("/", response_model=VisitRead, status_code=status.HTTP_201_CREATED)
 def create_visit(
     payload: VisitCreate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
 ) -> VisitRead:
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
+
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")

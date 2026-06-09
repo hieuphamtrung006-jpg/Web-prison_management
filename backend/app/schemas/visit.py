@@ -18,7 +18,7 @@ class VisitRead(BaseModel):
     status: str
     approved_by: int | None = None
     notes: str | None = None
-    created_at: datetime
+    created_at: datetime | None = None
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -43,7 +43,7 @@ class VisitRequestRead(BaseModel):
     viewer_id: int
     requested_date: datetime
     status: str
-    created_at: datetime
+    created_at: datetime | None = None
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
