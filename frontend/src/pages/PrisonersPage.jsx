@@ -535,6 +535,7 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
 
 export default function PrisonersPage() {
   const { user } = useAuth();
+  const isViewer = user?.role === "Viewer";
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
   const canEdit = user?.role === "Admin" || user?.role === "Warden";
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
@@ -775,8 +776,8 @@ export default function PrisonersPage() {
                     <tr>
                       <th>ID</th>
                       <th>Name</th>
-                      <th>DOB</th>
-                      <th>Crime</th>
+                      {!isViewer && <th>DOB</th>}
+                      {!isViewer && <th>Crime</th>}
                       <th>Risk Level</th>
                       <th>Location</th>
                       <th>Status</th>
@@ -795,8 +796,8 @@ export default function PrisonersPage() {
                         >
                           <td>{row.prisoner_id}</td>
                           <td>{row.full_name}</td>
-                          <td>{formatDateOnly(row.date_of_birth)}</td>
-                          <td>{row.crime_type || "-"}</td>
+                          {!isViewer && <td>{formatDateOnly(row.date_of_birth)}</td>}
+                          {!isViewer && <td>{row.crime_type || "-"}</td>}
                           <td>
                             <RiskBadge value={row.risk_level} />
                           </td>

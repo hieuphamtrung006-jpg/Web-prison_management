@@ -347,6 +347,7 @@ function SectionLoading({ label }) {
 
 export default function LaborPage() {
   const { user } = useAuth();
+  const isViewer = user?.role === "Viewer";
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
   const canCreateAssignment = canManageProjects;
@@ -809,8 +810,12 @@ export default function LaborPage() {
                           </td>
                           <td>
                             <div className="project-actions">
-                              <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)} disabled={!canManageProjects}>Edit</button>
-                              <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)} disabled={!canManageProjects}>Delete</button>
+                              {canManageProjects && (
+                                <>
+                                  <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)}>Edit</button>
+                                  <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)}>Delete</button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -909,8 +914,12 @@ export default function LaborPage() {
                         <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
                         <td>
                           <div className="table-actions">
-                            <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)} disabled={!canManageLabor}>Edit</button>
-                            <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)} disabled={!canManageLabor}>Delete</button>
+                            {canManageLabor && (
+                              <>
+                                <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)}>Edit</button>
+                                <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)}>Delete</button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>

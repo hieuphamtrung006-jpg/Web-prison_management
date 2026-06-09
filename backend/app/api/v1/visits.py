@@ -65,6 +65,21 @@ def list_pending_requests(
     return [VisitRequestRead.model_validate(row) for row in rows]
 
 
+@router.get("/requests/mine", response_model=list[VisitRequestRead])
+def list_my_visit_requests(
+    current_user: User = Depends(require_roles("Viewer")),
+    db: Session = Depends(get_db),
+) -> list[VisitRequestRead]:
+    """Viewer xem danh sách các request mà chính họ đã tạo (kèm trạng thái)."""
+    rows = (
+        db.query(VisitRequest)
+        .filter(VisitRequest.viewer_id == current_user.user_id)
+        .order_by(VisitRequest.request_id.desc())
+        .all()
+    )
+    return [VisitRequestRead.model_validate(row) for row in rows]
+
+
 @router.put("/requests/{request_id}/approve", response_model=VisitRead)
 def approve_visit_request(
     request_id: int,

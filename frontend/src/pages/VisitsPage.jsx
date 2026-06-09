@@ -308,6 +308,8 @@ export default function VisitsPage() {
 
   // Real-time search term
   const [searchTerm, setSearchTerm] = useState("");
+  // For Viewer: their own submitted requests with status
+  const [myRequests, setMyRequests] = useState([]);
 
   const load = async () => {
     try {
@@ -329,6 +331,18 @@ export default function VisitsPage() {
     }
   };
 
+  // For Viewer: load only their own requests (using the new /requests/mine endpoint)
+  const loadMyRequests = async () => {
+    if (!isViewer) return;
+    try {
+      const response = await api.get("/visits/requests/mine");
+      setMyRequests(response.data || []);
+    } catch (err) {
+      // Non-fatal for Viewer
+      console.warn("Could not load my visit requests", err);
+    }
+  };
+
   // Load prisoners (for name display in table + search + Edit modal dropdown).
   // Loaded at page level following patterns from LaborPage etc.
   const loadPrisoners = async () => {
@@ -344,7 +358,11 @@ export default function VisitsPage() {
   // Load visits rows (depends on page + role)
   useEffect(() => {
     load();
-    loadPendingRequests();
+    if (!isReadOnly) {
+      loadPendingRequests();
+    } else if (isViewer) {
+      loadMyRequests();
+    }
   }, [page, isReadOnly]);
 
   // Load prisoners once on mount
@@ -352,6 +370,14 @@ export default function VisitsPage() {
     loadPrisoners();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load my requests on mount for Viewer
+  useEffect(() => {
+    if (isViewer) {
+      loadMyRequests();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isViewer]);
 
   // Ensure we refresh the prisoners list (for table names + search) when Edit is opened.
   // The Edit modal fetches its own list independently for the dropdown.
@@ -575,6 +601,46 @@ export default function VisitsPage() {
         )}
       </section>
 
+      {/* "My Visit Requests" section - dedicated for Viewer role to track their own submissions */}
+      {isViewer && (
+        <section className="panel">
+          <h3>My Visit Requests</h3>
+          <p className="hint-text">Track the status of requests you have submitted (Pending / Approved / Rejected).</p>
+          {myRequests.length === 0 ? (
+            <p className="muted">You haven't submitted any visit requests yet. Use the "Request Visit" action to create one.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Requested Date</th>
+                    <th>Status</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {myRequests.map((r) => (
+                    <tr key={r.request_id}>
+                      <td>{r.request_id}</td>
+                      <td>{String(r.requested_date || "").slice(0, 16)}</td>
+                      <td>
+                        <span className={`status-badge ${r.status === "Approved" ? "status-active" : r.status === "Rejected" ? "status-inactive" : ""}`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: "200px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {r.notes || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
       {!isReadOnly && pendingRequests.length > 0 && (
         <section className="panel">
           <h3>Pending visit requests</h3>
@@ -609,7 +675,15 @@ export default function VisitsPage() {
       )}
 
       {showRequestModal && (
-        <RequestVisitModal onClose={() => setShowRequestModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
+        <RequestVisitModal 
+          onClose={() => setShowRequestModal(false)} 
+          onSaved={() => { 
+            setPage(1); 
+            load(); 
+            if (isViewer) loadMyRequests(); 
+          }} 
+          showToast={showToast} 
+        />
       )}
       {showCreateModal && canManageVisits && (
         <CreateVisitModal onClose={() => setShowCreateModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
