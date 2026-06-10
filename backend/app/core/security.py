@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
+import re
 import string
 
 import bcrypt
 import jwt
 from jwt import InvalidTokenError
+from sqlalchemy import text
 
 from app.core.config import settings
 
@@ -83,14 +85,16 @@ def get_table_name_for_role(base_table: str, user_role: str) -> str:
 
 def normalize_db_row(row_dict: dict) -> dict:
     """
-    Chuyển key từ kiểu DB (PascalCase như PrisonerID, FullName) sang snake_case
-    để tương thích với Pydantic models.
-    Hỗ trợ linh hoạt hơn cho các View.
+    Chuyển key từ kiểu DB (PascalCase như PrisonerID, FullName, CurrentLocationID) 
+    sang snake_case để tương thích với Pydantic models (prisoner_id, full_name...).
+    Xử lý tốt cả acronym như ID, UUID.
     """
     normalized = {}
     for k, v in row_dict.items():
-        # PrisonerID -> prisoner_id
-        snake = "".join(["_" + c.lower() if c.isupper() else c for c in k]).lstrip("_")
+        # Chèn _ trước chữ hoa (trừ chữ cái đầu)
+        # Xử lý tốt "PrisonerID" -> "prisoner_id", "CurrentLocationID" -> "current_location_id"
+        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', k)
+        snake = re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
         normalized[snake] = v
     return normalized
 
@@ -107,8 +111,6 @@ def execute_viewer_query(
     Helper chung để thực thi raw query trên View cho role Viewer.
     Trả về list of normalized dicts sẵn sàng cho .model_validate().
     """
-    from sqlalchemy import text
-
     sql = f"SELECT * FROM {view_name}"
     if where_clause:
         sql += f" WHERE {where_clause}"

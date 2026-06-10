@@ -8,7 +8,7 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.core.security import execute_viewer_query, get_table_name_for_role, normalize_db_row
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
