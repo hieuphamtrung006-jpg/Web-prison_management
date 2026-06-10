@@ -29,8 +29,11 @@ function Toast({ message, type = "info", onClose }) {
   return <div className={`toast toast-${type}`}>{message}</div>;
 }
 
-function RequestVisitModal({ onClose, onSaved, showToast }) {
-  const [form, setForm] = useState(initialRequestForm);
+function RequestVisitModal({ onClose, onSaved, showToast, initialPrisonerId }) {
+  const [form, setForm] = useState({
+    ...initialRequestForm,
+    prisoner_id: initialPrisonerId || initialRequestForm.prisoner_id,
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -57,13 +60,98 @@ function RequestVisitModal({ onClose, onSaved, showToast }) {
         <div className="modal-header"><h3>Request a Visit</h3><button className="close-btn" onClick={onClose}>×</button></div>
         {error && <div className="error-msg">{error}</div>}
         <form className="form-grid" onSubmit={handleSubmit}>
-          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+          <label>
+            Prisoner ID
+            <input 
+              type="number" 
+              value={form.prisoner_id} 
+              onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} 
+              required 
+              disabled={!!initialPrisonerId} // For Viewer, pre-selected via modal
+            />
+            {initialPrisonerId && <span className="hint-text" style={{fontSize: '0.75rem'}}> (Selected via search)</span>}
+          </label>
           <label>Requested date<input type="datetime-local" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} required /></label>
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Request"}</button>
             <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Modal for Viewer to search and select a prisoner when creating a Visit Request.
+ * This avoids requiring the user to know the Prisoner ID in advance.
+ * Uses client-side search on the loaded prisoners list (Basic view for Viewer).
+ */
+function PrisonerSelectorModal({ onClose, onSelect, prisoners, searchTerm, setSearchTerm }) {
+  const filteredPrisoners = prisoners.filter((p) =>
+    includesText(p.full_name, searchTerm) ||
+    includesText(p.risk_level, searchTerm) ||
+    includesText(String(p.prisoner_id), searchTerm)
+  );
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Select Prisoner</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{ padding: "16px" }}>
+          <input
+            type="text"
+            placeholder="Search by name, risk level or ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{ width: "100%", marginBottom: "12px" }}
+          />
+
+          <div style={{ maxHeight: "320px", overflowY: "auto", border: "1px solid var(--line)", borderRadius: "8px" }}>
+            {filteredPrisoners.length > 0 ? (
+              filteredPrisoners.map((p) => (
+                <div
+                  key={p.prisoner_id}
+                  onClick={() => onSelect(p.prisoner_id)}
+                  style={{
+                    padding: "10px 14px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid var(--line)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center"
+                  }}
+                  className="hover:bg-[var(--bg-elevated)]"
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{p.full_name} <span className="muted">(#{p.prisoner_id})</span></div>
+                    <div style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                      Risk: <span className={`status-badge risk-${(p.risk_level || '').toLowerCase()}`}>{p.risk_level || "N/A"}</span>
+                      {p.current_location_name && ` • ${p.current_location_name}`}
+                    </div>
+                  </div>
+                  <button className="btn-sm btn-edit" style={{ pointerEvents: "none" }}>Select</button>
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: "20px", textAlign: "center", color: "var(--muted)" }}>
+                No prisoners found matching your search.
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: "12px", fontSize: "0.75rem", color: "var(--muted)" }}>
+            Select a prisoner to continue with your visit request.
+          </div>
+        </div>
+
+        <div className="modal-buttons" style={{ padding: "0 16px 16px" }}>
+          <button className="secondary-btn" type="button" onClick={onClose}>Cancel</button>
+        </div>
       </div>
     </div>
   );
@@ -366,6 +454,13 @@ export default function VisitsPage() {
   const [toast, setToast] = useState(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // For Viewer: prisoner selector modal before creating request
+  const [showPrisonerSelector, setShowPrisonerSelector] = useState(false);
+  const [prisonerSearchTerm, setPrisonerSearchTerm] = useState("");
+  const [pendingRequestPrisonerId, setPendingRequestPrisonerId] = useState(null);
+
+  // Load prisoners on mount if not already (needed for prisoner selector in request flow)
+  // The existing loadPrisoners in useEffect handles this.
 
   // Per-row editing (new)
   const [editingVisit, setEditingVisit] = useState(null);
@@ -541,11 +636,19 @@ export default function VisitsPage() {
   const canManageVisits = !isReadOnly;
 
   const actions = [];
-  if (canRequest) actions.push({ label: "Request Visit", onClick: () => setShowRequestModal(true) });
+  if (canRequest) {
+    // For Viewer: first open the prisoner search/selector modal (no need to manually enter ID)
+    actions.push({ 
+      label: "Request Visit", 
+      onClick: () => setShowPrisonerSelector(true) 
+    });
+  }
   if (canManageVisits) {
     actions.push({ label: "+ Create Visit", onClick: () => setShowCreateModal(true), variant: "create" });
     // Per-row Edit button in the table is now the recommended way (much better UX)
   }
+
+  // Note: Viewer flow for request creation is: Request Visit -> PrisonerSelectorModal -> RequestVisitModal (with prefilled ID)
 
   // Note: For Viewer, the main content is "My Visit Requests" (see branched panel below).
   // Request creation will auto-refresh the list via onSaved in the modal.
@@ -798,13 +901,38 @@ export default function VisitsPage() {
 
       {showRequestModal && (
         <RequestVisitModal 
-          onClose={() => setShowRequestModal(false)} 
+          onClose={() => {
+            setShowRequestModal(false);
+            setPendingRequestPrisonerId(null); // clear if cancelled
+          }} 
           onSaved={() => { 
             setPage(1); 
             load(); 
             if (isViewer) loadMyRequests(); 
+            setPendingRequestPrisonerId(null); // clear after use
           }} 
           showToast={showToast} 
+          initialPrisonerId={pendingRequestPrisonerId} // pre-filled from selector
+        />
+      )}
+
+      {/* Prisoner selector modal - only for Viewer when creating request */}
+      {isViewer && showPrisonerSelector && (
+        <PrisonerSelectorModal
+          onClose={() => {
+            setShowPrisonerSelector(false);
+            setPrisonerSearchTerm("");
+          }}
+          onSelect={(prisonerId) => {
+            // Pre-fill the prisoner and open the request form
+            setPendingRequestPrisonerId(prisonerId);
+            setShowPrisonerSelector(false);
+            setPrisonerSearchTerm("");
+            setShowRequestModal(true);
+          }}
+          prisoners={prisoners}
+          searchTerm={prisonerSearchTerm}
+          setSearchTerm={setPrisonerSearchTerm}
         />
       )}
       {showCreateModal && canManageVisits && (

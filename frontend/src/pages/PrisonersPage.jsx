@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ActionSidebar from "../components/ActionSidebar";
+import { Lock } from "lucide-react";
 
 const pageSize = 20;
 
@@ -407,12 +408,29 @@ function CreatePrisonerModal({ locations, onClose, onSaved, showToast }) {
 // ============================================
 // Prisoner Detail Modal (replaces the old right sidebar)
 // ============================================
-function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, canDelete, locationById }) {
+function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, canDelete, locationById, isViewer = false }) {
   if (!prisoner) return null;
 
   const location = prisoner.current_location_id 
     ? locationById.get(prisoner.current_location_id) 
     : null;
+
+  // Reusable component for restricted fields (Viewer only)
+  // Shows a clear message + lock icon instead of just "-"
+  const RestrictedField = ({ children }) => {
+    if (!isViewer) {
+      return children;
+    }
+    return (
+      <span 
+        className="text-[#64748b] italic flex items-center gap-1 text-sm"
+        title="Thông tin này bị hạn chế đối với vai trò Viewer"
+      >
+        <Lock size={12} />
+        Thông tin bị hạn chế
+      </span>
+    );
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -424,83 +442,88 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
 
         <div className="px-5 pb-2">
           {/* Prisoner details - dark theme friendly cards */}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Full name</span>
-            <strong className="text-[#e2e8f0]">{prisoner.full_name}</strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Date of birth</span>
-            <strong className="text-[#e2e8f0]">{formatDateOnly(prisoner.date_of_birth)}</strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Gender</span>
-            <strong className="text-[#e2e8f0]">{prisoner.gender || "-"}</strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Crime type</span>
-            <strong className="text-[#e2e8f0]">{prisoner.crime_type || "-"}</strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Risk level</span>
-            <div><RiskBadge value={prisoner.risk_level} /></div>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Productivity score</span>
-            <strong className="text-[#e2e8f0]">{prisoner.productivity_score ?? 0}</strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Current location</span>
-            <strong className="text-[#e2e8f0]">
-              {prisoner.current_location_name || location?.location_name || "Unassigned"}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Sentence</span>
-            <strong className="text-[#e2e8f0]">
-              {formatDateOnly(prisoner.sentence_start)} — {formatDateOnly(prisoner.sentence_end)}
-            </strong>
-          </div>
-
-          <div className="detail-item">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Status</span>
-            <div>
-              <span className={`status-badge ${statusClass(prisoner.status)}`}>
-                {prisoner.status}
-              </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Full name</span>
+              <strong className="text-[#e2e8f0]">{prisoner.full_name}</strong>
             </div>
-          </div>
-        </div>
 
-        {/* Active labor projects - dark theme friendly */}
-        <div className="mt-5 pt-4 border-t border-[#1e293b]">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase font-medium">Active labor projects</span>
-          </div>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Date of birth</span>
+              <strong className="text-[#e2e8f0]">{formatDateOnly(prisoner.date_of_birth)}</strong>
+            </div>
 
-          {prisoner.projects?.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
-              {prisoner.projects.map((project, index) => (
-                <span 
-                  key={index} 
-                  className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-[#0f172a] border border-[#1e293b] text-[#e2e8f0]"
-                >
-                  {project}
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Gender</span>
+              <strong className="text-[#e2e8f0]">{prisoner.gender || "-"}</strong>
+            </div>
+
+            {/* Crime type - restricted for Viewer */}
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Crime type</span>
+              <RestrictedField>
+                <strong className="text-[#e2e8f0]">{prisoner.crime_type || "-"}</strong>
+              </RestrictedField>
+            </div>
+
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Risk level</span>
+              <div><RiskBadge value={prisoner.risk_level} /></div>
+            </div>
+
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Productivity score</span>
+              <strong className="text-[#e2e8f0]">{prisoner.productivity_score ?? 0}</strong>
+            </div>
+
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Current location</span>
+              <strong className="text-[#e2e8f0]">
+                {prisoner.current_location_name || location?.location_name || "Unassigned"}
+              </strong>
+            </div>
+
+            {/* Sentence - restricted for Viewer (dates are sensitive) */}
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Sentence</span>
+              <RestrictedField>
+                <strong className="text-[#e2e8f0]">
+                  {formatDateOnly(prisoner.sentence_start)} — {formatDateOnly(prisoner.sentence_end)}
+                </strong>
+              </RestrictedField>
+            </div>
+
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Status</span>
+              <div>
+                <span className={`status-badge ${statusClass(prisoner.status)}`}>
+                  {prisoner.status}
                 </span>
-              ))}
+              </div>
             </div>
-          ) : (
-            <p className="text-[#64748b] text-sm">No active labor projects.</p>
-          )}
-        </div>
+          </div>
+
+          {/* Active labor projects - dark theme friendly */}
+          <div className="mt-5 pt-4 border-t border-[#1e293b]">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase font-medium">Active labor projects</span>
+            </div>
+
+            {prisoner.projects?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {prisoner.projects.map((project, index) => (
+                  <span 
+                    key={index} 
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-[#0f172a] border border-[#1e293b] text-[#e2e8f0]"
+                  >
+                    {project}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[#64748b] text-sm">No active labor projects.</p>
+            )}
+          </div>
         </div>
 
         {/* Action buttons in modal */}
@@ -862,6 +885,7 @@ export default function PrisonersPage() {
           canEdit={canEdit}
           canDelete={canDelete}
           locationById={locationById}
+          isViewer={isViewer}
         />
       )}
 
