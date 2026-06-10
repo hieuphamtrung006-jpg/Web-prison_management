@@ -288,6 +288,70 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
   );
 }
 
+/**
+ * Modal for Viewer to view their own Visit Request details.
+ * Follows the same dark modal pattern as other modals in the app.
+ */
+function MyRequestDetailModal({ request, onClose, prisonerNameById }) {
+  if (!request) return null;
+
+  const prisonerName = prisonerNameById[request.prisoner_id] 
+    ? `${prisonerNameById[request.prisoner_id]} (#${request.prisoner_id})` 
+    : `#${request.prisoner_id}`;
+
+  const getStatusBadgeClass = (status) => {
+    if (status === "Approved") return "status-active";
+    if (status === "Rejected") return "status-inactive";
+    return ""; // Pending - default style
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Request Detail #{request.request_id}</h3>
+          <button className="close-btn" type="button" onClick={onClose}>×</button>
+        </div>
+
+        <div style={{ padding: "20px 24px" }}>
+          {/* Detail rows using similar structure to other detail modals */}
+          <div className="detail-item" style={{ marginBottom: "8px" }}>
+            <span>Prisoner</span>
+            <strong>{prisonerName}</strong>
+          </div>
+
+          <div className="detail-item" style={{ marginBottom: "8px" }}>
+            <span>Visit Date</span>
+            <strong>{String(request.requested_date || "").slice(0, 16)}</strong>
+          </div>
+
+          <div className="detail-item" style={{ marginBottom: "8px" }}>
+            <span>Status</span>
+            <div>
+              <span className={`status-badge ${getStatusBadgeClass(request.status)}`}>
+                {request.status}
+              </span>
+            </div>
+          </div>
+
+          <div className="detail-item" style={{ marginBottom: "8px" }}>
+            <span>Notes</span>
+            <strong style={{ whiteSpace: "pre-wrap" }}>
+              {request.notes || "Không có ghi chú"}
+            </strong>
+          </div>
+        </div>
+
+        <div className="modal-buttons" style={{ padding: "0 24px 20px" }}>
+          <button className="secondary-btn" type="button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function VisitsPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
@@ -310,6 +374,8 @@ export default function VisitsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   // For Viewer: their own submitted requests with status
   const [myRequests, setMyRequests] = useState([]);
+  // Selected request for detail modal (Viewer only)
+  const [viewingRequest, setViewingRequest] = useState(null);
 
   const load = async () => {
     try {
@@ -481,6 +547,9 @@ export default function VisitsPage() {
     // Per-row Edit button in the table is now the recommended way (much better UX)
   }
 
+  // Note: For Viewer, the main content is "My Visit Requests" (see branched panel below).
+  // Request creation will auto-refresh the list via onSaved in the modal.
+
   return (
     <div className="page-action-layout">
       <div className="page-action-column">
@@ -494,7 +563,9 @@ export default function VisitsPage() {
         </div>
 
         {isViewer && (
-          <p className="hint-text">Chỉ hiển thị các đơn bạn đã yêu cầu. Theo dõi trạng thái duyệt tại đây.</p>
+          <p className="hint-text">
+            Các yêu cầu thăm gặp bạn đã gửi. Trạng thái sẽ được cập nhật sau khi được duyệt.
+          </p>
         )}
 
         {error && <p className="error-msg">{error}</p>}
@@ -567,7 +638,7 @@ export default function VisitsPage() {
                     <td colSpan={6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
                       {searchTerm 
                         ? "No matching requests found." 
-                        : "Bạn chưa có yêu cầu thăm gặp nào. Nhấn “Request Visit” để tạo đơn mới."}
+                        : <>Bạn chưa có yêu cầu thăm gặp nào.<br />Nhấn nút <strong>“Request Visit”</strong> để tạo đơn mới.</>}
                     </td>
                   </tr>
                 ) : (
@@ -589,10 +660,7 @@ export default function VisitsPage() {
                         <td>
                           <button 
                             className="btn-sm btn-edit" 
-                            onClick={() => {
-                              // Simple view - can be expanded to a detail modal later
-                              alert(`Request #${r.request_id}\nPrisoner: ${prisonerName}\nDate: ${String(r.requested_date || "").slice(0, 16)}\nStatus: ${r.status}\nNotes: ${r.notes || "-"}`);
-                            }}
+                            onClick={() => setViewingRequest(r)}
                             title="View request details"
                           >
                             View
@@ -750,6 +818,15 @@ export default function VisitsPage() {
           onClose={() => setEditingVisit(null)}
           onSaved={() => load()}
           showToast={showToast}
+        />
+      )}
+
+      {/* Viewer-only: Beautiful modal for viewing own request details */}
+      {isViewer && viewingRequest && (
+        <MyRequestDetailModal
+          request={viewingRequest}
+          onClose={() => setViewingRequest(null)}
+          prisonerNameById={prisonerNameById}
         />
       )}
 
