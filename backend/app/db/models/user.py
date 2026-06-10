@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Unicode
 from sqlalchemy.sql import func
 
 from app.db.base import Base
@@ -10,7 +10,7 @@ class User(Base):
     user_id = Column("UserID", Integer, primary_key=True, index=True)
     username = Column("Username", String(50), unique=True, nullable=False)
     password_hash = Column("PasswordHash", String(255), nullable=False)
-    full_name = Column("FullName", String(100), nullable=False)
+    full_name = Column("FullName", Unicode(100), nullable=False)
     role = Column("Role", String(20), nullable=False)
     email = Column("Email", String(100), nullable=True)
     phone = Column("Phone", String(20), nullable=True)

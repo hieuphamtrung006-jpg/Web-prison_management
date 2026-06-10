@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy import Boolean, DateTime, Integer, String, Unicode, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -10,7 +10,7 @@ class Location(Base):
     __tablename__ = "Locations"
 
     location_id: Mapped[int] = mapped_column("LocationID", Integer, primary_key=True, index=True)
-    location_name: Mapped[str] = mapped_column("LocationName", String(100), nullable=False)
+    location_name: Mapped[str] = mapped_column("LocationName", Unicode(100), nullable=False)
     type: Mapped[str | None] = mapped_column("Type", String(30), nullable=True)
     capacity: Mapped[int] = mapped_column("Capacity", Integer, nullable=False)
     security_level: Mapped[str | None] = mapped_column("SecurityLevel", String(20), nullable=True)
