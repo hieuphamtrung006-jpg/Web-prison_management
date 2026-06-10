@@ -160,6 +160,7 @@ function QuickActionCard({ label, desc, to, icon: Icon }) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const role = user?.role || "Viewer";
+  const isViewer = role === "Viewer";
 
   // State for core data
   const [stats, setStats] = useState({});
@@ -169,6 +170,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
+
+  // Viewer-specific state (personalized Visit Requests)
+  const [myRequests, setMyRequests] = useState([]);
+  const [viewerLoading, setViewerLoading] = useState(false);
 
   // ============================================
   // Data fetching - Core functionality
@@ -233,15 +238,47 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // ============================================
+  // Viewer Dashboard Data Loading
+  // Fetches only the current user's Visit Requests for personalized view
+  // ============================================
+  const loadViewerDashboard = useCallback(async (isRefresh = false) => {
+    setViewerLoading(true);
+    if (!isRefresh) setError("");
+
+    try {
+      // Fetch the Viewer's own requests (backend supports /requests/mine for Viewer)
+      const res = await api.get("/visits/requests/mine");
+      const requests = Array.isArray(res.data) ? res.data : [];
+      setMyRequests(requests);
+
+      setLastUpdated(new Date());
+    } catch (err) {
+      const msg = parseApiError(err);
+      setError(msg || "Failed to load your requests");
+      setMyRequests([]);
+    } finally {
+      setViewerLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+    if (isViewer) {
+      loadViewerDashboard();
+    } else {
+      loadDashboard();
+    }
+  }, [isViewer, loadDashboard, loadViewerDashboard]);
 
   const handleRefresh = () => {
-    loadDashboard(true);
+    if (isViewer) {
+      loadViewerDashboard();
+    } else {
+      loadDashboard(true);
+    }
   };
 
-  // Role-based filtering for Quick Actions
+  // Role-based filtering for Quick Actions (only used for non-Viewer staff dashboard)
   const visibleActions = QUICK_ACTIONS.filter(
     (action) => action.roles.includes(role) || role === "Admin"
   );
@@ -257,6 +294,20 @@ export default function DashboardPage() {
     }
   };
 
+  // ============================================
+  // Viewer-specific computed values
+  // ============================================
+  const viewerStats = {
+    pending: myRequests.filter(r => r.status === "Pending").length,
+    approved: myRequests.filter(r => r.status === "Approved").length,
+    rejected: myRequests.filter(r => r.status === "Rejected").length,
+    total: myRequests.length,
+  };
+
+  const recentMyRequests = [...myRequests]
+    .sort((a, b) => new Date(b.requested_date || 0) - new Date(a.requested_date || 0))
+    .slice(0, 6);
+
   return (
     <div className="ops-console">
       {/* ============================================
@@ -264,20 +315,32 @@ export default function DashboardPage() {
           ============================================ */}
       <div className="ops-header">
         <div>
-          <div className="eyebrow">Facility Operations</div>
-          <h2>Operations Console</h2>
-          <p className="muted" style={{ marginTop: 4 }}>
-            Real-time overview and quick actions for daily prison operations.
-          </p>
+          {isViewer ? (
+            <>
+              <div className="eyebrow">Personal</div>
+              <h2>My Dashboard</h2>
+              <p className="muted" style={{ marginTop: 4 }}>
+                Chào mừng trở lại! Dưới đây là các yêu cầu thăm gặp của bạn.
+              </p>
+            </>
+          ) : (
+            <>
+              <div className="eyebrow">Facility Operations</div>
+              <h2>Operations Console</h2>
+              <p className="muted" style={{ marginTop: 4 }}>
+                Real-time overview and quick actions for daily prison operations.
+              </p>
+            </>
+          )}
         </div>
 
         <button
           className="refresh-btn"
           onClick={handleRefresh}
-          disabled={loading}
+          disabled={isViewer ? viewerLoading : loading}
         >
           <RefreshCw size={16} />
-          {loading ? "Refreshing..." : "Refresh"}
+          {(isViewer ? viewerLoading : loading) ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -290,184 +353,350 @@ export default function DashboardPage() {
       )}
 
       {/* ============================================
-          KEY INDICATORS (4 core cards)
-          Real-time data from backend
+          VIEWER DASHBOARD - Personalized for Visit Requests
+          Clean, focused, role-specific view
           ============================================ */}
-      <section>
-        <div className="section-head" style={{ marginBottom: 12 }}>
-          <span className="eyebrow">Key Indicators</span>
-          {lastUpdated && (
-            <div className="last-updated">
-              <Clock size={14} /> Last updated {lastUpdated.toLocaleTimeString()}
+      {isViewer ? (
+        <div>
+          {/* KEY INDICATORS - Simple personal stats */}
+          <section>
+            <div className="section-head" style={{ marginBottom: 12 }}>
+              <span className="eyebrow">Your Request Summary</span>
+              {lastUpdated && (
+                <div className="last-updated">
+                  <Clock size={14} /> Last updated {lastUpdated.toLocaleTimeString()}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {loading ? (
-          // Simple loading placeholders (structure first)
-          <div className="loading-grid">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="loading-card" />
-            ))}
-          </div>
-        ) : (
-          <div className="metric-grid">
-            {KEY_INDICATORS.map((card) => (
-              <KeyIndicatorCard
-                key={card.key}
-                title={card.title}
-                value={stats[card.key] ?? 0}
-                sub={card.sub}
-                icon={card.icon}
-                accent={card.accent}
-                loading={false}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* ============================================
-          QUICK ACTIONS + OPERATIONAL ALERTS
-          Two-column layout for core ops view
-          ============================================ */}
-      <div className="split-grid" style={{ alignItems: "start" }}>
-        {/* QUICK ACTIONS - Role aware, actionable */}
-        <section className="panel">
-          <div className="section-head">
-            <div>
-              <span className="eyebrow">Quick Actions</span>
-              <h3 style={{ marginTop: 2 }}>Common daily tasks</h3>
-            </div>
-          </div>
-
-          {visibleActions.length > 0 ? (
-            <div className="quick-actions">
-              {visibleActions.map((action, idx) => (
-                <QuickActionCard
-                  key={idx}
-                  label={action.label}
-                  desc={action.desc}
-                  to={action.to}
-                  icon={action.icon}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="muted">No quick actions available for your role.</p>
-          )}
-
-          <div style={{ marginTop: 16, fontSize: "0.8rem", color: "var(--muted)" }}>
-            Actions respect your current role permissions.
-          </div>
-        </section>
-
-        {/* OPERATIONAL ALERTS - Important signals */}
-        <section className="panel alerts-panel">
-          <div className="section-head">
-            <div>
-              <span className="eyebrow">Operational Alerts</span>
-              <h3 style={{ marginTop: 2 }}>Requires attention</h3>
-            </div>
-            <Link to="/incidents" className="muted-link" style={{ fontSize: "0.85rem" }}>
-              View incidents →
-            </Link>
-          </div>
-
-          {/* Near capacity warnings */}
-          {highOccupancy.length > 0 && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#8a6f3a", marginBottom: 6 }}>
-                NEAR OR AT CAPACITY
-              </div>
-              <div className="alert-list">
-                {highOccupancy.map((loc, i) => (
-                  <div key={i} className="alert-item high">
-                    <div className="alert-icon">
-                      <AlertTriangle size={18} />
-                    </div>
-                    <div className="alert-text">
-                      <strong>{loc.location_name}</strong> — {loc.occupancyPct}% full
-                      <div style={{ fontSize: "0.8rem", marginTop: 2 }}>
-                        {loc.current_occupancy || 0} / {loc.capacity} inmates
-                      </div>
-                    </div>
-                    <div className="alert-meta">Review needed</div>
-                  </div>
+            {viewerLoading ? (
+              <div className="loading-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="loading-card" />
                 ))}
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="metric-grid">
+                <KeyIndicatorCard
+                  title="Pending"
+                  value={viewerStats.pending}
+                  sub="awaiting review"
+                  icon={Clock}
+                  accent="#d97706"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Approved"
+                  value={viewerStats.approved}
+                  sub="visits granted"
+                  icon={UserCheck}
+                  accent="#10a36e"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Rejected"
+                  value={viewerStats.rejected}
+                  sub="not approved"
+                  icon={AlertTriangle}
+                  accent="#d64343"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Total Requests"
+                  value={viewerStats.total}
+                  sub="you have submitted"
+                  icon={ClipboardList}
+                  accent="#4f5df0"
+                  loading={false}
+                />
+              </div>
+            )}
+          </section>
 
-          {/* Recent incidents */}
-          <div>
-            <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--muted)", marginBottom: 6 }}>
-              RECENT INCIDENTS
-            </div>
-
-            {recentIncidents.length === 0 ? (
-              <div className="alert-item">
-                <div className="alert-icon">
-                  <Shield size={18} />
+          {/* MY RECENT VISIT REQUESTS + QUICK ACTIONS */}
+          <div className="split-grid" style={{ alignItems: "start" }}>
+            {/* Recent Requests */}
+            <section className="panel">
+              <div className="section-head">
+                <div>
+                  <span className="eyebrow">Recent Activity</span>
+                  <h3 style={{ marginTop: 2 }}>My Recent Visit Requests</h3>
                 </div>
-                <div className="alert-text">No recent incidents reported.</div>
+              </div>
+
+              {viewerLoading ? (
+                <div className="loading-state">
+                  <div className="spinner" />
+                  <p>Loading your requests...</p>
+                </div>
+              ) : recentMyRequests.length > 0 ? (
+                <div className="table-wrap" style={{ marginTop: 8 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Prisoner</th>
+                        <th>Visit Date</th>
+                        <th>Status</th>
+                        <th style={{ width: 70 }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentMyRequests.map((req) => {
+                        const statusClass = 
+                          req.status === "Approved" ? "status-active" : 
+                          req.status === "Rejected" ? "status-inactive" : "";
+                        return (
+                          <tr key={req.request_id}>
+                            <td>#{req.prisoner_id}</td>
+                            <td>{req.requested_date ? new Date(req.requested_date).toLocaleDateString() : "-"}</td>
+                            <td>
+                              <span className={`status-badge ${statusClass}`}>
+                                {req.status}
+                              </span>
+                            </td>
+                            <td>
+                              <Link 
+                                to="/visits" 
+                                className="btn-sm btn-edit"
+                                title="View full details and status on the Visits page"
+                              >
+                                View
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="loading-state" style={{ padding: "32px 0" }}>
+                  <p>Bạn chưa có yêu cầu thăm gặp nào.</p>
+                  <Link to="/visits" className="primary-btn" style={{ marginTop: 12, display: "inline-block", textDecoration: "none" }}>
+                    Request Visit
+                  </Link>
+                </div>
+              )}
+
+              <div style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--muted)" }}>
+                Showing your most recent requests. Visit the Visits page for full history.
+              </div>
+            </section>
+
+            {/* QUICK ACTIONS - Tailored for Viewer */}
+            <section className="panel">
+              <div className="section-head">
+                <div>
+                  <span className="eyebrow">Quick Actions</span>
+                  <h3 style={{ marginTop: 2 }}>What would you like to do?</h3>
+                </div>
+              </div>
+
+              <div className="quick-actions">
+                {/* Primary action: Request Visit - opens the request flow */}
+                <Link to="/visits" className="quick-action" style={{ border: "2px solid var(--accent)", background: "var(--highlight)" }}>
+                  <div className="icon-wrap" style={{ background: "var(--accent-soft)" }}>
+                    <UserCheck size={20} />
+                  </div>
+                  <div className="qa-content">
+                    <div className="qa-label">Request New Visit</div>
+                    <div className="qa-desc">Submit a new visit request for a prisoner</div>
+                  </div>
+                </Link>
+
+                <Link to="/visits" className="quick-action">
+                  <div className="icon-wrap">
+                    <ClipboardList size={20} />
+                  </div>
+                  <div className="qa-content">
+                    <div className="qa-label">View All My Requests</div>
+                    <div className="qa-desc">See the complete history and status of your requests</div>
+                  </div>
+                </Link>
+              </div>
+
+              <div style={{ marginTop: 16, fontSize: "0.8rem", color: "var(--muted)" }}>
+                All actions are limited to your own requests as a Viewer.
+              </div>
+            </section>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ORIGINAL OPERATIONS CONSOLE FOR STAFF ROLES */}
+          {/* KEY INDICATORS (4 core cards) */}
+          <section>
+            <div className="section-head" style={{ marginBottom: 12 }}>
+              <span className="eyebrow">Key Indicators</span>
+              {lastUpdated && (
+                <div className="last-updated">
+                  <Clock size={14} /> Last updated {lastUpdated.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+
+            {loading ? (
+              <div className="loading-grid">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="loading-card" />
+                ))}
               </div>
             ) : (
-              <div className="alert-list">
-                {recentIncidents.map((inc, idx) => (
-                  <div key={idx} className="alert-item">
-                    <div className="alert-icon">
-                      <AlertCircle size={18} />
-                    </div>
-                    <div className="alert-text">
-                      <strong>{inc.incident_type || "Incident"}</strong>
-                      {inc.severity && (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            fontSize: "0.75rem",
-                            padding: "1px 7px",
-                            borderRadius: 999,
-                            background:
-                              inc.severity === "High"
-                                ? "#ffe8e8"
-                                : inc.severity === "Medium"
-                                ? "#f7e9c4"
-                                : "#e6f4ea",
-                            color:
-                              inc.severity === "High"
-                                ? "#9f3e31"
-                                : inc.severity === "Medium"
-                                ? "#7a5c00"
-                                : "#0f6b4e",
-                          }}
-                        >
-                          {inc.severity}
-                        </span>
-                      )}
-                      <div style={{ fontSize: "0.82rem", marginTop: 3, color: "var(--muted)" }}>
-                        {inc.description ? inc.description.slice(0, 70) : "No description"}...
-                      </div>
-                    </div>
-                    <div className="alert-meta">{formatShortDate(inc.incident_date)}</div>
-                  </div>
+              <div className="metric-grid">
+                {KEY_INDICATORS.map((card) => (
+                  <KeyIndicatorCard
+                    key={card.key}
+                    title={card.title}
+                    value={stats[card.key] ?? 0}
+                    sub={card.sub}
+                    icon={card.icon}
+                    accent={card.accent}
+                    loading={false}
+                  />
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <div style={{ marginTop: 14 }}>
-            <Link to="/incidents" className="muted-link">
-              Full incident log →
-            </Link>
+          {/* QUICK ACTIONS + OPERATIONAL ALERTS */}
+          <div className="split-grid" style={{ alignItems: "start" }}>
+            <section className="panel">
+              <div className="section-head">
+                <div>
+                  <span className="eyebrow">Quick Actions</span>
+                  <h3 style={{ marginTop: 2 }}>Common daily tasks</h3>
+                </div>
+              </div>
+
+              {visibleActions.length > 0 ? (
+                <div className="quick-actions">
+                  {visibleActions.map((action, idx) => (
+                    <QuickActionCard
+                      key={idx}
+                      label={action.label}
+                      desc={action.desc}
+                      to={action.to}
+                      icon={action.icon}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">No quick actions available for your role.</p>
+              )}
+
+              <div style={{ marginTop: 16, fontSize: "0.8rem", color: "var(--muted)" }}>
+                Actions respect your current role permissions.
+              </div>
+            </section>
+
+            {/* OPERATIONAL ALERTS */}
+            <section className="panel alerts-panel">
+              <div className="section-head">
+                <div>
+                  <span className="eyebrow">Operational Alerts</span>
+                  <h3 style={{ marginTop: 2 }}>Requires attention</h3>
+                </div>
+                <Link to="/incidents" className="muted-link" style={{ fontSize: "0.85rem" }}>
+                  View incidents →
+                </Link>
+              </div>
+
+              {/* Near capacity warnings */}
+              {highOccupancy.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#8a6f3a", marginBottom: 6 }}>
+                    NEAR OR AT CAPACITY
+                  </div>
+                  <div className="alert-list">
+                    {highOccupancy.map((loc, i) => (
+                      <div key={i} className="alert-item high">
+                        <div className="alert-icon">
+                          <AlertTriangle size={18} />
+                        </div>
+                        <div className="alert-text">
+                          <strong>{loc.location_name}</strong> — {loc.occupancyPct}% full
+                          <div style={{ fontSize: "0.8rem", marginTop: 2 }}>
+                            {loc.current_occupancy || 0} / {loc.capacity} inmates
+                          </div>
+                        </div>
+                        <div className="alert-meta">Review needed</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent incidents */}
+              <div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--muted)", marginBottom: 6 }}>
+                  RECENT INCIDENTS
+                </div>
+
+                {recentIncidents.length === 0 ? (
+                  <div className="alert-item">
+                    <div className="alert-icon">
+                      <Shield size={18} />
+                    </div>
+                    <div className="alert-text">No recent incidents reported.</div>
+                  </div>
+                ) : (
+                  <div className="alert-list">
+                    {recentIncidents.map((inc, idx) => (
+                      <div key={idx} className="alert-item">
+                        <div className="alert-icon">
+                          <AlertCircle size={18} />
+                        </div>
+                        <div className="alert-text">
+                          <strong>{inc.incident_type || "Incident"}</strong>
+                          {inc.severity && (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: "0.75rem",
+                                padding: "1px 7px",
+                                borderRadius: 999,
+                                background:
+                                  inc.severity === "High"
+                                    ? "#ffe8e8"
+                                    : inc.severity === "Medium"
+                                    ? "#f7e9c4"
+                                    : "#e6f4ea",
+                                color:
+                                  inc.severity === "High"
+                                    ? "#9f3e31"
+                                    : inc.severity === "Medium"
+                                    ? "#7a5c00"
+                                    : "#0f6b4e",
+                              }}
+                            >
+                              {inc.severity}
+                            </span>
+                          )}
+                          <div style={{ fontSize: "0.82rem", marginTop: 3, color: "var(--muted)" }}>
+                            {inc.description ? inc.description.slice(0, 70) : "No description"}...
+                          </div>
+                        </div>
+                        <div className="alert-meta">{formatShortDate(inc.incident_date)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 14 }}>
+                <Link to="/incidents" className="muted-link">
+                  Full incident log →
+                </Link>
+              </div>
+            </section>
           </div>
-        </section>
-      </div>
+        </>
+      )}
 
       {/* Footer / status note */}
       <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>
         Data refreshed from backend. Use the Refresh button for the latest snapshot.
-        {role === "Viewer" && " (Read-only mode)"}
+        {isViewer && " (Personal read-only view)"}
       </div>
     </div>
   );
