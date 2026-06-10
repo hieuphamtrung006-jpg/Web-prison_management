@@ -413,6 +413,22 @@ export default function VisitsPage() {
     });
   }, [rows, searchTerm, prisonerNameById]);
 
+  // Filtered list for Viewer's own requests (client-side search)
+  const filteredMyRequests = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return myRequests;
+
+    return myRequests.filter((r) => {
+      const prisonerName = prisonerNameById[r.prisoner_id] || "";
+      return (
+        includesText(prisonerName, q) ||
+        includesText(r.status, q) ||
+        includesText(String(r.requested_date || ""), q) ||
+        includesText(r.request_id, q)
+      );
+    });
+  }, [myRequests, searchTerm, prisonerNameById]);
+
   const approve = async (visitId) => {
     try {
       await api.put(`/visits/requests/${visitId}/approve`);
@@ -474,17 +490,21 @@ export default function VisitsPage() {
       <div className="page-main-data">
       <section className="panel">
         <div className="panel-header">
-          <h2>Visits</h2>
+          <h2>{isViewer ? "My Visit Requests" : "Visits"}</h2>
         </div>
+
+        {isViewer && (
+          <p className="hint-text">Chỉ hiển thị các đơn bạn đã yêu cầu. Theo dõi trạng thái duyệt tại đây.</p>
+        )}
 
         {error && <p className="error-msg">{error}</p>}
 
-        {/* Search bar + pagination (real-time filtering) */}
+        {/* Search bar + pagination (real-time filtering). For Viewer, search applies to their own requests. */}
         <div className="inline-form" style={{ flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
           <div style={{ flex: 1, minWidth: "260px", maxWidth: "420px" }}>
             <input
               type="text"
-              placeholder="Search by prisoner, visitor name, notes or status..."
+              placeholder={isViewer ? "Search your requests by prisoner, date or status..." : "Search by prisoner, visitor name, notes or status..."}
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -502,19 +522,22 @@ export default function VisitsPage() {
             />
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <button
-              className="secondary-btn"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-            >
-              Prev
-            </button>
-            <span className="muted">Page {page}</span>
-            <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>
-              Next
-            </button>
-          </div>
+          {/* Pagination controls only relevant for staff visits list */}
+          {!isViewer && (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <button
+                className="secondary-btn"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </button>
+              <span className="muted">Page {page}</span>
+              <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>
+                Next
+              </button>
+            </div>
+          )}
 
           {searchTerm && (
             <button className="secondary-btn" onClick={() => setSearchTerm("")} style={{ marginLeft: "auto" }}>
@@ -523,123 +546,154 @@ export default function VisitsPage() {
           )}
         </div>
 
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Prisoner</th>
-                <th>Visitor</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Notes</th>
-                {canManageVisits && <th style={{ width: "130px" }}>Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredRows.length === 0 ? (
+        {/* Role-based main content */}
+        {isViewer ? (
+          /* Viewer: My Visit Requests table (only their own) */
+          <div className="table-wrap">
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={canManageVisits ? 7 : 6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
-                    {searchTerm ? "No visits match your search." : "No visits found."}
-                  </td>
+                  <th>ID</th>
+                  <th>Prisoner</th>
+                  <th>Visit Date</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th>Actions</th>
                 </tr>
-              ) : (
-                filteredRows.map((row) => {
-                  const prisonerName = prisonerNameById[row.prisoner_id];
-                  return (
-                    <tr key={row.visit_id}>
-                      <td>{row.visit_id}</td>
-                      <td>
-                        {prisonerName ? (
-                          <span>{prisonerName} <span className="muted">#{row.prisoner_id}</span></span>
-                        ) : (
-                          `#${row.prisoner_id}`
-                        )}
-                      </td>
-                      <td>{row.visitor_name}</td>
-                      <td>{String(row.visit_date || "").slice(0, 16)}</td>
-                      <td>{row.status}</td>
-                      <td style={{ maxWidth: "220px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {row.notes || "-"}
-                      </td>
-
-                      {canManageVisits && (
+              </thead>
+              <tbody>
+                {filteredMyRequests.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
+                      {searchTerm 
+                        ? "No matching requests found." 
+                        : "Bạn chưa có yêu cầu thăm gặp nào. Nhấn “Request Visit” để tạo đơn mới."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredMyRequests.map((r) => {
+                    const prisonerName = prisonerNameById[r.prisoner_id] || `#${r.prisoner_id}`;
+                    return (
+                      <tr key={r.request_id}>
+                        <td>{r.request_id}</td>
+                        <td>{prisonerName}</td>
+                        <td>{String(r.requested_date || "").slice(0, 16)}</td>
                         <td>
-                          <div className="table-actions">
-                            <button
-                              className="btn-sm btn-edit"
-                              onClick={() => setEditingVisit(row)}
-                              title="Edit visit"
-                            >
-                              <Edit2 size={14} style={{ marginRight: 4 }} />
-                              Edit
-                            </button>
-
-                            <button
-                              className="btn-sm btn-delete"
-                              onClick={() => deleteVisit(row.visit_id)}
-                              title="Delete visit"
-                            >
-                              <Trash2 size={14} style={{ marginRight: 4 }} />
-                              Delete
-                            </button>
-                          </div>
+                          <span className={`status-badge ${r.status === "Approved" ? "status-active" : r.status === "Rejected" ? "status-inactive" : ""}`}>
+                            {r.status}
+                          </span>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                        <td style={{ maxWidth: "200px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {r.notes || "-"}
+                        </td>
+                        <td>
+                          <button 
+                            className="btn-sm btn-edit" 
+                            onClick={() => {
+                              // Simple view - can be expanded to a detail modal later
+                              alert(`Request #${r.request_id}\nPrisoner: ${prisonerName}\nDate: ${String(r.requested_date || "").slice(0, 16)}\nStatus: ${r.status}\nNotes: ${r.notes || "-"}`);
+                            }}
+                            title="View request details"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          /* Staff: original visits table */
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Prisoner</th>
+                  <th>Visitor</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  {canManageVisits && <th style={{ width: "130px" }}>Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {filteredRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={canManageVisits ? 7 : 6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
+                      {searchTerm ? "No visits match your search." : "No visits found."}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredRows.map((row) => {
+                    const prisonerName = prisonerNameById[row.prisoner_id];
+                    return (
+                      <tr key={row.visit_id}>
+                        <td>{row.visit_id}</td>
+                        <td>
+                          {prisonerName ? (
+                            <span>{prisonerName} <span className="muted">#{row.prisoner_id}</span></span>
+                          ) : (
+                            `#${row.prisoner_id}`
+                          )}
+                        </td>
+                        <td>{row.visitor_name}</td>
+                        <td>{String(row.visit_date || "").slice(0, 16)}</td>
+                        <td>{row.status}</td>
+                        <td style={{ maxWidth: "220px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {row.notes || "-"}
+                        </td>
 
-        {searchTerm && filteredRows.length < rows.length && (
-          <p className="muted" style={{ marginTop: "8px", fontSize: "0.85rem" }}>
-            Showing {filteredRows.length} of {rows.length} visits on this page (filtered).
-          </p>
+                        {canManageVisits && (
+                          <td>
+                            <div className="table-actions">
+                              <button
+                                className="btn-sm btn-edit"
+                                onClick={() => setEditingVisit(row)}
+                                title="Edit visit"
+                              >
+                                <Edit2 size={14} style={{ marginRight: 4 }} />
+                                Edit
+                              </button>
+
+                              <button
+                                className="btn-sm btn-delete"
+                                onClick={() => deleteVisit(row.visit_id)}
+                                title="Delete visit"
+                              >
+                                <Trash2 size={14} style={{ marginRight: 4 }} />
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Showing count */}
+        {isViewer ? (
+          searchTerm && filteredMyRequests.length < myRequests.length && (
+            <p className="muted" style={{ marginTop: "8px", fontSize: "0.85rem" }}>
+              Showing {filteredMyRequests.length} of {myRequests.length} of your requests (filtered).
+            </p>
+          )
+        ) : (
+          searchTerm && filteredRows.length < rows.length && (
+            <p className="muted" style={{ marginTop: "8px", fontSize: "0.85rem" }}>
+              Showing {filteredRows.length} of {rows.length} visits on this page (filtered).
+            </p>
+          )
         )}
       </section>
-
-      {/* "My Visit Requests" section - dedicated for Viewer role to track their own submissions */}
-      {isViewer && (
-        <section className="panel">
-          <h3>My Visit Requests</h3>
-          <p className="hint-text">Track the status of requests you have submitted (Pending / Approved / Rejected).</p>
-          {myRequests.length === 0 ? (
-            <p className="muted">You haven't submitted any visit requests yet. Use the "Request Visit" action to create one.</p>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Requested Date</th>
-                    <th>Status</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {myRequests.map((r) => (
-                    <tr key={r.request_id}>
-                      <td>{r.request_id}</td>
-                      <td>{String(r.requested_date || "").slice(0, 16)}</td>
-                      <td>
-                        <span className={`status-badge ${r.status === "Approved" ? "status-active" : r.status === "Rejected" ? "status-inactive" : ""}`}>
-                          {r.status}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: "200px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {r.notes || "-"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
 
       {!isReadOnly && pendingRequests.length > 0 && (
         <section className="panel">
