@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ActionSidebar from "../components/ActionSidebar";
+import { Edit2, Trash2 } from "lucide-react";
 
 const initialForm = {
   prisoner_id: 1,
@@ -12,6 +13,11 @@ const initialForm = {
   penalty_points: 0,
   description: "",
 };
+
+// Helper for real-time search (case-insensitive)
+function includesText(value, query) {
+  return String(value ?? "").toLowerCase().includes(query.trim().toLowerCase());
+}
 
 function Toast({ message, type = "info", onClose }) {
   useEffect(() => {
@@ -76,44 +82,86 @@ function CreateIncidentModal({ onClose, onSaved, showToast }) {
   );
 }
 
-function UpdateIncidentModal({ onClose, onSaved, showToast }) {
+/**
+ * EditIncidentModal - Per-row edit with pre-filled data
+ * Follows the same modal + form pattern as other pages (Labor, Prisoners, Locations)
+ */
+function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
   const [form, setForm] = useState({
-    incident_id: "",
     prisoner_id: "",
     location_id: "",
     incident_date: "",
     incident_type: "",
-    severity: "",
-    penalty_points: "",
+    severity: "Medium",
+    penalty_points: 0,
     description: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Dedicated state for the Prisoner dropdown inside the modal.
+  // We fetch fresh when the modal opens to guarantee the list is available.
+  const [dropdownPrisoners, setDropdownPrisoners] = useState([]);
+  const [loadingPrisoners, setLoadingPrisoners] = useState(false);
+
+  // Load prisoners specifically for this Edit modal when it opens.
+  // Triggered by the `incident` prop changing (i.e. when user clicks Edit).
+  useEffect(() => {
+    const loadDropdownPrisoners = async () => {
+      if (!incident) return;
+      setLoadingPrisoners(true);
+      try {
+        const response = await api.get(`/prisoners?page=1&page_size=100`);
+        const list = response.data || [];
+        setDropdownPrisoners(list);
+        console.log("[EditIncidentModal] Prisoners loaded for dropdown:", list.length);
+      } catch (err) {
+        console.error("[EditIncidentModal] Failed to load prisoners:", err);
+        // Keep empty list; the UI will show the disabled option.
+      } finally {
+        setLoadingPrisoners(false);
+      }
+    };
+
+    loadDropdownPrisoners();
+  }, [incident]);
+
+  // Prefill form (and ensure prisoner is pre-selected) when the incident being edited changes
+  useEffect(() => {
+    if (!incident) return;
+    setForm({
+      prisoner_id: incident.prisoner_id ?? "",
+      location_id: incident.location_id ?? "",
+      incident_date: incident.incident_date ? String(incident.incident_date).slice(0, 16) : "",
+      incident_type: incident.incident_type ?? "",
+      severity: incident.severity ?? "Medium",
+      penalty_points: incident.penalty_points ?? 0,
+      description: incident.description ?? "",
+    });
+    setError("");
+  }, [incident]);
+
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!incident) return;
+
     setLoading(true);
     setError("");
-    if (!form.incident_id) {
-      setError("Incident ID is required");
-      setLoading(false);
-      return;
-    }
-    const payload = {};
-    if (form.prisoner_id) payload.prisoner_id = Number(form.prisoner_id);
-    if (form.location_id) payload.location_id = Number(form.location_id);
-    if (form.incident_date) payload.incident_date = form.incident_date;
-    if (form.incident_type) payload.incident_type = form.incident_type;
-    if (form.severity) payload.severity = form.severity;
-    if (form.penalty_points !== "") payload.penalty_points = Number(form.penalty_points);
-    if (form.description) payload.description = form.description;
+
+    // Build payload - only send fields that make sense to update
+    const payload = {
+      prisoner_id: Number(form.prisoner_id),
+      location_id: form.location_id ? Number(form.location_id) : null,
+      incident_date: form.incident_date,
+      incident_type: form.incident_type || null,
+      severity: form.severity,
+      penalty_points: Number(form.penalty_points) || 0,
+      description: form.description || null,
+    };
 
     try {
-      await api.put(`/incidents/${Number(form.incident_id)}`, payload);
-      showToast("Incident updated", "success");
-      setForm({
-        incident_id: "", prisoner_id: "", location_id: "", incident_date: "", incident_type: "", severity: "", penalty_points: "", description: "",
-      });
+      await api.put(`/incidents/${incident.incident_id}`, payload);
+      showToast(`Incident #${incident.incident_id} updated`, "success");
       onSaved();
       onClose();
     } catch (err) {
@@ -125,26 +173,108 @@ function UpdateIncidentModal({ onClose, onSaved, showToast }) {
     }
   };
 
+  if (!incident) return null;
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Update Incident</h3>
-          <button className="close-btn" onClick={onClose}>×</button>
+          <h3>Edit Incident #{incident.incident_id}</h3>
+          <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
+
         {error && <div className="error-msg">{error}</div>}
+
         <form className="form-grid" onSubmit={handleSubmit}>
-          <label>Incident ID<input type="number" value={form.incident_id} onChange={(e) => setForm({ ...form, incident_id: e.target.value })} required /></label>
-          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} /></label>
-          <label>Location ID<input type="number" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })} /></label>
-          <label>Incident date<input type="datetime-local" value={form.incident_date} onChange={(e) => setForm({ ...form, incident_date: e.target.value })} /></label>
-          <label>Type<input value={form.incident_type} onChange={(e) => setForm({ ...form, incident_type: e.target.value })} /></label>
-          <label>Severity<select value={form.severity} onChange={(e) => setForm({ ...form, severity: e.target.value })}><option value="">(no change)</option><option>Low</option><option>Medium</option><option>High</option></select></label>
-          <label>Penalty<input type="number" value={form.penalty_points} onChange={(e) => setForm({ ...form, penalty_points: e.target.value })} /></label>
-          <label>Description<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
+          <label>
+            Prisoner
+            <select
+              value={form.prisoner_id}
+              onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })}
+              required
+              disabled={loadingPrisoners}
+            >
+              <option value="">Select prisoner</option>
+              {loadingPrisoners && (
+                <option value="" disabled>Loading prisoners...</option>
+              )}
+              {!loadingPrisoners && dropdownPrisoners.length === 0 && (
+                <option value="" disabled>No prisoners loaded (check console for errors)</option>
+              )}
+              {dropdownPrisoners.map((p) => (
+                <option key={p.prisoner_id} value={p.prisoner_id}>
+                  {p.full_name} (#{p.prisoner_id})
+                </option>
+              ))}
+            </select>
+            {loadingPrisoners && <span style={{ fontSize: "0.8rem", marginLeft: "8px", color: "var(--muted)" }}>Loading...</span>}
+          </label>
+
+          <label>
+            Location ID
+            <input
+              type="number"
+              value={form.location_id}
+              onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+            />
+          </label>
+
+          <label>
+            Incident date
+            <input
+              type="datetime-local"
+              value={form.incident_date}
+              onChange={(e) => setForm({ ...form, incident_date: e.target.value })}
+              required
+            />
+          </label>
+
+          <label>
+            Type
+            <input
+              value={form.incident_type}
+              onChange={(e) => setForm({ ...form, incident_type: e.target.value })}
+              placeholder="e.g. Fight, Theft, Medical"
+            />
+          </label>
+
+          <label>
+            Severity
+            <select
+              value={form.severity}
+              onChange={(e) => setForm({ ...form, severity: e.target.value })}
+            >
+              <option>Low</option>
+              <option>Medium</option>
+              <option>High</option>
+            </select>
+          </label>
+
+          <label>
+            Penalty Points
+            <input
+              type="number"
+              value={form.penalty_points}
+              onChange={(e) => setForm({ ...form, penalty_points: e.target.value })}
+            />
+          </label>
+
+          <label className="full-width">
+            Description / Notes
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={3}
+            />
+          </label>
+
           <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Update"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
           </div>
         </form>
       </div>
@@ -156,12 +286,18 @@ export default function IncidentsPage() {
   const { user } = useAuth();
   const isGuard = user?.role === "Guard";
   const [rows, setRows] = useState([]);
+  const [prisoners, setPrisoners] = useState([]);
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
+
+  // Per-row editing state (new primary UX)
+  const [editingIncident, setEditingIncident] = useState(null);
+
+  // Real-time search
+  const [searchTerm, setSearchTerm] = useState("");
 
   const load = async () => {
     try {
@@ -172,13 +308,73 @@ export default function IncidentsPage() {
     }
   };
 
+  // Load prisoners for name resolution in table + for the Edit modal dropdown.
+  // We load this data at page level (consistent with LaborPage / other pages pattern).
+  const loadPrisoners = async () => {
+    try {
+      const response = await api.get(`/prisoners?page=1&page_size=100`);
+      setPrisoners(response.data || []);
+      console.log("[IncidentsPage] Parent prisoners loaded:", (response.data || []).length);
+    } catch (err) {
+      console.error("[IncidentsPage] Failed to load prisoners for table:", err);
+      // Non-fatal for table name display; modal will show empty state if this fails.
+    }
+  };
+
+  // Load incident rows when page changes
   useEffect(() => {
     load();
   }, [page]);
 
+  // Load prisoners once on initial mount
+  useEffect(() => {
+    loadPrisoners();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Ensure we refresh the prisoners list (for table names) when Edit is opened.
+  // The modal itself also fetches independently for its dropdown.
+  useEffect(() => {
+    if (editingIncident) {
+      loadPrisoners();
+    }
+  }, [editingIncident]);
+
+  // Map prisoner_id -> full_name for display and search
+  const prisonerNameById = useMemo(() => {
+    const map = {};
+    prisoners.forEach((p) => {
+      map[p.prisoner_id] = p.full_name;
+    });
+    return map;
+  }, [prisoners]);
+
+  // Client-side real-time filtering (search by prisoner name, severity, type, description)
+  const filteredRows = useMemo(() => {
+    const q = searchTerm;
+    if (!q || !q.trim()) return rows;
+
+    return rows.filter((row) => {
+      const prisonerName = prisonerNameById[row.prisoner_id] || "";
+      return (
+        includesText(prisonerName, q) ||
+        includesText(row.severity, q) ||
+        includesText(row.incident_type, q) ||
+        includesText(row.description, q) ||
+        includesText(row.prisoner_id, q) // fallback to ID
+      );
+    });
+  }, [rows, searchTerm, prisonerNameById]);
+
   const deleteIncident = async (incidentId) => {
     const confirmed = window.confirm("Delete this incident permanently?");
     if (!confirmed) return;
+
+    // If we were editing this one, close the modal
+    if (editingIncident?.incident_id === incidentId) {
+      setEditingIncident(null);
+    }
+
     setError("");
     try {
       await api.delete(`/incidents/${incidentId}`);
@@ -189,10 +385,11 @@ export default function IncidentsPage() {
   };
 
   const canManage = !isGuard;
+
+  // Sidebar now only has Create (per-row Edit is the main way to edit)
   const createActions = canManage
     ? [
         { label: "+ Create Incident", onClick: () => setShowCreateModal(true), variant: "create" },
-        { label: "✎ Update Incident", onClick: () => setShowUpdateModal(true), variant: "update" },
       ]
     : [];
 
@@ -206,31 +403,145 @@ export default function IncidentsPage() {
 
       <div className="page-main-data">
       <section className="panel">
-        <h2>Incidents</h2>
-        {error && <p className="error-msg">{error}</p>}
-        <div className="inline-form">
-          <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-          <span className="muted">Page {page}</span>
-          <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Next</button>
+        <div className="panel-header">
+          <h2>Incidents</h2>
         </div>
+
+        {error && <p className="error-msg">{error}</p>}
+
+        {/* Search + Pagination controls */}
+        <div className="inline-form" style={{ flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+          {/* Search bar - real-time filter */}
+          <div style={{ flex: 1, minWidth: "260px", maxWidth: "420px" }}>
+            <input
+              type="text"
+              placeholder="Search by prisoner name, severity, type or notes..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (page !== 1) setPage(1);
+              }}
+              style={{
+                width: "100%",
+                padding: "9px 14px",
+                borderRadius: "10px",
+                border: "1px solid var(--border)",
+                background: "var(--bg-elevated)",
+                color: "var(--text)",
+                fontSize: "0.95rem",
+              }}
+            />
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              className="secondary-btn"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </button>
+            <span className="muted">Page {page}</span>
+            <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>
+              Next
+            </button>
+          </div>
+
+          {searchTerm && (
+            <button
+              className="secondary-btn"
+              onClick={() => setSearchTerm("")}
+              style={{ marginLeft: "auto" }}
+            >
+              Clear search
+            </button>
+          )}
+        </div>
+
         <div className="table-wrap">
           <table>
-            <thead><tr><th>ID</th><th>Prisoner</th><th>Severity</th><th>Date</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Prisoner</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Date</th>
+                <th>Description</th>
+                {canManage && <th style={{ width: "120px" }}>Actions</th>}
+              </tr>
+            </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.incident_id}>
-                  <td>{row.incident_id}</td>
-                  <td>{row.prisoner_id}</td>
-                  <td>{row.severity}</td>
-                  <td>{String(row.incident_date).slice(0, 10)}</td>
-                  <td><button className="danger-btn" onClick={() => deleteIncident(row.incident_id)}>Delete</button></td>
+              {filteredRows.length === 0 ? (
+                <tr>
+                  <td colSpan={canManage ? 7 : 6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
+                    {searchTerm ? "No incidents match your search." : "No incidents found."}
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                filteredRows.map((row) => {
+                  const prisonerName = prisonerNameById[row.prisoner_id];
+                  return (
+                    <tr key={row.incident_id}>
+                      <td>{row.incident_id}</td>
+                      <td>
+                        {prisonerName ? (
+                          <span>{prisonerName} <span className="muted">#{row.prisoner_id}</span></span>
+                        ) : (
+                          `#${row.prisoner_id}`
+                        )}
+                      </td>
+                      <td>{row.incident_type || "-"}</td>
+                      <td>
+                        <span className={`status-badge ${row.severity === "High" ? "risk-high" : row.severity === "Medium" ? "risk-medium" : "risk-low"}`}>
+                          {row.severity}
+                        </span>
+                      </td>
+                      <td>{String(row.incident_date || "").slice(0, 16)}</td>
+                      <td style={{ maxWidth: "280px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {row.description || "-"}
+                      </td>
+
+                      {canManage && (
+                        <td>
+                          <div className="table-actions">
+                            {/* Per-row Edit button (primary new feature) */}
+                            <button
+                              className="btn-sm btn-edit"
+                              onClick={() => setEditingIncident(row)}
+                              title="Edit incident"
+                            >
+                              <Edit2 size={14} style={{ marginRight: 4 }} />
+                              Edit
+                            </button>
+
+                            <button
+                              className="btn-sm btn-delete"
+                              onClick={() => deleteIncident(row.incident_id)}
+                              title="Delete incident"
+                            >
+                              <Trash2 size={14} style={{ marginRight: 4 }} />
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
+
+        {searchTerm && filteredRows.length < rows.length && (
+          <p className="muted" style={{ marginTop: "8px", fontSize: "0.85rem" }}>
+            Showing {filteredRows.length} of {rows.length} incidents on this page (filtered).
+          </p>
+        )}
       </section>
 
+      {/* Create Modal (existing) */}
       {showCreateModal && canManage && (
         <CreateIncidentModal
           onClose={() => setShowCreateModal(false)}
@@ -239,9 +550,11 @@ export default function IncidentsPage() {
         />
       )}
 
-      {showUpdateModal && canManage && (
-        <UpdateIncidentModal
-          onClose={() => setShowUpdateModal(false)}
+      {/* Edit Modal - fetches its own prisoners list on open via useEffect([incident]) */}
+      {editingIncident && canManage && (
+        <EditIncidentModal
+          incident={editingIncident}
+          onClose={() => setEditingIncident(null)}
           onSaved={() => load()}
           showToast={showToast}
         />

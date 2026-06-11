@@ -8,7 +8,7 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.db.models.user import User
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
@@ -19,7 +19,15 @@ from app.db.models.user import User
 from app.db.models.visit import Visit
 from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
-from app.schemas.prisoner import PrisonerCreate, PrisonerDetail, PrisonerRead, PrisonerUpdate
+from app.schemas.prisoner import (
+    PrisonerCreate,
+    PrisonerDetail,
+    PrisonerRead,
+    PrisonerReadBasic,
+    PrisonerUpdate,
+)
+
+
 
 router = APIRouter()
 
@@ -46,7 +54,7 @@ def _ensure_location_capacity(db: Session, location_id: int, exclude_prisoner_id
         raise HTTPException(status_code=400, detail="Location is at full capacity")
 
 
-@router.get("/", response_model=list[PrisonerRead])
+@router.get("/", response_model=list[PrisonerRead] | list[PrisonerReadBasic])
 def list_prisoners(
     name: str | None = Query(default=None, min_length=1, max_length=100),
     risk_level: str | None = Query(default=None, max_length=20),
@@ -54,17 +62,55 @@ def list_prisoners(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[PrisonerRead]:
-    query = db.query(Prisoner)
-    if name:
-        query = query.filter(Prisoner.full_name.ilike(f"%{name}%"))
-    if risk_level:
-        query = query.filter(Prisoner.risk_level == risk_level)
-    if location_id is not None:
-        query = query.filter(Prisoner.current_location_id == location_id)
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[PrisonerRead] | list[PrisonerReadBasic]:
+    """
+    List prisoners.
+    - Admin/Warden/Guard: query trực tiếp bảng Prisoners (full data).
+    - Viewer: query View vw_Prisoners_Basic (dữ liệu đã được lọc ở DB level).
+    """
+    table_name = get_table_name_for_role("Prisoners", current_user.role)
+
     offset = (page - 1) * page_size
-    return query.order_by(Prisoner.prisoner_id.desc()).offset(offset).limit(page_size).all()
+
+    if table_name.startswith("vw_"):
+        # Viewer: dùng raw query trên View thông qua helper chung (giảm lặp code)
+        conditions = []
+        params = {"offset": offset, "limit": page_size}
+
+        if name:
+            conditions.append("FullName LIKE :name")
+            params["name"] = f"%{name}%"
+        if risk_level:
+            conditions.append("RiskLevel = :risk_level")
+            params["risk_level"] = risk_level
+        if location_id is not None:
+            conditions.append("CurrentLocationID = :location_id")
+            params["location_id"] = location_id
+
+        where_clause = " AND ".join(conditions) if conditions else ""
+        order_by = "ORDER BY PrisonerID DESC"
+        limit_clause = "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
+
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where_clause,
+            params=params,
+            order_by=order_by,
+            limit_clause=limit_clause,
+        )
+        return [PrisonerReadBasic.model_validate(row) for row in normalized_rows]
+    else:
+        # Admin/Warden/Guard: query ORM bình thường
+        query = db.query(Prisoner)
+        if name:
+            query = query.filter(Prisoner.full_name.ilike(f"%{name}%"))
+        if risk_level:
+            query = query.filter(Prisoner.risk_level == risk_level)
+        if location_id is not None:
+            query = query.filter(Prisoner.current_location_id == location_id)
+        return query.order_by(Prisoner.prisoner_id.desc()).offset(offset).limit(page_size).all()
 
 
 @router.post("/", response_model=PrisonerRead, status_code=status.HTTP_201_CREATED)
@@ -88,39 +134,59 @@ def create_prisoner(
     return PrisonerRead.model_validate(prisoner)
 
 
-@router.get("/{prisoner_id}", response_model=PrisonerDetail)
+@router.get("/{prisoner_id}", response_model=PrisonerDetail | PrisonerReadBasic)
 def get_prisoner(
     prisoner_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> PrisonerDetail:
-    prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == prisoner_id).first()
-    if not prisoner:
-        raise HTTPException(status_code=404, detail="Prisoner not found")
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> PrisonerDetail | PrisonerReadBasic:
+    """
+    Get single prisoner detail.
+    - Non-Viewer: full data + enrichment (location, active projects).
+    - Viewer: dữ liệu từ View (có thể ít trường nhạy cảm hơn).
+    """
+    table_name = get_table_name_for_role("Prisoners", current_user.role)
 
-    location_name = (
-        db.query(Location.location_name)
-        .filter(Location.location_id == prisoner.current_location_id)
-        .scalar()
-    )
-    projects = (
-        db.query(LaborProject.project_name)
-        .join(Schedule, Schedule.project_id == LaborProject.project_id)
-        .filter(
-            Schedule.prisoner_id == prisoner_id,
-            Schedule.status == "Active",
-            cast(Schedule.start_time, SQLDate) == date.today(),
+    if table_name.startswith("vw_"):
+        # Viewer: lấy từ View cơ bản (dùng helper chung)
+        normalized_rows = execute_viewer_query(
+            db, table_name, where_clause="PrisonerID = :pid", params={"pid": prisoner_id}
         )
-        .distinct()
-        .all()
-    )
+        if not normalized_rows:
+            raise HTTPException(status_code=404, detail="Prisoner not found")
 
-    prisoner_data = PrisonerRead.model_validate(prisoner).model_dump()
-    return PrisonerDetail(
-        **prisoner_data,
-        current_location_name=location_name,
-        projects=[name for (name,) in projects],
-    )
+        # Viewer: enrichment data (location_name, projects) thường bị ẩn hoặc trả None/[]
+        # vì vw_Prisoners_Basic chỉ cung cấp dữ liệu cơ bản (không join nhạy cảm).
+        return PrisonerReadBasic.model_validate(normalized_rows[0])
+    else:
+        # Full role
+        prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == prisoner_id).first()
+        if not prisoner:
+            raise HTTPException(status_code=404, detail="Prisoner not found")
+
+        location_name = (
+            db.query(Location.location_name)
+            .filter(Location.location_id == prisoner.current_location_id)
+            .scalar()
+        )
+        projects = (
+            db.query(LaborProject.project_name)
+            .join(Schedule, Schedule.project_id == LaborProject.project_id)
+            .filter(
+                Schedule.prisoner_id == prisoner_id,
+                Schedule.status == "Active",
+                cast(Schedule.start_time, SQLDate) == date.today(),
+            )
+            .distinct()
+            .all()
+        )
+
+        prisoner_data = PrisonerRead.model_validate(prisoner).model_dump()
+        return PrisonerDetail(
+            **prisoner_data,
+            current_location_name=location_name,
+            projects=[name for (name,) in projects],
+        )
 
 
 @router.put("/{prisoner_id}", response_model=PrisonerRead)

@@ -2,14 +2,14 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, cast, Date as SQLDate
+from sqlalchemy import func, cast, Date as SQLDate, text
 from sqlalchemy.orm import Session
 
 from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.db.models.user import User
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
 from app.db.models.location import Location
@@ -20,8 +20,10 @@ from app.schemas.common import MessageResponse
 from app.schemas.labor import (
     DailyPerformanceCreate,
     DailyPerformanceRead,
+    DailyPerformanceReadBasic,
     LaborAssignmentCreate,
     LaborAssignmentRead,
+    LaborAssignmentReadBasic,
     LaborAssignmentUpdate,
     LaborProjectCreate,
     LaborProjectRead,
@@ -308,35 +310,73 @@ def list_assignments(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> list[LaborAssignmentRead]:
-    query = (
-        db.query(
-            LaborAssignment.assignment_id,
-            LaborAssignment.prisoner_id,
-            Prisoner.full_name.label("prisoner_name"),
-            LaborAssignment.project_id,
-            LaborProject.project_name.label("project_name"),
-            LaborAssignment.assigned_by,
-            User.full_name.label("assigned_by_name"),
-            LaborAssignment.assignment_date,
-            LaborAssignment.hours_assigned,
-            LaborAssignment.created_at,
-            LaborAssignment.updated_at,
+    """
+    Viewer sẽ query vw_LaborAssignments_Basic thay vì bảng gốc.
+    """
+    table_name = get_table_name_for_role("LaborAssignments", current_user.role)
+
+    if table_name.startswith("vw_"):
+        # Viewer path: raw select from view (các cột trong view có thể đã được alias sẵn)
+        offset = (page - 1) * page_size
+        conditions = []
+        params = {"offset": offset, "limit": page_size}
+
+        if prisoner_id:
+            conditions.append("PrisonerID = :prisoner_id")
+            params["prisoner_id"] = prisoner_id
+        if project_id:
+            conditions.append("ProjectID = :project_id")
+            params["project_id"] = project_id
+
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        sql = f"""
+            SELECT * FROM {table_name}
+            {where}
+            ORDER BY AssignmentID DESC
+            OFFSET :offset ROWS
+            FETCH NEXT :limit ROWS ONLY
+        """
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where,
+            params=params,
+            order_by="ORDER BY AssignmentID DESC",
+            limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
         )
-        .join(Prisoner, Prisoner.prisoner_id == LaborAssignment.prisoner_id)
-        .join(LaborProject, LaborProject.project_id == LaborAssignment.project_id)
-        .outerjoin(User, User.user_id == LaborAssignment.assigned_by)
-    )
+        return [LaborAssignmentReadBasic.model_validate(row) for row in normalized_rows]
 
-    if prisoner_id is not None:
-        query = query.filter(LaborAssignment.prisoner_id == prisoner_id)
-    if project_id is not None:
-        query = query.filter(LaborAssignment.project_id == project_id)
+    else:
+        # Non-viewer: giữ logic join phức tạp như cũ
+        query = (
+            db.query(
+                LaborAssignment.assignment_id,
+                LaborAssignment.prisoner_id,
+                Prisoner.full_name.label("prisoner_name"),
+                LaborAssignment.project_id,
+                LaborProject.project_name.label("project_name"),
+                LaborAssignment.assigned_by,
+                User.full_name.label("assigned_by_name"),
+                LaborAssignment.assignment_date,
+                LaborAssignment.hours_assigned,
+                LaborAssignment.created_at,
+                LaborAssignment.updated_at,
+            )
+            .join(Prisoner, Prisoner.prisoner_id == LaborAssignment.prisoner_id)
+            .join(LaborProject, LaborProject.project_id == LaborAssignment.project_id)
+            .outerjoin(User, User.user_id == LaborAssignment.assigned_by)
+        )
 
-    offset = (page - 1) * page_size
-    rows = query.order_by(LaborAssignment.assignment_date.desc(), LaborAssignment.assignment_id.desc()).offset(offset).limit(page_size).all()
-    return [_assignment_read_from_row(row) for row in rows]
+        if prisoner_id is not None:
+            query = query.filter(LaborAssignment.prisoner_id == prisoner_id)
+        if project_id is not None:
+            query = query.filter(LaborAssignment.project_id == project_id)
+
+        offset = (page - 1) * page_size
+        rows = query.order_by(LaborAssignment.assignment_date.desc(), LaborAssignment.assignment_id.desc()).offset(offset).limit(page_size).all()
+        return [_assignment_read_from_row(row) for row in rows]
 
 
 @router.post("/assignments", response_model=LaborAssignmentRead, status_code=status.HTTP_201_CREATED)
@@ -494,16 +534,42 @@ def delete_assignment(
     return MessageResponse(detail="Assignment deleted")
 
 
-@router.get("/performance", response_model=list[DailyPerformanceRead])
+@router.get("/performance", response_model=list[DailyPerformanceRead] | list[DailyPerformanceReadBasic])
 def list_performance(
     prisoner_id: int | None = Query(default=None, gt=0),
     project_id: int | None = Query(default=None, gt=0),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[DailyPerformanceRead]:
-    query = (
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[DailyPerformanceRead] | list[DailyPerformanceReadBasic]:
+    table_name = get_table_name_for_role("DailyPerformance", current_user.role)
+
+    if table_name.startswith("vw_"):
+        offset = (page - 1) * page_size
+        conditions = []
+        params = {"offset": offset, "limit": page_size}
+        if prisoner_id:
+            conditions.append("PrisonerID = :prisoner_id")
+            params["prisoner_id"] = prisoner_id
+        if project_id:
+            conditions.append("ProjectID = :project_id")
+            params["project_id"] = project_id
+
+        where = " AND ".join(conditions) if conditions else ""
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where,
+            params=params,
+            order_by="ORDER BY WorkDate DESC",
+            limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
+        )
+        return [DailyPerformanceReadBasic.model_validate(row) for row in normalized_rows]
+
+    else:
+        # Non-viewer full logic (original join logic)
+        query = (
         db.query(
             DailyPerformance.performance_id,
             DailyPerformance.prisoner_id,

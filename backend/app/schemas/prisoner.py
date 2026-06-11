@@ -48,7 +48,7 @@ class PrisonerUpdate(BaseModel):
 
 class PrisonerRead(PrisonerBase):
     prisoner_id: int
-    productivity_score: Decimal
+    productivity_score: Decimal | None = None  # Có thể thiếu ở vw_Prisoners_Basic
 
     model_config = {"from_attributes": True}
 
@@ -56,3 +56,17 @@ class PrisonerRead(PrisonerBase):
 class PrisonerDetail(PrisonerRead):
     current_location_name: str | None = None
     projects: list[str] = Field(default_factory=list)
+
+
+# --- Basic schema for Viewer role (maps to vw_Prisoners_Basic) ---
+# Only fields that are safe / exposed in the database View for limited visibility.
+class PrisonerReadBasic(BaseModel):
+    prisoner_id: int
+    full_name: str
+    gender: str | None = None
+    risk_level: str | None = None
+    status: str = "InPrison"
+    productivity_score: Decimal | None = None
+    current_location_id: int | None = None
+
+    model_config = {"from_attributes": True}

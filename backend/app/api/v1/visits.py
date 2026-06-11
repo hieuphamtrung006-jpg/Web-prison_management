@@ -9,12 +9,22 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.prisoner import Prisoner
 from app.db.models.visit import Visit
 from app.db.models.visit_request import VisitRequest
 from app.schemas.common import MessageResponse
-from app.schemas.visit import VisitCreate, VisitRead, VisitRequestCreate, VisitRequestRead, VisitUpdate
+from app.schemas.visit import (
+    VisitCreate,
+    VisitRead,
+    VisitReadBasic,
+    VisitRequestCreate,
+    VisitRequestRead,
+    VisitUpdate,
+)
+
+
 
 router = APIRouter()
 
@@ -44,11 +54,26 @@ def request_visit(
 @router.get("/requests/pending", response_model=list[VisitRequestRead])
 def list_pending_requests(
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Warden", "Guard")),
+    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
 ) -> list[VisitRequestRead]:
     rows = (
         db.query(VisitRequest)
         .filter(VisitRequest.status == "Pending")
+        .order_by(VisitRequest.request_id.desc())
+        .all()
+    )
+    return [VisitRequestRead.model_validate(row) for row in rows]
+
+
+@router.get("/requests/mine", response_model=list[VisitRequestRead])
+def list_my_visit_requests(
+    current_user: User = Depends(require_roles("Viewer")),
+    db: Session = Depends(get_db),
+) -> list[VisitRequestRead]:
+    """Viewer xem danh sách các request mà chính họ đã tạo (kèm trạng thái)."""
+    rows = (
+        db.query(VisitRequest)
+        .filter(VisitRequest.viewer_id == current_user.user_id)
         .order_by(VisitRequest.request_id.desc())
         .all()
     )
@@ -116,41 +141,90 @@ def reject_visit_request(
     return VisitRequestRead.model_validate(request)
 
 
-@router.get("/", response_model=list[VisitRead])
+@router.get("/", response_model=list[VisitRead] | list[VisitReadBasic])
 def list_visits(
     status_filter: str = Query(default="Pending", min_length=1, max_length=20),
     today_only: bool = True,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[VisitRead]:
-    query = db.query(Visit).filter(Visit.status == status_filter)
-    if today_only:
-        query = query.filter(cast(Visit.visit_date, SQLDate) == date.today())
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[VisitRead] | list[VisitReadBasic]:
+    """
+    List visits.
+    - Non-Viewer: query bảng Visits.
+    - Viewer: query vw_Visits_Basic.
+    """
+    table_name = get_table_name_for_role("Visits", current_user.role)
     offset = (page - 1) * page_size
-    rows = query.order_by(Visit.visit_id.desc()).offset(offset).limit(page_size).all()
-    return [VisitRead.model_validate(row) for row in rows]
+
+    if table_name.startswith("vw_"):
+        conditions = ["Status = :status"]
+        params = {
+            "status": status_filter,
+            "offset": offset,
+            "limit": page_size,
+        }
+        if today_only:
+            conditions.append("CAST(VisitDate AS DATE) = CAST(GETDATE() AS DATE)")
+
+        where_clause = " AND ".join(conditions)
+        order_by = "ORDER BY VisitID DESC"
+        limit_clause = "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
+
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause=where_clause,
+            params=params,
+            order_by=order_by,
+            limit_clause=limit_clause,
+        )
+        return [VisitReadBasic.model_validate(row) for row in normalized_rows]
+    else:
+        # Full access
+        query = db.query(Visit).filter(Visit.status == status_filter)
+        if today_only:
+            query = query.filter(cast(Visit.visit_date, SQLDate) == date.today())
+        rows = query.order_by(Visit.visit_id.desc()).offset(offset).limit(page_size).all()
+        return [VisitRead.model_validate(row) for row in rows]
 
 
-@router.get("/{visit_id}", response_model=VisitRead)
+@router.get("/{visit_id}", response_model=VisitRead | VisitReadBasic)
 def get_visit(
     visit_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> VisitRead:
-    visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
-    if not visit:
-        raise HTTPException(status_code=404, detail="Visit not found")
-    return VisitRead.model_validate(visit)
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> VisitRead | VisitReadBasic:
+    table_name = get_table_name_for_role("Visits", current_user.role)
+
+    if table_name.startswith("vw_"):
+        normalized_rows = execute_viewer_query(
+            db, table_name, where_clause="VisitID = :vid", params={"vid": visit_id}
+        )
+        if not normalized_rows:
+            raise HTTPException(status_code=404, detail="Visit not found")
+
+        # Viewer: trả về Basic schema (có thể thiếu approved_by, notes, timestamps)
+        return VisitReadBasic.model_validate(normalized_rows[0])
+    else:
+        visit = db.query(Visit).filter(Visit.visit_id == visit_id).first()
+        if not visit:
+            raise HTTPException(status_code=404, detail="Visit not found")
+        return VisitRead.model_validate(visit)
 
 
 @router.post("/", response_model=VisitRead, status_code=status.HTTP_201_CREATED)
 def create_visit(
     payload: VisitCreate,
+    request: Request,
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard")),
 ) -> VisitRead:
+    # Set audit context manually
+    client_ip = request.client.host if request.client else None
+    set_audit_context(db, current_user.user_id, client_ip)
+
     prisoner = db.query(Prisoner).filter(Prisoner.prisoner_id == payload.prisoner_id).first()
     if not prisoner:
         raise HTTPException(status_code=404, detail="Prisoner not found")

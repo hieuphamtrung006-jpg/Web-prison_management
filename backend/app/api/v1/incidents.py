@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -5,46 +7,79 @@ from fastapi import Request
 
 from app.core.audit import set_audit_context
 from app.core.deps import get_db, require_roles
-from app.db.models.user import User
+from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.incident import Incident
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
 from app.db.models.user import User
 from app.schemas.common import MessageResponse
-from app.schemas.incident import IncidentCreate, IncidentRead, IncidentUpdate
+from app.schemas.incident import IncidentCreate, IncidentRead, IncidentReadBasic, IncidentUpdate
+
+
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[IncidentRead])
+@router.get("/", response_model=list[IncidentRead] | list[IncidentReadBasic])
 def list_incidents(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[IncidentRead]:
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> list[IncidentRead] | list[IncidentReadBasic]:
+    """
+    List incidents.
+    Viewer dùng vw_Incidents_Basic.
+    """
+    table_name = get_table_name_for_role("Incidents", current_user.role)
     offset = (page - 1) * page_size
-    rows = (
-        db.query(Incident)
-        .order_by(Incident.incident_id.desc())
-        .offset(offset)
-        .limit(page_size)
-        .all()
-    )
-    return [IncidentRead.model_validate(row) for row in rows]
+
+    if table_name.startswith("vw_"):
+        order_by = "ORDER BY IncidentID DESC"
+        limit_clause = "OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY"
+
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            order_by=order_by,
+            limit_clause=limit_clause,
+            params={"offset": offset, "limit": page_size},
+        )
+        return [IncidentReadBasic.model_validate(row) for row in normalized_rows]
+    else:
+        rows = (
+            db.query(Incident)
+            .order_by(Incident.incident_id.desc())
+            .offset(offset)
+            .limit(page_size)
+            .all()
+        )
+        return [IncidentRead.model_validate(row) for row in rows]
 
 
-@router.get("/{incident_id}", response_model=IncidentRead)
+@router.get("/{incident_id}", response_model=IncidentRead | IncidentReadBasic)
 def get_incident(
     incident_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> IncidentRead:
-    incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
-    if not incident:
-        raise HTTPException(status_code=404, detail="Incident not found")
-    return IncidentRead.model_validate(incident)
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+) -> IncidentRead | IncidentReadBasic:
+    table_name = get_table_name_for_role("Incidents", current_user.role)
+
+    if table_name.startswith("vw_"):
+        normalized_rows = execute_viewer_query(
+            db, table_name, where_clause="IncidentID = :iid", params={"iid": incident_id}
+        )
+        if not normalized_rows:
+            raise HTTPException(status_code=404, detail="Incident not found")
+
+        # Viewer: trả về Basic (thường thiếu description đầy đủ, created_by, location chi tiết)
+        return IncidentReadBasic.model_validate(normalized_rows[0])
+    else:
+        incident = db.query(Incident).filter(Incident.incident_id == incident_id).first()
+        if not incident:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return IncidentRead.model_validate(incident)
 
 
 @router.post("/", response_model=IncidentRead, status_code=status.HTTP_201_CREATED)

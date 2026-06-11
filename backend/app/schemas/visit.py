@@ -18,7 +18,7 @@ class VisitRead(BaseModel):
     status: str
     approved_by: int | None = None
     notes: str | None = None
-    created_at: datetime
+    created_at: datetime | None = None
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}
@@ -43,7 +43,18 @@ class VisitRequestRead(BaseModel):
     viewer_id: int
     requested_date: datetime
     status: str
-    created_at: datetime
+    created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# --- Basic schema for Viewer role (maps to vw_Visits_Basic) ---
+class VisitReadBasic(BaseModel):
+    visit_id: int
+    prisoner_id: int
+    visitor_name: str
+    visit_date: datetime
+    status: str
 
     model_config = {"from_attributes": True}

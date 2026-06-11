@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ActionSidebar from "../components/ActionSidebar";
+import { Lock } from "lucide-react";
 
 const pageSize = 20;
 
@@ -407,92 +408,126 @@ function CreatePrisonerModal({ locations, onClose, onSaved, showToast }) {
 // ============================================
 // Prisoner Detail Modal (replaces the old right sidebar)
 // ============================================
-function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, canDelete, locationById }) {
+function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, canDelete, locationById, isViewer = false }) {
   if (!prisoner) return null;
 
   const location = prisoner.current_location_id 
     ? locationById.get(prisoner.current_location_id) 
     : null;
 
+  // Reusable component for restricted fields (Viewer only)
+  // Shows a clear message + lock icon instead of just "-"
+  const RestrictedField = ({ children }) => {
+    if (!isViewer) {
+      return children;
+    }
+    return (
+      <span 
+        className="text-[#64748b] italic flex items-center gap-1 text-sm"
+        title="Thông tin này bị hạn chế đối với vai trò Viewer"
+      >
+        <Lock size={12} />
+        Thông tin bị hạn chế
+      </span>
+    );
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Prisoner Detail</h3>
+          <h3>Prisoner: {prisoner.full_name}</h3>
           <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
 
-        <div className="detail-grid" style={{ marginTop: 8 }}>
-          <div className="detail-item">
-            <span>Full name</span>
-            <strong>{prisoner.full_name}</strong>
-          </div>
+        <div className="px-5 pb-2">
+          {/* Prisoner details - dark theme friendly cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Full name</span>
+              <strong className="text-[#e2e8f0]">{prisoner.full_name}</strong>
+            </div>
 
-          <div className="detail-item">
-            <span>Date of birth</span>
-            <strong>{formatDateOnly(prisoner.date_of_birth)}</strong>
-          </div>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Date of birth</span>
+              <strong className="text-[#e2e8f0]">{formatDateOnly(prisoner.date_of_birth)}</strong>
+            </div>
 
-          <div className="detail-item">
-            <span>Gender</span>
-            <strong>{prisoner.gender || "-"}</strong>
-          </div>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Gender</span>
+              <strong className="text-[#e2e8f0]">{prisoner.gender || "-"}</strong>
+            </div>
 
-          <div className="detail-item">
-            <span>Crime type</span>
-            <strong>{prisoner.crime_type || "-"}</strong>
-          </div>
+            {/* Crime type - restricted for Viewer */}
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Crime type</span>
+              <RestrictedField>
+                <strong className="text-[#e2e8f0]">{prisoner.crime_type || "-"}</strong>
+              </RestrictedField>
+            </div>
 
-          <div className="detail-item">
-            <span>Risk level</span>
-            <div><RiskBadge value={prisoner.risk_level} /></div>
-          </div>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Risk level</span>
+              <div><RiskBadge value={prisoner.risk_level} /></div>
+            </div>
 
-          <div className="detail-item">
-            <span>Productivity score</span>
-            <strong>{prisoner.productivity_score ?? 0}</strong>
-          </div>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Productivity score</span>
+              <strong className="text-[#e2e8f0]">{prisoner.productivity_score ?? 0}</strong>
+            </div>
 
-          <div className="detail-item">
-            <span>Current location</span>
-            <strong>
-              {prisoner.current_location_name || location?.location_name || "Unassigned"}
-            </strong>
-          </div>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Current location</span>
+              <strong className="text-[#e2e8f0]">
+                {prisoner.current_location_name || location?.location_name || "Unassigned"}
+              </strong>
+            </div>
 
-          <div className="detail-item">
-            <span>Sentence</span>
-            <strong>
-              {formatDateOnly(prisoner.sentence_start)} — {formatDateOnly(prisoner.sentence_end)}
-            </strong>
-          </div>
+            {/* Sentence - restricted for Viewer (dates are sensitive) */}
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Sentence</span>
+              <RestrictedField>
+                <strong className="text-[#e2e8f0]">
+                  {formatDateOnly(prisoner.sentence_start)} — {formatDateOnly(prisoner.sentence_end)}
+                </strong>
+              </RestrictedField>
+            </div>
 
-          <div className="detail-item">
-            <span>Status</span>
-            <div>
-              <span className={`status-badge ${statusClass(prisoner.status)}`}>
-                {prisoner.status}
-              </span>
+            <div className="detail-item">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Status</span>
+              <div>
+                <span className={`status-badge ${statusClass(prisoner.status)}`}>
+                  {prisoner.status}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Active labor projects */}
-        <div style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 8 }}>Active labor projects</h3>
-          {prisoner.projects?.length > 0 ? (
-            <div className="project-list">
-              {prisoner.projects.map((project, index) => (
-                <span key={index} className="project-pill">{project}</span>
-              ))}
+          {/* Active labor projects - dark theme friendly */}
+          <div className="mt-5 pt-4 border-t border-[#1e293b]">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase font-medium">Active labor projects</span>
             </div>
-          ) : (
-            <p className="hint-text">No active labor projects.</p>
-          )}
+
+            {prisoner.projects?.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {prisoner.projects.map((project, index) => (
+                  <span 
+                    key={index} 
+                    className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-[#0f172a] border border-[#1e293b] text-[#e2e8f0]"
+                  >
+                    {project}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[#64748b] text-sm">No active labor projects.</p>
+            )}
+          </div>
         </div>
 
         {/* Action buttons in modal */}
-        <div className="modal-buttons" style={{ marginTop: 24 }}>
+        <div className="modal-buttons px-5 pb-5" style={{ marginTop: 8 }}>
           {canEdit && (
             <button
               className="primary-btn"
@@ -523,6 +558,7 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
 
 export default function PrisonersPage() {
   const { user } = useAuth();
+  const isViewer = user?.role === "Viewer";
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
   const canEdit = user?.role === "Admin" || user?.role === "Warden";
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
@@ -763,8 +799,8 @@ export default function PrisonersPage() {
                     <tr>
                       <th>ID</th>
                       <th>Name</th>
-                      <th>DOB</th>
-                      <th>Crime</th>
+                      {!isViewer && <th>DOB</th>}
+                      {!isViewer && <th>Crime</th>}
                       <th>Risk Level</th>
                       <th>Location</th>
                       <th>Status</th>
@@ -783,8 +819,8 @@ export default function PrisonersPage() {
                         >
                           <td>{row.prisoner_id}</td>
                           <td>{row.full_name}</td>
-                          <td>{formatDateOnly(row.date_of_birth)}</td>
-                          <td>{row.crime_type || "-"}</td>
+                          {!isViewer && <td>{formatDateOnly(row.date_of_birth)}</td>}
+                          {!isViewer && <td>{row.crime_type || "-"}</td>}
                           <td>
                             <RiskBadge value={row.risk_level} />
                           </td>
@@ -849,6 +885,7 @@ export default function PrisonersPage() {
           canEdit={canEdit}
           canDelete={canDelete}
           locationById={locationById}
+          isViewer={isViewer}
         />
       )}
 

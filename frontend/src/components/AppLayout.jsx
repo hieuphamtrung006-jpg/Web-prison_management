@@ -31,9 +31,8 @@ const fullNavItems = [
 ];
 
 const viewerNavItems = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/prisoners", label: "Prisoners", icon: Shield },
-  { to: "/labor", label: "Labor", icon: Briefcase },
-  { to: "/schedules", label: "Schedules", icon: ClipboardList },
   { to: "/visits", label: "Visits", icon: Calendar },
 ];
 
@@ -43,11 +42,20 @@ export default function AppLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isGuard = user?.role === "Guard";
-  const navItems = user?.role === "Viewer"
+  let navItems = user?.role === "Viewer"
     ? viewerNavItems
     : isGuard
       ? fullNavItems.filter((item) => item.label !== "Dashboard")
       : fullNavItems;
+
+  // For Viewer, make the Visits menu label more specific ("My Visit Requests")
+  if (user?.role === "Viewer") {
+    navItems = navItems.map(item => 
+      item.label === "Visits" 
+        ? { ...item, label: "My Visit Requests" } 
+        : item
+    );
+  }
 
   const handleLogout = () => {
     logout();
