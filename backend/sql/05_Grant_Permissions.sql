@@ -20,7 +20,9 @@ GRANT SELECT ON dbo.vw_Prisoners_Basic TO db_role_viewer;
 GRANT SELECT ON dbo.vw_Visits_Basic TO db_role_viewer;
 GRANT SELECT ON dbo.vw_Incidents_Basic TO db_role_viewer;
 GRANT SELECT ON dbo.vw_LaborAssignments_Basic TO db_role_viewer;
-GRANT SELECT ON dbo.vw_DailyPerformance_Basic TO db_role_viewer;
+GRANT SELECT ON dbo.vw_LaborProjects_Basic TO db_role_viewer;
+-- Đảm bảo Viewer không được xem DailyPerformance (và history)
+DENY SELECT ON dbo.DailyPerformance TO db_role_viewer;
 GRANT SELECT ON dbo.vw_Locations_Basic TO db_role_viewer;
 
 -- Từ chối truy cập trực tiếp vào các bảng gốc (quan trọng)
@@ -28,6 +30,7 @@ DENY SELECT ON dbo.Prisoners TO db_role_viewer;
 DENY SELECT ON dbo.Visits TO db_role_viewer;
 DENY SELECT ON dbo.Incidents TO db_role_viewer;
 DENY SELECT ON dbo.LaborAssignments TO db_role_viewer;
+DENY SELECT ON dbo.LaborProjects TO db_role_viewer;
 DENY SELECT ON dbo.DailyPerformance TO db_role_viewer;
 DENY SELECT ON dbo.Users TO db_role_viewer;
 DENY SELECT ON dbo.AuditLog TO db_role_viewer;
@@ -109,7 +112,7 @@ PHÂN QUYỀN HOÀN TẤT
 
 Tóm tắt quyền:
 
-- db_role_viewer : Chỉ SELECT trên View (không được xem bảng gốc)
+- db_role_viewer : Chỉ SELECT trên View (không được xem bảng gốc; bao gồm vw_LaborProjects_Basic + vw_LaborAssignments_Basic)
 - db_role_guard  : SELECT + INSERT + UPDATE một số bảng (không được DELETE)
 - db_role_warden : Quyền rộng (có thể DELETE), nhưng không chạm Users & AuditLog
 - db_role_admin  : Quyền cao nhất trong schema dbo

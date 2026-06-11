@@ -347,10 +347,14 @@ function SectionLoading({ label }) {
 
 export default function LaborPage() {
   const { user } = useAuth();
+  // current_user.role from AuthContext (JWT). Used for ALL UI branching and some fetch decisions.
   const isViewer = user?.role === "Viewer";
+  // Viewer can view Labor data but cannot manage (create/edit/delete). Matches backend require_roles + view paths.
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
   const canCreateAssignment = canManageProjects;
+  // Viewer: can view Projects + Assignments (from vw_Labor*Basic via backend), but never Performance related (no log, no history, skipped in refreshAll)
+  // This + hiding action column + tighter margins + no filter-bar => clean, balanced, professional layout without Network Error or empty regions.
 
   const [projects, setProjects] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -414,11 +418,14 @@ export default function LaborPage() {
   const loadProjects = async () => {
     setLoadingProjects(true);
     try {
+      // Viewer: backend list_projects uses get_table_name_for_role("LaborProjects") -> vw_LaborProjects_Basic + execute_viewer_query
+      // Non-viewer: full query with live current_workers. Same URL, role-driven in backend.
       const response = await api.get("/labor/projects?page=1&page_size=100");
       setProjects(response.data);
+      // Do not setError here (load errors should not leave persistent "Network Error" banner in UI)
     } catch (err) {
       const message = parseApiError(err);
-      setError(message);
+      // setError removed to prevent "Network Error" showing in Projects section after successful partial loads (e.g. assignments failing previously polluted it)
       showToast(message, "error");
     } finally {
       setLoadingProjects(false);
@@ -432,7 +439,7 @@ export default function LaborPage() {
       setLocations(response.data);
     } catch (err) {
       const message = parseApiError(err);
-      setError(message);
+      // setError removed for load (prevents stale "Network Error" banner polluting Labor Projects UI)
       showToast(message, "error");
     } finally {
       setLoadingLocations(false);
@@ -450,7 +457,7 @@ export default function LaborPage() {
       setPrisoners(response.data);
     } catch (err) {
       const message = parseApiError(err);
-      setError(message);
+      // setError removed for load (prevents stale "Network Error" banner polluting Labor Projects UI)
       showToast(message, "error");
     } finally {
       setLoadingPrisoners(false);
@@ -461,15 +468,24 @@ export default function LaborPage() {
     setLoadingAssignments(true);
     try {
       const params = new URLSearchParams({ page: String(pageNumber), page_size: String(pageSize) });
-      if (filters.prisoner_id) params.set("prisoner_id", filters.prisoner_id);
-      if (filters.project_id) params.set("project_id", filters.project_id);
+      // Viewer role handling (current_user.role === "Viewer"):
+      // - Skip sending filter params (prisoner_id/project_id) so backend list_assignments does not build conditions.
+      // - Backend will hit get_table_name_for_role("LaborAssignments") === "vw_LaborAssignments_Basic", use execute_viewer_query.
+      // - This avoids the previous double-WHERE bug in where_clause="WHERE ..." + execute adding another WHERE.
+      // - Response uses LaborAssignmentReadBasic (names missing -> UI falls back to #ID), response_model union prevents 500.
+      // Client-side search (assignmentSearch) + sort still works via sortedAssignments useMemo.
+      if (!isViewer) {
+        if (filters.prisoner_id) params.set("prisoner_id", filters.prisoner_id);
+        if (filters.project_id) params.set("project_id", filters.project_id);
+      }
 
       const response = await api.get(`/labor/assignments?${params.toString()}`);
       setAssignments(response.data);
       setAssignmentHasNext(response.data.length === pageSize);
     } catch (err) {
       const message = parseApiError(err);
-      setError(message);
+      // setError removed: previously any assignment load failure would set shared error and show "Network Error" inside Labor Projects panel
+      // even when projects themselves loaded fine. Toast is sufficient for transient load issues.
       showToast(message, "error");
     } finally {
       setLoadingAssignments(false);
@@ -488,7 +504,7 @@ export default function LaborPage() {
       setPerformanceHasNext(response.data.length === pageSize);
     } catch (err) {
       const message = parseApiError(err);
-      setError(message);
+      // setError removed (consistent; only non-viewer uses this path)
       showToast(message, "error");
     } finally {
       setLoadingPerformance(false);
@@ -496,13 +512,21 @@ export default function LaborPage() {
   };
 
   const refreshAll = async () => {
-    await Promise.all([
+    setError(""); // clear any stale error banner (e.g. from previous failed loads) so Viewer never sees lingering "Network Error"
+    // Viewer role: never load performance (section + Log button + History fully hidden via !isViewer).
+    // Also skip loadLocations() for Viewer: its query joins Prisoners (which is denied for db_role_viewer in grants).
+    // This prevents unnecessary "Network Error" / permission toasts on Labor page for Viewer.
+    // loadProjects and loadAssignments use the safe vw_*_Basic paths (with fallback for projects if view not created yet).
+    const loads = [
       loadProjects(),
-      loadLocations(),
+      ...(isViewer ? [] : [loadLocations()]),
       loadPrisoners(prisonerSearch),
       loadAssignments(assignmentPage, assignmentFilters),
-      loadPerformance(performancePage, performanceFilters),
-    ]);
+    ];
+    if (!isViewer) {
+      loads.push(loadPerformance(performancePage, performanceFilters));
+    }
+    await Promise.all(loads);
   };
 
   useEffect(() => {
@@ -688,8 +712,31 @@ export default function LaborPage() {
   }, [projects, projectSearch, projectSort]);
 
   const sortedAssignments = useMemo(() => {
+    // Build lookup maps so that for Viewer (who gets LaborAssignmentReadBasic without joined names)
+    // we can still display nice prisoner/project names using data we already loaded (projects + prisoners).
+    // This makes "Assignments" section actually show useful data instead of only #IDs.
+    // Safe against project_id / prisoner_id being null (defensive after the backend filter + relaxed Basic schema).
+    const projectNameById = new Map(projects.map((p) => [p.project_id, p.project_name]));
+    const prisonerNameById = new Map(prisoners.map((pr) => [pr.prisoner_id, pr.full_name]));
+
     const search = assignmentSearch.trim().toLowerCase();
-    const filtered = assignments.filter((assignment) => {
+    const enriched = assignments.map((assignment) => {
+      const pid = assignment.prisoner_id;
+      const projid = assignment.project_id;
+      const pn = assignment.prisoner_name
+        || (pid != null ? prisonerNameById.get(pid) : null)
+        || (pid != null ? `#${pid}` : '#?');
+      const projn = assignment.project_name
+        || (projid != null ? projectNameById.get(projid) : null)
+        || (projid != null ? `#${projid}` : '#?');
+      return {
+        ...assignment,
+        prisoner_name: pn,
+        project_name: projn,
+      };
+    });
+
+    const filtered = enriched.filter((assignment) => {
       if (!search) return true;
       return (
         includesText(assignment.prisoner_name, search) ||
@@ -698,7 +745,7 @@ export default function LaborPage() {
       );
     });
     return sortByField(filtered, assignmentSort);
-  }, [assignments, assignmentSearch, assignmentSort]);
+  }, [assignments, assignmentSearch, assignmentSort, projects, prisoners]);
 
   const sortedPerformance = useMemo(() => {
     const search = performanceSearch.trim().toLowerCase();
@@ -722,24 +769,33 @@ export default function LaborPage() {
     return options;
   }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
 
+  // Viewer: hide the entire left action column (ActionSidebar returns null for empty actions anyway).
+  // Omitting .page-action-column makes .page-main-data take full width -> content "pushed up", no wasted left space, cleaner for Viewer.
+  const showActionColumn = !isViewer; // Only non-Viewer (Guard/Warden/Admin) see create/log actions
+
   return (
     <>
     <div className="page-action-layout">
-      <div className="page-action-column">
-        <ActionSidebar
-          title="Actions"
-          actions={[
-            ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
-            ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
-            { label: "Log Performance", onClick: () => setShowLogPerformance(true) },
-          ]}
-        />
-      </div>
+      {showActionColumn && (
+        <div className="page-action-column">
+          <ActionSidebar
+            title="Actions"
+            actions={[
+              ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
+              ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
+              // Only show Log Performance for non-Viewer roles (Guard/Warden/Admin)
+              ...(!isViewer ? [{ label: "Log Performance", onClick: () => setShowLogPerformance(true) }] : []),
+            ]}
+          />
+        </div>
+      )}
 
       <div className="page-main-data">
       <div style={{ display: 'block' }}>
         <div className="labor-stack">
-          <section className="panel">
+          {/* Viewer layout: tight vertical rhythm (8px or less) between Projects and Assignments after hiding Performance sections.
+             This + omitting left action column + hiding filter-bar below makes the page clean, balanced, no large empty regions. */}
+          <section className="panel" style={isViewer ? { marginBottom: '8px' } : {}}>
             <div className="section-head">
               <div>
                 <h2>Labor Projects</h2>
@@ -763,6 +819,7 @@ export default function LaborPage() {
               </label>
             </div>
 
+            {/* Note: global error banner kept here for action failures (create/update/delete). Load errors no longer setError to avoid "Network Error" after data has loaded. */}
             {error && <div className="error-msg">{error}</div>}
 
             {loadingProjects ? (
@@ -780,7 +837,8 @@ export default function LaborPage() {
                       <th>Current Workers</th>
                       <th>Revenue / Hour</th>
                       <th>Status</th>
-                      <th>Actions</th>
+                      {/* Viewer: no Actions column at all (no edit/delete). Column entirely omitted for clean table. */}
+                      {!isViewer && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -808,16 +866,19 @@ export default function LaborPage() {
                             <span className={`status-badge ${status.className}`}>{status.label}</span>
                             <div className="mini-muted">{project.open_slots} open</div>
                           </td>
-                          <td>
-                            <div className="project-actions">
-                              {canManageProjects && (
-                                <>
-                                  <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)}>Edit</button>
-                                  <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)}>Delete</button>
-                                </>
-                              )}
-                            </div>
-                          </td>
+                          {/* Viewer sees no action buttons (Edit/Delete guarded by !isViewer and canManage checks). */}
+                          {!isViewer && (
+                            <td>
+                              <div className="project-actions">
+                                {canManageProjects && (
+                                  <>
+                                    <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)}>Edit</button>
+                                    <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)}>Delete</button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -827,7 +888,8 @@ export default function LaborPage() {
             )}
           </section>
 
-          <section className="panel">
+          {/* Viewer: smaller marginTop + previous marginBottom on Projects => sections are visually closer, balanced, no large whitespace after Performance was hidden. Order: Projects then Assignments. */}
+          <section className="panel" style={isViewer ? { marginTop: '8px' } : {}}>
             <div className="section-head">
               <div>
                 <h2>Assignments</h2>
@@ -851,6 +913,9 @@ export default function LaborPage() {
               </label>
             </div>
 
+            {/* Viewer: hide the server-side filter-bar entirely (filters are not sent to backend for isViewer; would be ignored anyway).
+                Top search + client-side filter in sortedAssignments + pagination is sufficient and keeps UI clean/compact for Viewer. */}
+            {!isViewer && (
             <div className="filter-bar">
               <label>
                 Prisoner
@@ -870,6 +935,7 @@ export default function LaborPage() {
                 <button className="secondary-btn" type="button" onClick={clearAssignmentFilters}>Clear</button>
               </div>
             </div>
+            )}
 
             <div className="pagination-bar">
               <div className="search-status">Page {assignmentPage} {loadingAssignments ? "• loading" : ""}</div>
@@ -901,27 +967,29 @@ export default function LaborPage() {
                       <th>Assigned Date</th>
                       <th>Hours</th>
                       <th>Assigned By</th>
-                      <th>Actions</th>
+                      {!isViewer && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {sortedAssignments.map((assignment) => (
                       <tr key={assignment.assignment_id}>
-                        <td>{assignment.prisoner_name || `#${assignment.prisoner_id}`}</td>
-                        <td>{assignment.project_name || `#${assignment.project_id}`}</td>
+                        <td>{assignment.prisoner_name || (assignment.prisoner_id != null ? `#${assignment.prisoner_id}` : '#?')}</td>
+                        <td>{assignment.project_name || (assignment.project_id != null ? `#${assignment.project_id}` : '#?')}</td>
                         <td>{formatDateOnly(assignment.assignment_date)}</td>
                         <td>{formatDecimal(assignment.hours_assigned)}</td>
                         <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
-                        <td>
-                          <div className="table-actions">
-                            {canManageLabor && (
-                              <>
-                                <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)}>Edit</button>
-                                <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)}>Delete</button>
-                              </>
-                            )}
-                          </div>
-                        </td>
+                        {!isViewer && (
+                          <td>
+                            <div className="table-actions">
+                              {canManageLabor && (
+                                <>
+                                  <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)}>Edit</button>
+                                  <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)}>Delete</button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -930,6 +998,9 @@ export default function LaborPage() {
             )}
           </section>
 
+          {/* Performance History + Log fully hidden for Viewer (role check on current_user.role).
+             Combined with skipping loadPerformance in refreshAll + no sidebar Log action => no wasted space, no Network Error from perf endpoint. */}
+          {!isViewer && (
           <section className="panel">
             <div className="history-header">
               <div>
@@ -1029,6 +1100,7 @@ export default function LaborPage() {
               </>
             )}
           </section>
+          )}
         </div> {/* close labor-stack */}
       </div> {/* close style block */}
 
@@ -1138,7 +1210,8 @@ export default function LaborPage() {
         </div>
       )}
 
-      {showLogPerformance && (
+      {/* Hide Log Performance modal for Viewer too */}
+      {!isViewer && showLogPerformance && (
         <div className="modal-overlay" onClick={() => setShowLogPerformance(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -1192,6 +1265,7 @@ export default function LaborPage() {
             </form>
           </div>
         </div>
+      )}
       )}
 
       {editingProject && (

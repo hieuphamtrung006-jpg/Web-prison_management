@@ -124,10 +124,32 @@ PerformanceRead = DailyPerformanceRead
 
 
 # --- Basic schemas for Viewer role ---
-class LaborAssignmentReadBasic(BaseModel):
-    assignment_id: int
-    prisoner_id: int
+class LaborProjectReadBasic(BaseModel):
+    # Basic projection for Viewer via vw_LaborProjects_Basic (location_name may be joined in view)
     project_id: int
+    project_name: str
+    location_id: int | None = None
+    location_name: str | None = None
+    revenue_per_hour: Decimal
+    priority_score: int
+    max_workers: int
+    current_workers: int = 0
+    open_slots: int = 0
+    required_skills: str | None = None
+    is_active: bool
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class LaborAssignmentReadBasic(BaseModel):
+    # Made FKs optional to tolerate dirty data / NULLs in vw_LaborAssignments_Basic (prevents Pydantic ValidationError
+    # like "project_id Input should be a valid integer" when a row has ProjectID=NULL).
+    # Matches the defensive style in LaborAssignmentRead (project_id: int | None).
+    assignment_id: int
+    prisoner_id: int | None = None
+    project_id: int | None = None
     assignment_date: date
     hours_assigned: Decimal
 
@@ -135,9 +157,10 @@ class LaborAssignmentReadBasic(BaseModel):
 
 
 class DailyPerformanceReadBasic(BaseModel):
+    # Relaxed for safety (same reason as LaborAssignmentReadBasic)
     performance_id: int
-    prisoner_id: int
-    project_id: int
+    prisoner_id: int | None = None
+    project_id: int | None = None
     work_date: date
     productivity: Decimal
     notes: str | None = None

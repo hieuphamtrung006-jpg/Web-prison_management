@@ -75,6 +75,7 @@ def get_table_name_for_role(base_table: str, user_role: str) -> str:
             "Prisoners": "vw_Prisoners_Basic",
             "Visits": "vw_Visits_Basic",
             "Incidents": "vw_Incidents_Basic",
+            "LaborProjects": "vw_LaborProjects_Basic",
             "LaborAssignments": "vw_LaborAssignments_Basic",
             "DailyPerformance": "vw_DailyPerformance_Basic",
             "Locations": "vw_Locations_Basic",
