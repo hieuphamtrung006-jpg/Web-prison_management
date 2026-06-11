@@ -59,6 +59,7 @@ def list_prisoners(
     name: str | None = Query(default=None, min_length=1, max_length=100),
     risk_level: str | None = Query(default=None, max_length=20),
     location_id: int | None = Query(default=None),
+    prisoner_id: int | None = Query(default=None, gt=0),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -87,6 +88,9 @@ def list_prisoners(
         if location_id is not None:
             conditions.append("CurrentLocationID = :location_id")
             params["location_id"] = location_id
+        if prisoner_id is not None:
+            conditions.append("PrisonerID = :prisoner_id")
+            params["prisoner_id"] = prisoner_id
 
         where_clause = " AND ".join(conditions) if conditions else ""
         order_by = "ORDER BY PrisonerID DESC"
@@ -110,6 +114,8 @@ def list_prisoners(
             query = query.filter(Prisoner.risk_level == risk_level)
         if location_id is not None:
             query = query.filter(Prisoner.current_location_id == location_id)
+        if prisoner_id is not None:
+            query = query.filter(Prisoner.prisoner_id == prisoner_id)
         return query.order_by(Prisoner.prisoner_id.desc()).offset(offset).limit(page_size).all()
 
 

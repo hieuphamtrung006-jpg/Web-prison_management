@@ -22,6 +22,7 @@ const initialFilters = {
   name: "",
   risk_level: "",
   location_id: "",
+  prisoner_id: "",  // Added for Viewer convenience (search by exact ID)
 };
 
 const editableByGuard = ["full_name", "gender", "crime_type", "risk_level", "rehab_hours"];
@@ -607,9 +608,16 @@ export default function PrisonersPage() {
       const params = new URLSearchParams();
       params.set("page", String(pageNumber));
       params.set("page_size", String(pageSize));
-      if (appliedFilters.name) {
+
+      // Support combined search: prioritize prisoner_id if provided or if name looks like a number (for Viewer convenience)
+      if (appliedFilters.prisoner_id) {
+        params.set("prisoner_id", appliedFilters.prisoner_id);
+      } else if (appliedFilters.name && /^\d+$/.test(appliedFilters.name.trim())) {
+        params.set("prisoner_id", appliedFilters.name.trim());
+      } else if (appliedFilters.name) {
         params.set("name", appliedFilters.name);
       }
+
       if (appliedFilters.risk_level) {
         params.set("risk_level", appliedFilters.risk_level);
       }
@@ -650,8 +658,13 @@ export default function PrisonersPage() {
 
   const handleSearch = (event) => {
     event.preventDefault();
+    const newFilters = { ...filterDraft };
     setPage(1);
-    setFilters({ ...filterDraft });
+    setFilters(newFilters);
+    setError(""); // clear previous errors on new search
+    // Force load immediately with the new filters to ensure search applies (especially prisoner_id for Viewer)
+    // This prevents any timing issues with useEffect deps and makes search feel responsive.
+    loadPrisoners(1, newFilters);
   };
 
   const handleResetFilters = () => {
@@ -718,33 +731,54 @@ export default function PrisonersPage() {
   return (
     <>
       <div className="page-action-layout">
-        <div className="page-action-column">
-          <ActionSidebar title="Actions" actions={createActions} />
-        </div>
+        {/* Hide action sidebar for Viewer to reduce empty space on the left (no Create action) */}
+        {!isViewer && (
+          <div className="page-action-column">
+            <ActionSidebar title="Actions" actions={createActions} />
+          </div>
+        )}
 
-        <div className="page-main-data">
+        <div className="page-main-data" style={isViewer ? { marginLeft: 0 } : {}}>
           {/* Full width table (main content now takes the available space) */}
-          <section className="panel">
+          {/* For Viewer: tighter padding to reduce wasted space since no left sidebar actions */}
+          <section className="panel" style={isViewer ? { paddingTop: '8px' } : {}}>
             <h2>Prisoners</h2>
-            <p className="hint-text">
-              Search by name, risk level, or location. Click a row to view full details in a modal.
+            <p className="hint-text" style={isViewer ? { marginBottom: '6px', fontSize: '0.85rem' } : {}}>
+              {isViewer 
+                ? "Search by name or Prisoner ID (enter number for ID). Click a row to view details." 
+                : "Search by name, risk level, or location. Click a row to view full details in a modal."}
             </p>
 
             {error && <div className="error-msg">{error}</div>}
 
-            <form className="prisoners-toolbar" onSubmit={handleSearch}>
+            <form 
+              className="prisoners-toolbar" 
+              onSubmit={handleSearch}
+              style={isViewer ? { marginBottom: '4px' } : {}}
+            >
+              {/* Added ID search for Viewer convenience (they often have Prisoner ID from documents) */}
+              <label>
+                Prisoner ID
+                <input
+                  type="text"
+                  value={filterDraft.prisoner_id}
+                  onChange={(e) => setFilterDraft(prev => ({ ...prev, prisoner_id: e.target.value }))}
+                  placeholder="Search by Prisoner ID"
+                />
+              </label>
+
               <label>
                 Name
                 <input
                   value={filterDraft.name}
-                  onChange={(e) => setFilterDraft({ ...filterDraft, name: e.target.value })}
+                  onChange={(e) => setFilterDraft(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Search by prisoner name"
                 />
               </label>
 
               <label>
                 Risk level
-                <select value={filterDraft.risk_level} onChange={(e) => setFilterDraft({ ...filterDraft, risk_level: e.target.value })}>
+                <select value={filterDraft.risk_level} onChange={(e) => setFilterDraft(prev => ({ ...prev, risk_level: e.target.value }))}>
                   <option value="">All</option>
                   <option value="Low">Low</option>
                   <option value="Medium">Medium</option>
@@ -754,7 +788,7 @@ export default function PrisonersPage() {
 
               <label>
                 Location
-                <select value={filterDraft.location_id} onChange={(e) => setFilterDraft({ ...filterDraft, location_id: e.target.value })}>
+                <select value={filterDraft.location_id} onChange={(e) => setFilterDraft(prev => ({ ...prev, location_id: e.target.value }))}>
                   <option value="">All</option>
                   {locations.map((location) => (
                     <option key={location.location_id} value={location.location_id}>
@@ -773,7 +807,7 @@ export default function PrisonersPage() {
               </button>
             </form>
 
-            <div className="inline-form pagination">
+            <div className="inline-form pagination" style={isViewer ? { marginTop: '2px', marginBottom: '6px' } : {}}>
               <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
                 Prev
               </button>
