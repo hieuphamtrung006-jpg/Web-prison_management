@@ -108,31 +108,9 @@ GO
 PRINT 'Created View: vw_LaborAssignments_Basic';
 
 
--- ============================================================
--- View 5: DailyPerformance (ẩn Notes)
--- ============================================================
-IF OBJECT_ID('dbo.vw_DailyPerformance_Basic', 'V') IS NOT NULL
-    DROP VIEW dbo.vw_DailyPerformance_Basic;
-GO
-
-CREATE VIEW dbo.vw_DailyPerformance_Basic AS
-SELECT 
-    PerformanceID,
-    PrisonerID,
-    ProjectID,
-    EvaluatedBy,
-    WorkDate,
-    Productivity,
-    CreatedAt
-    -- Ẩn: Notes
-FROM dbo.DailyPerformance;
-GO
-
-PRINT 'Created View: vw_DailyPerformance_Basic';
-
 
 -- ============================================================
--- View 6: Locations (cho phép xem đầy đủ vì ít nhạy cảm)
+-- View 5: Locations (cho phép xem đầy đủ vì ít nhạy cảm)
 -- ============================================================
 IF OBJECT_ID('dbo.vw_Locations_Basic', 'V') IS NOT NULL
     DROP VIEW dbo.vw_Locations_Basic;
@@ -160,7 +138,6 @@ Các View đã tạo:
 - vw_Visits_Basic
 - vw_Incidents_Basic
 - vw_LaborAssignments_Basic
-- vw_DailyPerformance_Basic
 - vw_Locations_Basic
 
 Lưu ý: 

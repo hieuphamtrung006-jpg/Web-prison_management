@@ -20,7 +20,8 @@ GRANT SELECT ON dbo.vw_Prisoners_Basic TO db_role_viewer;
 GRANT SELECT ON dbo.vw_Visits_Basic TO db_role_viewer;
 GRANT SELECT ON dbo.vw_Incidents_Basic TO db_role_viewer;
 GRANT SELECT ON dbo.vw_LaborAssignments_Basic TO db_role_viewer;
-GRANT SELECT ON dbo.vw_DailyPerformance_Basic TO db_role_viewer;
+-- Đảm bảo Viewer không được xem DailyPerformance
+DENY SELECT ON dbo.DailyPerformance TO db_role_viewer;
 GRANT SELECT ON dbo.vw_Locations_Basic TO db_role_viewer;
 
 -- Từ chối truy cập trực tiếp vào các bảng gốc (quan trọng)
