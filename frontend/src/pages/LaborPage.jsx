@@ -348,6 +348,7 @@ function SectionLoading({ label }) {
 export default function LaborPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
+  // Viewer can view Labor data but cannot manage (create/edit/delete)
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
   const canCreateAssignment = canManageProjects;
@@ -780,7 +781,7 @@ export default function LaborPage() {
                       <th>Current Workers</th>
                       <th>Revenue / Hour</th>
                       <th>Status</th>
-                      <th>Actions</th>
+                      {!isViewer && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -808,16 +809,18 @@ export default function LaborPage() {
                             <span className={`status-badge ${status.className}`}>{status.label}</span>
                             <div className="mini-muted">{project.open_slots} open</div>
                           </td>
-                          <td>
-                            <div className="project-actions">
-                              {canManageProjects && (
-                                <>
-                                  <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)}>Edit</button>
-                                  <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)}>Delete</button>
-                                </>
-                              )}
-                            </div>
-                          </td>
+                          {!isViewer && (
+                            <td>
+                              <div className="project-actions">
+                                {canManageProjects && (
+                                  <>
+                                    <button className="btn-sm btn-edit" type="button" onClick={() => setEditingProject(project)}>Edit</button>
+                                    <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteProject(project)}>Delete</button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -827,7 +830,7 @@ export default function LaborPage() {
             )}
           </section>
 
-          <section className="panel">
+          <section className="panel" style={isViewer ? { marginTop: '12px' } : {}}>
             <div className="section-head">
               <div>
                 <h2>Assignments</h2>
@@ -901,7 +904,7 @@ export default function LaborPage() {
                       <th>Assigned Date</th>
                       <th>Hours</th>
                       <th>Assigned By</th>
-                      <th>Actions</th>
+                      {!isViewer && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -912,16 +915,18 @@ export default function LaborPage() {
                         <td>{formatDateOnly(assignment.assignment_date)}</td>
                         <td>{formatDecimal(assignment.hours_assigned)}</td>
                         <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
-                        <td>
-                          <div className="table-actions">
-                            {canManageLabor && (
-                              <>
-                                <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)}>Edit</button>
-                                <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)}>Delete</button>
-                              </>
-                            )}
-                          </div>
-                        </td>
+                        {!isViewer && (
+                          <td>
+                            <div className="table-actions">
+                              {canManageLabor && (
+                                <>
+                                  <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)}>Edit</button>
+                                  <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)}>Delete</button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

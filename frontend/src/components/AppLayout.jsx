@@ -34,6 +34,7 @@ const viewerNavItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/prisoners", label: "Prisoners", icon: Shield },
   { to: "/visits", label: "Visits", icon: Calendar },
+  { to: "/labor", label: "Labor", icon: Briefcase },
 ];
 
 export default function AppLayout({ children }) {
