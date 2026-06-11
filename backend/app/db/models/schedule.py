@@ -1,7 +1,7 @@
 from datetime import datetime, time
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Time
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Time, Unicode
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -11,7 +11,7 @@ class Shift(Base):
     __tablename__ = "Shifts"
 
     shift_id: Mapped[int] = mapped_column("ShiftID", Integer, primary_key=True, index=True)
-    shift_type: Mapped[str] = mapped_column("ShiftType", String(30), nullable=False)
+    shift_type: Mapped[str] = mapped_column("ShiftType", Unicode(30), nullable=False)
     start_time: Mapped[time] = mapped_column("StartTime", Time, nullable=False)
     end_time: Mapped[time] = mapped_column("EndTime", Time, nullable=False)
     capacity: Mapped[int] = mapped_column("Capacity", Integer, nullable=False)
@@ -39,7 +39,7 @@ class SchedulingConfig(Base):
     __tablename__ = "SchedulingConfigs"
 
     config_id: Mapped[int] = mapped_column("ConfigID", Integer, primary_key=True, index=True)
-    config_name: Mapped[str] = mapped_column("ConfigName", String(50), default="Mac dinh")
+    config_name: Mapped[str] = mapped_column("ConfigName", Unicode(50), default="Mặc định")
     weight_economy: Mapped[Decimal] = mapped_column("WeightEconomy", Numeric(5, 2), default=0.4)
     weight_security: Mapped[Decimal] = mapped_column("WeightSecurity", Numeric(5, 2), default=0.3)
     weight_rehab: Mapped[Decimal] = mapped_column("WeightRehab", Numeric(5, 2), default=0.3)

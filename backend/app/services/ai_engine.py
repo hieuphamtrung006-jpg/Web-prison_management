@@ -42,13 +42,35 @@ def _classify_shift(shift_type: str | None) -> str:
     value = shift_type.lower()
     if "lao" in value or "work" in value or "xuong" in value:
         return "labor"
-    if "an" in value or "meal" in value or "dining" in value:
+    
+    # Check for meal shifts safely using word matching
+    is_meal = False
+    if "meal" in value or "dining" in value:
+        is_meal = True
+    else:
+        words = value.replace("/", " ").replace("&", " ").split()
+        if "an" in words or "ăn" in words:
+            is_meal = True
+            
+    if is_meal:
         return "meal"
-    if "ngu" in value or "sleep" in value or "night" in value:
+
+    # Check for sleep shifts safely
+    is_sleep = False
+    if "sleep" in value or "night" in value or "khoa" in value or "khóa" in value or "diem danh" in value or "điểm danh" in value:
+        is_sleep = True
+    else:
+        words = value.replace("/", " ").replace("&", " ").split()
+        if "ngu" in words or "ngủ" in words:
+            is_sleep = True
+
+    if is_sleep:
         return "sleep"
+
     if value in {"sang", "chieu", "morning", "afternoon"}:
         return "labor"
     return "general"
+
 
 
 def _scaled(value: float, scale: int) -> int:
@@ -136,6 +158,23 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
                             model.Add(x[(prisoner_id, shift_id, loc_id)] == 1)
                         else:
                             model.Add(x[(prisoner_id, shift_id, loc_id)] == 0)
+            elif shift_class == "sleep":
+                prisoner_obj = prisoners_by_id.get(prisoner_id, {})
+                current_loc_id = prisoner_obj.get("current_location_id")
+                if current_loc_id is not None and current_loc_id in location_ids:
+                    for loc_id in location_ids:
+                        if loc_id == current_loc_id:
+                            model.Add(x[(prisoner_id, shift_id, loc_id)] == 1)
+                        else:
+                            model.Add(x[(prisoner_id, shift_id, loc_id)] == 0)
+                else:
+                    cell_locs = [lid for lid, loc in locations_by_id.items() if str(loc.get("type")).lower() == "cell"]
+                    if cell_locs:
+                        model.Add(sum(x[(prisoner_id, shift_id, lid)] for lid in cell_locs) == 1)
+            elif shift_class == "meal":
+                meal_locs = [lid for lid, loc in locations_by_id.items() if str(loc.get("type")).lower() in {"dining", "cell"}]
+                if meal_locs:
+                    model.Add(sum(x[(prisoner_id, shift_id, lid)] for lid in meal_locs) == 1)
 
     # Capacity constraints per shift and location.
     for shift_id in shift_ids:
@@ -196,7 +235,7 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
                     project_location = int(project.get("location_id")) if project else None
                     if project and project_location == location_id:
                         economy_gain += productivity + float(project.get("revenue_per_hour") or 0) / 100.0
-                else:
+                elif shift_class == "general":
                     if loc_type in {"yard", "hospital"}:
                         rehab_gain += 1.0
 

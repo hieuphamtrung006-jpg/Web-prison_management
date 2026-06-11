@@ -169,6 +169,7 @@ def generate_schedule(
                     "prisoner_id": p.prisoner_id,
                     "risk_level": p.risk_level,
                     "productivity_score": float(p.productivity_score),
+                    "current_location_id": p.current_location_id,
                 }
                 for p in prisoners
             ],
