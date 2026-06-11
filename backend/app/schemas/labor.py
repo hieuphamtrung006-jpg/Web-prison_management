@@ -144,9 +144,12 @@ class LaborProjectReadBasic(BaseModel):
 
 
 class LaborAssignmentReadBasic(BaseModel):
+    # Made FKs optional to tolerate dirty data / NULLs in vw_LaborAssignments_Basic (prevents Pydantic ValidationError
+    # like "project_id Input should be a valid integer" when a row has ProjectID=NULL).
+    # Matches the defensive style in LaborAssignmentRead (project_id: int | None).
     assignment_id: int
-    prisoner_id: int
-    project_id: int
+    prisoner_id: int | None = None
+    project_id: int | None = None
     assignment_date: date
     hours_assigned: Decimal
 
@@ -154,9 +157,10 @@ class LaborAssignmentReadBasic(BaseModel):
 
 
 class DailyPerformanceReadBasic(BaseModel):
+    # Relaxed for safety (same reason as LaborAssignmentReadBasic)
     performance_id: int
-    prisoner_id: int
-    project_id: int
+    prisoner_id: int | None = None
+    project_id: int | None = None
     work_date: date
     productivity: Decimal
     notes: str | None = None

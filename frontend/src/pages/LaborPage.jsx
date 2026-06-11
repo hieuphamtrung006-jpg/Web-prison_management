@@ -512,11 +512,14 @@ export default function LaborPage() {
   };
 
   const refreshAll = async () => {
+    setError(""); // clear any stale error banner (e.g. from previous failed loads) so Viewer never sees lingering "Network Error"
     // Viewer role: never load performance (section + Log button + History fully hidden via !isViewer).
-    // loadProjects and loadAssignments will succeed thanks to backend viewer branches (vw_* + execute_viewer_query + ReadBasic + fixed response_model).
+    // Also skip loadLocations() for Viewer: its query joins Prisoners (which is denied for db_role_viewer in grants).
+    // This prevents unnecessary "Network Error" / permission toasts on Labor page for Viewer.
+    // loadProjects and loadAssignments use the safe vw_*_Basic paths (with fallback for projects if view not created yet).
     const loads = [
       loadProjects(),
-      loadLocations(),
+      ...(isViewer ? [] : [loadLocations()]),
       loadPrisoners(prisonerSearch),
       loadAssignments(assignmentPage, assignmentFilters),
     ];
@@ -709,8 +712,31 @@ export default function LaborPage() {
   }, [projects, projectSearch, projectSort]);
 
   const sortedAssignments = useMemo(() => {
+    // Build lookup maps so that for Viewer (who gets LaborAssignmentReadBasic without joined names)
+    // we can still display nice prisoner/project names using data we already loaded (projects + prisoners).
+    // This makes "Assignments" section actually show useful data instead of only #IDs.
+    // Safe against project_id / prisoner_id being null (defensive after the backend filter + relaxed Basic schema).
+    const projectNameById = new Map(projects.map((p) => [p.project_id, p.project_name]));
+    const prisonerNameById = new Map(prisoners.map((pr) => [pr.prisoner_id, pr.full_name]));
+
     const search = assignmentSearch.trim().toLowerCase();
-    const filtered = assignments.filter((assignment) => {
+    const enriched = assignments.map((assignment) => {
+      const pid = assignment.prisoner_id;
+      const projid = assignment.project_id;
+      const pn = assignment.prisoner_name
+        || (pid != null ? prisonerNameById.get(pid) : null)
+        || (pid != null ? `#${pid}` : '#?');
+      const projn = assignment.project_name
+        || (projid != null ? projectNameById.get(projid) : null)
+        || (projid != null ? `#${projid}` : '#?');
+      return {
+        ...assignment,
+        prisoner_name: pn,
+        project_name: projn,
+      };
+    });
+
+    const filtered = enriched.filter((assignment) => {
       if (!search) return true;
       return (
         includesText(assignment.prisoner_name, search) ||
@@ -719,7 +745,7 @@ export default function LaborPage() {
       );
     });
     return sortByField(filtered, assignmentSort);
-  }, [assignments, assignmentSearch, assignmentSort]);
+  }, [assignments, assignmentSearch, assignmentSort, projects, prisoners]);
 
   const sortedPerformance = useMemo(() => {
     const search = performanceSearch.trim().toLowerCase();
@@ -947,8 +973,8 @@ export default function LaborPage() {
                   <tbody>
                     {sortedAssignments.map((assignment) => (
                       <tr key={assignment.assignment_id}>
-                        <td>{assignment.prisoner_name || `#${assignment.prisoner_id}`}</td>
-                        <td>{assignment.project_name || `#${assignment.project_id}`}</td>
+                        <td>{assignment.prisoner_name || (assignment.prisoner_id != null ? `#${assignment.prisoner_id}` : '#?')}</td>
+                        <td>{assignment.project_name || (assignment.project_id != null ? `#${assignment.project_id}` : '#?')}</td>
                         <td>{formatDateOnly(assignment.assignment_date)}</td>
                         <td>{formatDecimal(assignment.hours_assigned)}</td>
                         <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>

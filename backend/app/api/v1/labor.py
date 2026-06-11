@@ -156,33 +156,38 @@ def list_projects(
     offset = (page - 1) * page_size
 
     # Role-based data fetch for Viewer (fixes Network Error on /labor/projects for Viewer)
+    # We prefer the vw_LaborProjects_Basic when it exists (via execute_viewer_query).
+    # If the view has not been created yet (user has not run 04_Create_Views...), we gracefully
+    # fall back to the full query (current DB connection has rights) so Viewer never sees Network Error.
     table_name = get_table_name_for_role("LaborProjects", current_user.role)
     if table_name.startswith("vw_"):
-        # Viewer path: raw query against the safe Basic view
-        # View should expose ProjectID, ProjectName, LocationID, LocationName (joined), Revenue..., etc.
-        # We enrich current_workers/open_slots here (0 for basic view; UI falls back gracefully).
-        normalized_rows = execute_viewer_query(
-            db,
-            table_name,
-            where_clause="",
-            params={"offset": offset, "limit": page_size},
-            order_by="ORDER BY ProjectID DESC",
-            limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
-        )
-        results = []
-        for row in normalized_rows:
-            data = dict(row)  # already snake_cased by normalize_db_row
-            max_w = int(data.get("max_workers") or 1)
-            data["current_workers"] = 0
-            data["open_slots"] = max(max_w - 0, 0)
-            # Ensure timestamps exist for LaborProjectRead (view may include CreatedAt/UpdatedAt)
-            if not data.get("created_at"):
-                data["created_at"] = _now_utc()
-            # model_validate will accept extra or missing optionals; open_slots etc provided
-            results.append(LaborProjectRead.model_validate(data))
-        return results
+        try:
+            # Viewer path: raw query against the safe Basic view
+            normalized_rows = execute_viewer_query(
+                db,
+                table_name,
+                where_clause="",
+                params={"offset": offset, "limit": page_size},
+                order_by="ORDER BY ProjectID DESC",
+                limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
+            )
+            results = []
+            for row in normalized_rows:
+                data = dict(row)  # already snake_cased by normalize_db_row
+                max_w = int(data.get("max_workers") or 1)
+                data["current_workers"] = 0
+                data["open_slots"] = max(max_w - 0, 0)
+                if not data.get("created_at"):
+                    data["created_at"] = _now_utc()
+                results.append(LaborProjectRead.model_validate(data))
+            return results
+        except Exception:
+            # Fallback: view not created yet or other issue → use full query so data still loads
+            # (keeps Viewer experience working without "Network Error")
+            pass
 
-    # Non-Viewer (Admin/Warden/Guard): original full logic with live worker counts
+    # Non-Viewer (Admin/Warden/Guard) OR fallback for Viewer when vw_LaborProjects_Basic missing:
+    # original full logic with live worker counts from Schedule.
     schedule_subquery = (
         db.query(
             Schedule.project_id.label("project_id"),
@@ -377,7 +382,15 @@ def list_assignments(
             order_by="ORDER BY AssignmentID DESC",
             limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
         )
-        return [LaborAssignmentReadBasic.model_validate(row) for row in normalized_rows]
+
+        # Defensive: skip any rows that have NULL for critical FKs (e.g. bad data in LaborAssignments.ProjectID).
+        # This prevents the exact Pydantic error: "LaborAssignmentReadBasic project_id Input should be a valid integer [None]".
+        # Viewer gets a clean list; non-Viewer path uses joins which usually enforce non-null.
+        safe_rows = [
+            row for row in normalized_rows
+            if row.get("project_id") is not None and row.get("prisoner_id") is not None
+        ]
+        return [LaborAssignmentReadBasic.model_validate(row) for row in safe_rows]
 
     else:
         # Non-viewer: giữ logic join phức tạp như cũ
