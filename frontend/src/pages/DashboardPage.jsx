@@ -174,6 +174,7 @@ export default function DashboardPage() {
   // Viewer-specific state (personalized Visit Requests)
   const [myRequests, setMyRequests] = useState([]);
   const [viewerLoading, setViewerLoading] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false); // for direct request from dashboard for Viewer
 
   // ============================================
   // Data fetching - Core functionality
@@ -295,7 +296,7 @@ export default function DashboardPage() {
   };
 
   // ============================================
-  // Viewer-specific computed values
+  // Viewer-specific computed values (from /requests/mine)
   // ============================================
   const viewerStats = {
     pending: myRequests.filter(r => r.status === "Pending").length,
@@ -317,10 +318,10 @@ export default function DashboardPage() {
         <div>
           {isViewer ? (
             <>
-              <div className="eyebrow">Personal</div>
+              <div className="eyebrow">Personal Dashboard</div>
               <h2>My Dashboard</h2>
               <p className="muted" style={{ marginTop: 4 }}>
-                Chào mừng trở lại! Dưới đây là các yêu cầu thăm gặp của bạn.
+                Chào mừng trở lại! Dưới đây là tình trạng các yêu cầu thăm gặp của bạn.
               </p>
             </>
           ) : (
@@ -353,12 +354,12 @@ export default function DashboardPage() {
       )}
 
       {/* ============================================
-          VIEWER DASHBOARD - Personalized for Visit Requests
-          Clean, focused, role-specific view
+          ROLE-BASED DASHBOARD CONTENT
           ============================================ */}
       {isViewer ? (
+        /* VIEWER DASHBOARD - Focused on personal Visit Requests */
         <div>
-          {/* KEY INDICATORS - Simple personal stats */}
+          {/* KEY INDICATORS - 4 personal stats cards */}
           <section>
             <div className="section-head" style={{ marginBottom: 12 }}>
               <span className="eyebrow">Your Request Summary</span>
@@ -413,117 +414,127 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {/* MY RECENT VISIT REQUESTS + QUICK ACTIONS */}
-          <div className="split-grid" style={{ alignItems: "start" }}>
-            {/* Recent Requests */}
-            <section className="panel">
-              <div className="section-head">
-                <div>
-                  <span className="eyebrow">Recent Activity</span>
-                  <h3 style={{ marginTop: 2 }}>My Recent Visit Requests</h3>
-                </div>
+          {/* QUICK ACTIONS - Tailored for Viewer */}
+          <section className="panel" style={{ marginTop: 16 }}>
+            <div className="section-head">
+              <div>
+                <span className="eyebrow">Quick Actions</span>
+                <h3 style={{ marginTop: 2 }}>What would you like to do?</h3>
               </div>
+            </div>
 
-              {viewerLoading ? (
-                <div className="loading-state">
-                  <div className="spinner" />
-                  <p>Loading your requests...</p>
+            <div className="quick-actions">
+              {/* Big primary button to open request modal directly */}
+              <button 
+                className="quick-action" 
+                onClick={() => setShowRequestModal(true)}
+                style={{ 
+                  border: "2px solid var(--accent)", 
+                  background: "var(--highlight)",
+                  textAlign: "left",
+                  cursor: "pointer"
+                }}
+              >
+                <div className="icon-wrap" style={{ background: "var(--accent-soft)" }}>
+                  <UserCheck size={22} />
                 </div>
-              ) : recentMyRequests.length > 0 ? (
-                <div className="table-wrap" style={{ marginTop: 8 }}>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Prisoner</th>
-                        <th>Visit Date</th>
-                        <th>Status</th>
-                        <th style={{ width: 70 }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recentMyRequests.map((req) => {
-                        const statusClass = 
-                          req.status === "Approved" ? "status-active" : 
-                          req.status === "Rejected" ? "status-inactive" : "";
-                        return (
-                          <tr key={req.request_id}>
-                            <td>#{req.prisoner_id}</td>
-                            <td>{req.requested_date ? new Date(req.requested_date).toLocaleDateString() : "-"}</td>
-                            <td>
-                              <span className={`status-badge ${statusClass}`}>
-                                {req.status}
-                              </span>
-                            </td>
-                            <td>
-                              <Link 
-                                to="/visits" 
-                                className="btn-sm btn-edit"
-                                title="View full details and status on the Visits page"
-                              >
-                                View
-                              </Link>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="qa-content">
+                  <div className="qa-label" style={{ fontSize: "1.05rem" }}>Request New Visit</div>
+                  <div className="qa-desc">Submit a new visit request for a prisoner</div>
                 </div>
-              ) : (
-                <div className="loading-state" style={{ padding: "32px 0" }}>
-                  <p>Bạn chưa có yêu cầu thăm gặp nào.</p>
-                  <Link to="/visits" className="primary-btn" style={{ marginTop: 12, display: "inline-block", textDecoration: "none" }}>
-                    Request Visit
-                  </Link>
+              </button>
+
+              {/* Secondary action - go to full list */}
+              <Link to="/visits" className="quick-action">
+                <div className="icon-wrap">
+                  <ClipboardList size={20} />
                 </div>
-              )}
-
-              <div style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--muted)" }}>
-                Showing your most recent requests. Visit the Visits page for full history.
-              </div>
-            </section>
-
-            {/* QUICK ACTIONS - Tailored for Viewer */}
-            <section className="panel">
-              <div className="section-head">
-                <div>
-                  <span className="eyebrow">Quick Actions</span>
-                  <h3 style={{ marginTop: 2 }}>What would you like to do?</h3>
+                <div className="qa-content">
+                  <div className="qa-label">View My Requests</div>
+                  <div className="qa-desc">See the complete history and current status of all your requests</div>
                 </div>
-              </div>
+              </Link>
+            </div>
+          </section>
 
-              <div className="quick-actions">
-                {/* Primary action: Request Visit - opens the request flow */}
-                <Link to="/visits" className="quick-action" style={{ border: "2px solid var(--accent)", background: "var(--highlight)" }}>
-                  <div className="icon-wrap" style={{ background: "var(--accent-soft)" }}>
-                    <UserCheck size={20} />
-                  </div>
-                  <div className="qa-content">
-                    <div className="qa-label">Request New Visit</div>
-                    <div className="qa-desc">Submit a new visit request for a prisoner</div>
-                  </div>
-                </Link>
-
-                <Link to="/visits" className="quick-action">
-                  <div className="icon-wrap">
-                    <ClipboardList size={20} />
-                  </div>
-                  <div className="qa-content">
-                    <div className="qa-label">View All My Requests</div>
-                    <div className="qa-desc">See the complete history and status of your requests</div>
-                  </div>
-                </Link>
+          {/* RECENT REQUESTS - Last 5-6 of the viewer's requests */}
+          <section className="panel" style={{ marginTop: 16 }}>
+            <div className="section-head">
+              <div>
+                <span className="eyebrow">Recent Activity</span>
+                <h3 style={{ marginTop: 2 }}>My Recent Visit Requests</h3>
               </div>
+            </div>
 
-              <div style={{ marginTop: 16, fontSize: "0.8rem", color: "var(--muted)" }}>
-                All actions are limited to your own requests as a Viewer.
+            {viewerLoading ? (
+              <div className="loading-state">
+                <div className="spinner" />
+                <p>Loading your recent requests...</p>
               </div>
-            </section>
-          </div>
+            ) : recentMyRequests.length > 0 ? (
+              <div className="table-wrap" style={{ marginTop: 8 }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Prisoner</th>
+                      <th>Visit Date</th>
+                      <th>Status</th>
+                      <th style={{ width: 80 }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentMyRequests.map((req) => {
+                      const statusClass = 
+                        req.status === "Approved" ? "status-active" : 
+                        req.status === "Rejected" ? "status-inactive" : "";
+                      return (
+                        <tr key={req.request_id}>
+                          <td>#{req.prisoner_id}</td>
+                          <td>{req.requested_date ? new Date(req.requested_date).toLocaleDateString() : "-"}</td>
+                          <td>
+                            <span className={`status-badge ${statusClass}`}>
+                              {req.status}
+                            </span>
+                          </td>
+                          <td>
+                            <Link 
+                              to="/visits" 
+                              className="btn-sm btn-edit"
+                              title="View details on My Visit Requests page"
+                            >
+                              View
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ 
+                padding: "28px 16px", 
+                textAlign: "center", 
+                background: "var(--bg-elevated)", 
+                borderRadius: 12,
+                border: "1px solid var(--line)"
+              }}>
+                <p style={{ marginBottom: 12, color: "var(--muted)" }}>
+                  Bạn chưa có yêu cầu thăm gặp nào.
+                </p>
+                <button 
+                  className="primary-btn" 
+                  onClick={() => setShowRequestModal(true)}
+                >
+                  Request New Visit
+                </button>
+              </div>
+            )}
+          </section>
         </div>
       ) : (
         <>
-          {/* ORIGINAL OPERATIONS CONSOLE FOR STAFF ROLES */}
+          {/* STAFF / OPERATIONS DASHBOARD - Original full view */}
           {/* KEY INDICATORS (4 core cards) */}
           <section>
             <div className="section-head" style={{ marginBottom: 12 }}>
@@ -697,6 +708,88 @@ export default function DashboardPage() {
       <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>
         Data refreshed from backend. Use the Refresh button for the latest snapshot.
         {isViewer && " (Personal read-only view)"}
+      </div>
+
+      {/* Request New Visit Modal for Viewer (opened directly from Quick Action) */}
+      {isViewer && showRequestModal && (
+        <RequestVisitModalForDashboard 
+          onClose={() => setShowRequestModal(false)} 
+          onSuccess={() => {
+            // Refresh viewer data after successful request creation
+            loadViewerDashboard();
+            setShowRequestModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* Small self-contained modal for creating request directly from Viewer Dashboard */
+function RequestVisitModalForDashboard({ onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    prisoner_id: "",
+    requested_date: new Date().toISOString().slice(0, 16),
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/visits/request", {
+        prisoner_id: Number(form.prisoner_id),
+        requested_date: form.requested_date,
+      });
+      onSuccess(); // will refresh dashboard data and close
+    } catch (err) {
+      setError(parseApiError(err) || "Failed to submit request");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Request a Visit</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+
+        {error && <div className="error-msg">{error}</div>}
+
+        <form className="form-grid" onSubmit={handleSubmit} style={{ padding: "18px 20px 20px" }}>
+          <label>
+            Prisoner ID
+            <input 
+              type="number" 
+              value={form.prisoner_id} 
+              onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} 
+              required 
+            />
+          </label>
+          <label>
+            Requested date
+            <input 
+              type="datetime-local" 
+              value={form.requested_date} 
+              onChange={(e) => setForm({ ...form, requested_date: e.target.value })} 
+              required 
+            />
+          </label>
+
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>
+              {loading ? "Submitting..." : "Submit Request"}
+            </button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
+              Cancel
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
