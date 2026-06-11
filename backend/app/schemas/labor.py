@@ -124,6 +124,25 @@ PerformanceRead = DailyPerformanceRead
 
 
 # --- Basic schemas for Viewer role ---
+class LaborProjectReadBasic(BaseModel):
+    # Basic projection for Viewer via vw_LaborProjects_Basic (location_name may be joined in view)
+    project_id: int
+    project_name: str
+    location_id: int | None = None
+    location_name: str | None = None
+    revenue_per_hour: Decimal
+    priority_score: int
+    max_workers: int
+    current_workers: int = 0
+    open_slots: int = 0
+    required_skills: str | None = None
+    is_active: bool
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class LaborAssignmentReadBasic(BaseModel):
     assignment_id: int
     prisoner_id: int

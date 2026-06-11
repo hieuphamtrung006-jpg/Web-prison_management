@@ -108,9 +108,35 @@ GO
 PRINT 'Created View: vw_LaborAssignments_Basic';
 
 
+-- ============================================================
+-- View 5: LaborProjects (cho Viewer - dữ liệu công khai, không nhạy cảm cá nhân)
+-- ============================================================
+IF OBJECT_ID('dbo.vw_LaborProjects_Basic', 'V') IS NOT NULL
+    DROP VIEW dbo.vw_LaborProjects_Basic;
+GO
+
+CREATE VIEW dbo.vw_LaborProjects_Basic AS
+SELECT 
+    LP.ProjectID,
+    LP.ProjectName,
+    LP.LocationID,
+    L.LocationName,
+    LP.RevenuePerHour,
+    LP.PriorityScore,
+    LP.MaxWorkers,
+    LP.RequiredSkills,
+    LP.IsActive,
+    LP.CreatedAt,
+    LP.UpdatedAt
+FROM dbo.LaborProjects LP
+LEFT JOIN dbo.Locations L ON L.LocationID = LP.LocationID;
+GO
+
+PRINT 'Created View: vw_LaborProjects_Basic';
+
 
 -- ============================================================
--- View 5: Locations (cho phép xem đầy đủ vì ít nhạy cảm)
+-- View 6: Locations (cho phép xem đầy đủ vì ít nhạy cảm)
 -- ============================================================
 IF OBJECT_ID('dbo.vw_Locations_Basic', 'V') IS NOT NULL
     DROP VIEW dbo.vw_Locations_Basic;
@@ -138,10 +164,12 @@ Các View đã tạo:
 - vw_Visits_Basic
 - vw_Incidents_Basic
 - vw_LaborAssignments_Basic
+- vw_LaborProjects_Basic
 - vw_Locations_Basic
 
 Lưu ý: 
-- Viewer chỉ nên được cấp quyền SELECT trên các View này.
-- Không cấp quyền SELECT trực tiếp trên các bảng gốc (Prisoners, Visits, Incidents...).
+- Viewer chỉ nên được cấp quyền SELECT trên các View này (kể cả vw_LaborProjects_Basic).
+- Không cấp quyền SELECT trực tiếp trên các bảng gốc (Prisoners, Visits, Incidents, Labor*...).
+- Backend sử dụng get_table_name_for_role + execute_viewer_query khi current_user.role=Viewer.
 ';
 GO

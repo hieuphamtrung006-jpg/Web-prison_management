@@ -27,6 +27,7 @@ from app.schemas.labor import (
     LaborAssignmentUpdate,
     LaborProjectCreate,
     LaborProjectRead,
+    LaborProjectReadBasic,
     LaborProjectSummary,
     LaborProjectUpdate,
     PrisonerPerformancePoint,
@@ -143,11 +144,45 @@ def list_projects(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> list[LaborProjectRead]:
+    """
+    Viewer role: load via vw_LaborProjects_Basic (using execute_viewer_query helper)
+    to ensure no permission issues / column filtering at DB view level.
+    current_workers approximated to 0 (Schedule not exposed to Viewer views).
+    Non-Viewer: full ORM with live current_workers from Schedule.
+    """
     target_date = on_date or date.today()
     offset = (page - 1) * page_size
 
+    # Role-based data fetch for Viewer (fixes Network Error on /labor/projects for Viewer)
+    table_name = get_table_name_for_role("LaborProjects", current_user.role)
+    if table_name.startswith("vw_"):
+        # Viewer path: raw query against the safe Basic view
+        # View should expose ProjectID, ProjectName, LocationID, LocationName (joined), Revenue..., etc.
+        # We enrich current_workers/open_slots here (0 for basic view; UI falls back gracefully).
+        normalized_rows = execute_viewer_query(
+            db,
+            table_name,
+            where_clause="",
+            params={"offset": offset, "limit": page_size},
+            order_by="ORDER BY ProjectID DESC",
+            limit_clause="OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY",
+        )
+        results = []
+        for row in normalized_rows:
+            data = dict(row)  # already snake_cased by normalize_db_row
+            max_w = int(data.get("max_workers") or 1)
+            data["current_workers"] = 0
+            data["open_slots"] = max(max_w - 0, 0)
+            # Ensure timestamps exist for LaborProjectRead (view may include CreatedAt/UpdatedAt)
+            if not data.get("created_at"):
+                data["created_at"] = _now_utc()
+            # model_validate will accept extra or missing optionals; open_slots etc provided
+            results.append(LaborProjectRead.model_validate(data))
+        return results
+
+    # Non-Viewer (Admin/Warden/Guard): original full logic with live worker counts
     schedule_subquery = (
         db.query(
             Schedule.project_id.label("project_id"),
@@ -303,7 +338,7 @@ def delete_project(
     return MessageResponse(detail="Project deleted")
 
 
-@router.get("/assignments", response_model=list[LaborAssignmentRead])
+@router.get("/assignments", response_model=list[LaborAssignmentRead] | list[LaborAssignmentReadBasic])
 def list_assignments(
     prisoner_id: int | None = Query(default=None, gt=0),
     project_id: int | None = Query(default=None, gt=0),
@@ -311,14 +346,17 @@ def list_assignments(
     page_size: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
-) -> list[LaborAssignmentRead]:
+) -> list[LaborAssignmentRead] | list[LaborAssignmentReadBasic]:
     """
-    Viewer sẽ query vw_LaborAssignments_Basic thay vì bảng gốc.
+    Viewer sẽ query vw_LaborAssignments_Basic thay vì bảng gốc (sử dụng execute_viewer_query + Basic schema).
+    Sử dụng response_model Union để tránh validation error khi trả Basic (thiếu joined names + timestamps) -> loại bỏ Network Error.
     """
     table_name = get_table_name_for_role("LaborAssignments", current_user.role)
 
     if table_name.startswith("vw_"):
         # Viewer path: raw select from view (các cột trong view có thể đã được alias sẵn)
+        # FIX: where_clause không prefix "WHERE " (execute_viewer_query sẽ tự thêm " WHERE " + where_clause)
+        # Khớp logic với list_performance viewer path.
         offset = (page - 1) * page_size
         conditions = []
         params = {"offset": offset, "limit": page_size}
@@ -330,14 +368,7 @@ def list_assignments(
             conditions.append("ProjectID = :project_id")
             params["project_id"] = project_id
 
-        where = "WHERE " + " AND ".join(conditions) if conditions else ""
-        sql = f"""
-            SELECT * FROM {table_name}
-            {where}
-            ORDER BY AssignmentID DESC
-            OFFSET :offset ROWS
-            FETCH NEXT :limit ROWS ONLY
-        """
+        where = " AND ".join(conditions) if conditions else ""
         normalized_rows = execute_viewer_query(
             db,
             table_name,
