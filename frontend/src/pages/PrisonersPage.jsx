@@ -275,7 +275,7 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
               <option value="">Unassigned</option>
               {locations.map((location) => (
                 <option key={location.location_id} value={location.location_id}>
-                  {location.location_name} ({location.current_occupancy}/{location.capacity)}
+                  {`${location.location_name} (${location.current_occupancy}/${location.capacity})`}
                 </option>
               ))}
             </select>
@@ -427,7 +427,7 @@ function CreatePrisonerModal({ locations, onClose, onSaved, showToast }) {
               <option value="">Unassigned</option>
               {locations.map((location) => (
                 <option key={location.location_id} value={location.location_id}>
-                  {location.location_name} ({location.current_occupancy}/{location.capacity})
+                  {`${location.location_name} (${location.current_occupancy}/${location.capacity})`}
                 </option>
               ))}
             </select>
