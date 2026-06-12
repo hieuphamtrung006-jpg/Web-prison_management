@@ -25,7 +25,8 @@ const initialFilters = {
   prisoner_id: "",  // Added for Viewer convenience (search by exact ID)
 };
 
-const editableByGuard = ["full_name", "gender", "crime_type", "risk_level", "rehab_hours"];
+// Fields Guard is allowed to edit (operational only). Other fields must remain read-only or hidden in the Edit modal.
+const guardEditableFields = ["current_location_id", "status", "risk_level"];
 
 function formatDateOnly(value) {
   if (!value) {
@@ -82,6 +83,8 @@ function RiskBadge({ value }) {
 
 function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, showToast }) {
   const canEditAll = userRole === "Admin" || userRole === "Warden";
+  const isGuardRole = userRole === "Guard"; // Guard: limited operational edits only
+
   const [form, setForm] = useState({
     full_name: prisoner?.full_name || "",
     date_of_birth: prisoner?.date_of_birth || "",
@@ -119,26 +122,33 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
     setError("");
 
     try {
-      const payload = {
-        full_name: form.full_name,
-        gender: form.gender || null,
-        crime_type: form.crime_type || null,
-        risk_level: form.risk_level || null,
-        rehab_hours: Number(form.rehab_hours),
-      };
+      let payload = {};
 
       if (canEditAll) {
-        payload.date_of_birth = form.date_of_birth || null;
-        payload.current_location_id = normalizeLocationId(form.current_location_id);
-        payload.sentence_start = form.sentence_start || null;
-        payload.sentence_end = form.sentence_end || null;
-        payload.status = form.status;
-      } else {
-        editableByGuard.forEach((field) => {
-          payload[field] = field === "rehab_hours" ? Number(form[field]) : form[field] || null;
-        });
+        // Admin / Warden: full access
+        payload = {
+          full_name: form.full_name,
+          gender: form.gender || null,
+          crime_type: form.crime_type || null,
+          risk_level: form.risk_level || null,
+          rehab_hours: Number(form.rehab_hours),
+          date_of_birth: form.date_of_birth || null,
+          current_location_id: normalizeLocationId(form.current_location_id),
+          sentence_start: form.sentence_start || null,
+          sentence_end: form.sentence_end || null,
+          status: form.status,
+        };
+      } else if (isGuardRole) {
+        // Guard: ONLY allowed operational fields (per role requirements)
+        // Other changes are ignored even if form state has them.
+        payload = {
+          current_location_id: normalizeLocationId(form.current_location_id),
+          status: form.status,
+          risk_level: form.risk_level || null,
+        };
       }
 
+      // Clean undefined / empty
       Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) {
           delete payload[key];
@@ -158,6 +168,15 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
     }
   };
 
+  // Helper to render a disabled (read-only) input for fields Guard is not allowed to change
+  const readOnlyInput = (value) => (
+    <input
+      value={value || ""}
+      disabled
+      style={{ background: "#f1f5f9", color: "#64748b", cursor: "not-allowed" }}
+    />
+  );
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -170,12 +189,25 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
 
         {error && <div className="error-msg">{error}</div>}
 
+        {/* Role note for Guard */}
+        {isGuardRole && (
+          <div className="readonly-note" style={{ margin: "0 20px 12px" }}>
+            Guard role: You may only edit <strong>Current Location</strong>, <strong>Status</strong> and <strong>Risk Level</strong>. Other fields are shown read-only.
+          </div>
+        )}
+
         <form className="form-grid" onSubmit={handleSubmit}>
+          {/* Full name - read-only for Guard */}
           <label>
             Full name
-            <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
+            {canEditAll ? (
+              <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
+            ) : (
+              readOnlyInput(form.full_name)
+            )}
           </label>
 
+          {/* DOB - only for full editors (or read-only if we want to show for Guard) */}
           {canEditAll ? (
             <label>
               Date of birth
@@ -183,20 +215,31 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             </label>
           ) : null}
 
+          {/* Gender - read-only for Guard */}
           <label>
             Gender
-            <select value={form.gender || ""} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-              <option value="Other">Other</option>
-            </select>
+            {canEditAll ? (
+              <select value={form.gender || ""} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            ) : (
+              readOnlyInput(form.gender)
+            )}
           </label>
 
+          {/* Crime type - read-only for Guard */}
           <label>
             Crime type
-            <input value={form.crime_type} onChange={(e) => setForm({ ...form, crime_type: e.target.value })} />
+            {canEditAll ? (
+              <input value={form.crime_type} onChange={(e) => setForm({ ...form, crime_type: e.target.value })} />
+            ) : (
+              readOnlyInput(form.crime_type)
+            )}
           </label>
 
+          {/* Risk level - EDITABLE for Guard (operational field) */}
           <label>
             Risk level
             <select value={form.risk_level || ""} onChange={(e) => setForm({ ...form, risk_level: e.target.value })}>
@@ -206,30 +249,35 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             </select>
           </label>
 
+          {/* Rehab hours - read-only for Guard */}
           <label>
             Rehab hours
-            <input
-              type="number"
-              min={0}
-              value={form.rehab_hours}
-              onChange={(e) => setForm({ ...form, rehab_hours: e.target.value })}
-            />
+            {canEditAll ? (
+              <input
+                type="number"
+                min={0}
+                value={form.rehab_hours}
+                onChange={(e) => setForm({ ...form, rehab_hours: e.target.value })}
+              />
+            ) : (
+              readOnlyInput(form.rehab_hours)
+            )}
           </label>
 
-          {canEditAll ? (
-            <label>
-              Current location
-              <select value={form.current_location_id} onChange={(e) => setForm({ ...form, current_location_id: e.target.value })}>
-                <option value="">Unassigned</option>
-                {locations.map((location) => (
-                  <option key={location.location_id} value={location.location_id}>
-                    {location.location_name} ({location.current_occupancy}/{location.capacity})
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+          {/* Current location - EDITABLE for Guard (key operational field) */}
+          <label>
+            Current location
+            <select value={form.current_location_id} onChange={(e) => setForm({ ...form, current_location_id: e.target.value })}>
+              <option value="">Unassigned</option>
+              {locations.map((location) => (
+                <option key={location.location_id} value={location.location_id}>
+                  {location.location_name} ({location.current_occupancy}/{location.capacity})
+                </option>
+              ))}
+            </select>
+          </label>
 
+          {/* Sentence dates - only full editors (hidden for Guard) */}
           {canEditAll ? (
             <label>
               Sentence start
@@ -244,15 +292,14 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             </label>
           ) : null}
 
-          {canEditAll ? (
-            <label>
-              Status
-              <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                <option value="InPrison">InPrison</option>
-                <option value="Released">Released</option>
-              </select>
-            </label>
-          ) : null}
+          {/* Status - EDITABLE for Guard (key operational field) */}
+          <label>
+            Status
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option value="InPrison">InPrison</option>
+              <option value="Released">Released</option>
+            </select>
+          </label>
 
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>
@@ -560,8 +607,12 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
 export default function PrisonersPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
+  const isGuard = user?.role === "Guard";
+
+  // Role-based permissions (using current_user.role)
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
-  const canEdit = user?.role === "Admin" || user?.role === "Warden";
+  // Guard gets limited Edit rights (only specific operational fields)
+  const canEdit = user?.role === "Admin" || user?.role === "Warden" || isGuard;
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
 
   const [rows, setRows] = useState([]);
@@ -707,6 +758,9 @@ export default function PrisonersPage() {
       ]
     : [];
 
+  // For layout: roles without Create permission (Guard + Viewer) get the full-width main area (no left action column wasting space)
+  const hasCreateAction = canCreate;
+
   // Open detail modal for a prisoner
   const openPrisonerDetail = async (prisonerId) => {
     await loadPrisonerDetail(prisonerId);
@@ -731,22 +785,24 @@ export default function PrisonersPage() {
   return (
     <>
       <div className="page-action-layout">
-        {/* Hide action sidebar for Viewer to reduce empty space on the left (no Create action) */}
-        {!isViewer && (
+        {/* Hide left action sidebar for roles without Create (Guard + Viewer).
+           This frees horizontal space so table columns (esp. Name, Location, Status) can be wider and the page looks balanced. */}
+        {hasCreateAction && (
           <div className="page-action-column">
             <ActionSidebar title="Actions" actions={createActions} />
           </div>
         )}
 
-        <div className="page-main-data" style={isViewer ? { marginLeft: 0 } : {}}>
-          {/* Full width table (main content now takes the available space) */}
-          {/* For Viewer: tighter padding to reduce wasted space since no left sidebar actions */}
-          <section className="panel" style={isViewer ? { paddingTop: '8px' } : {}}>
+        <div className="page-main-data" style={!hasCreateAction ? { marginLeft: 0 } : {}}>
+          {/* For Guard/Viewer (no Create): tighter vertical rhythm + full width for better table readability */}
+          <section className="panel" style={!hasCreateAction ? { paddingTop: '8px', paddingBottom: '8px' } : {}}>
             <h2>Prisoners</h2>
-            <p className="hint-text" style={isViewer ? { marginBottom: '6px', fontSize: '0.85rem' } : {}}>
+            <p className="hint-text" style={!hasCreateAction ? { marginBottom: '6px', fontSize: '0.85rem' } : {}}>
               {isViewer 
                 ? "Search by name or Prisoner ID (enter number for ID). Click a row to view details." 
-                : "Search by name, risk level, or location. Click a row to view full details in a modal."}
+                : isGuard
+                  ? "Guard view: You can edit Current Location, Status and Risk Level. Click row for details or use Edit button."
+                  : "Search by name, risk level, or location. Click a row to view full details in a modal."}
             </p>
 
             {error && <div className="error-msg">{error}</div>}
@@ -754,7 +810,7 @@ export default function PrisonersPage() {
             <form 
               className="prisoners-toolbar" 
               onSubmit={handleSearch}
-              style={isViewer ? { marginBottom: '4px' } : {}}
+              style={!hasCreateAction ? { marginBottom: '4px' } : {}}
             >
               {/* Added ID search for Viewer convenience (they often have Prisoner ID from documents) */}
               <label>
@@ -807,7 +863,7 @@ export default function PrisonersPage() {
               </button>
             </form>
 
-            <div className="inline-form pagination" style={isViewer ? { marginTop: '2px', marginBottom: '6px' } : {}}>
+            <div className="inline-form pagination" style={!hasCreateAction ? { marginTop: '2px', marginBottom: '4px' } : {}}>
               <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))}>
                 Prev
               </button>
