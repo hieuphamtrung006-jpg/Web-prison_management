@@ -26,7 +26,8 @@ const initialFilters = {
 };
 
 // Fields Guard is allowed to edit (operational only). Other fields must remain read-only or hidden in the Edit modal.
-const guardEditableFields = ["current_location_id", "status", "risk_level"];
+// Danh sách field Guard được phép sửa (chỉ Current Location + Status theo yêu cầu mới nhất)
+const guardEditableFields = ["current_location_id", "status"];
 
 function formatDateOnly(value) {
   if (!value) {
@@ -83,7 +84,7 @@ function RiskBadge({ value }) {
 
 function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, showToast }) {
   const canEditAll = userRole === "Admin" || userRole === "Warden";
-  const isGuardRole = userRole === "Guard"; // Guard: limited operational edits only
+  const isGuardRole = userRole === "Guard"; // Guard: chỉ được sửa Current Location + Status (các trường khác read-only)
 
   const [form, setForm] = useState({
     full_name: prisoner?.full_name || "",
@@ -139,12 +140,11 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
           status: form.status,
         };
       } else if (isGuardRole) {
-        // Guard: ONLY allowed operational fields (per role requirements)
-        // Other changes are ignored even if form state has them.
+        // Guard: CHỈ được sửa Current Location và Status (theo yêu cầu).
+        // Không gửi các trường khác.
         payload = {
           current_location_id: normalizeLocationId(form.current_location_id),
           status: form.status,
-          risk_level: form.risk_level || null,
         };
       }
 
@@ -192,7 +192,7 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
         {/* Role note for Guard */}
         {isGuardRole && (
           <div className="readonly-note" style={{ margin: "0 20px 12px" }}>
-            Guard role: You may only edit <strong>Current Location</strong>, <strong>Status</strong> and <strong>Risk Level</strong>. Other fields are shown read-only.
+            Guard role: Bạn chỉ được sửa <strong>Current Location</strong> và <strong>Status</strong>. Các trường khác chỉ xem (read-only).
           </div>
         )}
 
@@ -239,14 +239,18 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             )}
           </label>
 
-          {/* Risk level - EDITABLE for Guard (operational field) */}
+          {/* Risk level - read-only cho Guard (chỉ Admin/Warden được sửa) */}
           <label>
             Risk level
-            <select value={form.risk_level || ""} onChange={(e) => setForm({ ...form, risk_level: e.target.value })}>
-              <option value="Low">Low</option>
-              <option value="Medium">Medium</option>
-              <option value="High">High</option>
-            </select>
+            {canEditAll ? (
+              <select value={form.risk_level || ""} onChange={(e) => setForm({ ...form, risk_level: e.target.value })}>
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+              </select>
+            ) : (
+              readOnlyInput(form.risk_level)
+            )}
           </label>
 
           {/* Rehab hours - read-only for Guard */}
@@ -264,14 +268,14 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             )}
           </label>
 
-          {/* Current location - EDITABLE for Guard (key operational field) */}
+          {/* Current location - EDITABLE cho Guard (chỉ field này + Status) */}
           <label>
             Current location
             <select value={form.current_location_id} onChange={(e) => setForm({ ...form, current_location_id: e.target.value })}>
               <option value="">Unassigned</option>
               {locations.map((location) => (
                 <option key={location.location_id} value={location.location_id}>
-                  {location.location_name} ({location.current_occupancy}/{location.capacity})
+                  {location.location_name} ({location.current_occupancy}/{location.capacity)}
                 </option>
               ))}
             </select>
@@ -292,7 +296,7 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             </label>
           ) : null}
 
-          {/* Status - EDITABLE for Guard (key operational field) */}
+          {/* Status - EDITABLE cho Guard (chỉ field này + Current Location) */}
           <label>
             Status
             <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
@@ -609,9 +613,9 @@ export default function PrisonersPage() {
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
 
-  // Role-based permissions (using current_user.role)
+  // Role-based permissions (dựa trên current_user.role)
   const canCreate = user?.role === "Admin" || user?.role === "Warden";
-  // Guard gets limited Edit rights (only specific operational fields)
+  // Guard: được phép Edit limited (chỉ Current Location + Status), không Create, không Delete
   const canEdit = user?.role === "Admin" || user?.role === "Warden" || isGuard;
   const canDelete = user?.role === "Admin" || user?.role === "Warden";
 
@@ -785,8 +789,8 @@ export default function PrisonersPage() {
   return (
     <>
       <div className="page-action-layout">
-        {/* Hide left action sidebar for roles without Create (Guard + Viewer).
-           This frees horizontal space so table columns (esp. Name, Location, Status) can be wider and the page looks balanced. */}
+        {/* Ẩn cột Actions bên trái cho Guard (và Viewer) vì không có nút Create.
+           Giúp nới rộng bảng, đặc biệt các cột Name, Location, Status. */}
         {hasCreateAction && (
           <div className="page-action-column">
             <ActionSidebar title="Actions" actions={createActions} />
@@ -794,14 +798,14 @@ export default function PrisonersPage() {
         )}
 
         <div className="page-main-data" style={!hasCreateAction ? { marginLeft: 0 } : {}}>
-          {/* For Guard/Viewer (no Create): tighter vertical rhythm + full width for better table readability */}
+          {/* Guard/Viewer (no Create): full width + tighter spacing để bảng rộng rãi hơn */}
           <section className="panel" style={!hasCreateAction ? { paddingTop: '8px', paddingBottom: '8px' } : {}}>
             <h2>Prisoners</h2>
             <p className="hint-text" style={!hasCreateAction ? { marginBottom: '6px', fontSize: '0.85rem' } : {}}>
               {isViewer 
                 ? "Search by name or Prisoner ID (enter number for ID). Click a row to view details." 
                 : isGuard
-                  ? "Guard view: You can edit Current Location, Status and Risk Level. Click row for details or use Edit button."
+                  ? "Guard view: Chỉ được sửa Current Location và Status. Click row hoặc nút Edit để chỉnh sửa."
                   : "Search by name, risk level, or location. Click a row to view full details in a modal."}
             </p>
 
@@ -889,8 +893,9 @@ export default function PrisonersPage() {
                     <tr>
                       <th>ID</th>
                       <th>Name</th>
-                      {!isViewer && <th>DOB</th>}
-                      {!isViewer && <th>Crime</th>}
+                      {/* Chỉ Admin/Warden (có nút Create) mới thấy DOB và Crime để nới rộng Name/Location/Status cho Guard */}
+                      {canCreate && <th>DOB</th>}
+                      {canCreate && <th>Crime</th>}
                       <th>Risk Level</th>
                       <th>Location</th>
                       <th>Status</th>
@@ -909,8 +914,9 @@ export default function PrisonersPage() {
                         >
                           <td>{row.prisoner_id}</td>
                           <td>{row.full_name}</td>
-                          {!isViewer && <td>{formatDateOnly(row.date_of_birth)}</td>}
-                          {!isViewer && <td>{row.crime_type || "-"}</td>}
+                          {/* Ẩn DOB và Crime cho Guard để nới rộng các cột quan trọng (Name, Location, Status) */}
+                          {canCreate && <td>{formatDateOnly(row.date_of_birth)}</td>}
+                          {canCreate && <td>{row.crime_type || "-"}</td>}
                           <td>
                             <RiskBadge value={row.risk_level} />
                           </td>

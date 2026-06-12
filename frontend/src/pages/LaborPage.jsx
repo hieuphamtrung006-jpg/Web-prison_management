@@ -349,12 +349,14 @@ export default function LaborPage() {
   const { user } = useAuth();
   // current_user.role from AuthContext (JWT). Used for ALL UI branching and some fetch decisions.
   const isViewer = user?.role === "Viewer";
-  // Viewer can view Labor data but cannot manage (create/edit/delete). Matches backend require_roles + view paths.
+  // current_user.role controls:
+  // - Viewer: read-only on everything, no performance, special fetch (vw_ Basic), no sidebar, tighter layout.
+  // - Guard: full control on Assignments + Performance (Create/Edit/Delete + Log), but only VIEW on Projects (no create/edit/delete on projects).
+  // - Admin/Warden: full control on Projects + Labor.
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
-  const canCreateAssignment = canManageProjects;
-  // Viewer: can view Projects + Assignments (from vw_Labor*Basic via backend), but never Performance related (no log, no history, skipped in refreshAll)
-  // This + hiding action column + tighter margins + no filter-bar => clean, balanced, professional layout without Network Error or empty regions.
+  const canCreateAssignment = canManageLabor; // Guard needs full Create on Assignments
+  // Note: Guard will load full (non-vw) data paths → no Network Error from viewer raw query issues.
 
   const [projects, setProjects] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -769,9 +771,9 @@ export default function LaborPage() {
     return options;
   }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
 
-  // Viewer: hide the entire left action column (ActionSidebar returns null for empty actions anyway).
-  // Omitting .page-action-column makes .page-main-data take full width -> content "pushed up", no wasted left space, cleaner for Viewer.
-  const showActionColumn = !isViewer; // Only non-Viewer (Guard/Warden/Admin) see create/log actions
+  // showActionColumn: Guard + higher roles see the left sidebar (with only the actions they are allowed via canManage*).
+  // Viewer hides it entirely for cleaner full-width layout.
+  const showActionColumn = !isViewer; // Guard/Warden/Admin see sidebar actions (Create Assignment / Log Performance etc. controlled inside by can* flags)
 
   return (
     <>
@@ -793,8 +795,8 @@ export default function LaborPage() {
       <div className="page-main-data">
       <div style={{ display: 'block' }}>
         <div className="labor-stack">
-          {/* Viewer layout: tight vertical rhythm (8px or less) between Projects and Assignments after hiding Performance sections.
-             This + omitting left action column + hiding filter-bar below makes the page clean, balanced, no large empty regions. */}
+          {/* For Viewer: tighter margins (no performance section + no sidebar).
+              Guard sees full sections (Assignments + full Performance) with normal spacing, but clean read-only Projects table (no Actions column). */}
           <section className="panel" style={isViewer ? { marginBottom: '8px' } : {}}>
             <div className="section-head">
               <div>
@@ -837,8 +839,9 @@ export default function LaborPage() {
                       <th>Current Workers</th>
                       <th>Revenue / Hour</th>
                       <th>Status</th>
-                      {/* Viewer: no Actions column at all (no edit/delete). Column entirely omitted for clean table. */}
-                      {!isViewer && <th>Actions</th>}
+                      {/* Chỉ Admin/Warden mới thấy cột Actions ở Labor Projects (vì họ canManageProjects).
+                          Guard chỉ được xem Projects (read-only) → ẩn cột Actions hoàn toàn để bảng sạch sẽ, không có nút thừa. */}
+                      {canManageProjects && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -866,8 +869,8 @@ export default function LaborPage() {
                             <span className={`status-badge ${status.className}`}>{status.label}</span>
                             <div className="mini-muted">{project.open_slots} open</div>
                           </td>
-                          {/* Viewer sees no action buttons (Edit/Delete guarded by !isViewer and canManage checks). */}
-                          {!isViewer && (
+                          {/* Guard không thấy cột này. Chỉ role có canManageProjects mới render td + nút Edit/Delete. */}
+                          {canManageProjects && (
                             <td>
                               <div className="project-actions">
                                 {canManageProjects && (
@@ -888,7 +891,7 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Viewer: smaller marginTop + previous marginBottom on Projects => sections are visually closer, balanced, no large whitespace after Performance was hidden. Order: Projects then Assignments. */}
+          {/* Assignments section always shown for Guard (full management) and higher roles. */}
           <section className="panel" style={isViewer ? { marginTop: '8px' } : {}}>
             <div className="section-head">
               <div>
@@ -913,8 +916,8 @@ export default function LaborPage() {
               </label>
             </div>
 
-            {/* Viewer: hide the server-side filter-bar entirely (filters are not sent to backend for isViewer; would be ignored anyway).
-                Top search + client-side filter in sortedAssignments + pagination is sufficient and keeps UI clean/compact for Viewer. */}
+            {/* Server-side filter bar hidden for Viewer (they use client-side only).
+                Guard and higher roles see and can use the filter bar (full backend query). */}
             {!isViewer && (
             <div className="filter-bar">
               <label>
@@ -998,8 +1001,8 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Performance History + Log fully hidden for Viewer (role check on current_user.role).
-             Combined with skipping loadPerformance in refreshAll + no sidebar Log action => no wasted space, no Network Error from perf endpoint. */}
+          {/* Performance History + Log fully hidden only for Viewer.
+             Guard (canManageLabor) sees the full Performance section + Log button + History, just like Admin/Warden. */}
           {!isViewer && (
           <section className="panel">
             <div className="history-header">
