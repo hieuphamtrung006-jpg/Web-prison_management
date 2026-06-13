@@ -939,8 +939,18 @@ export default function PrisonersPage() {
                                   type="button"
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    await loadPrisonerDetail(row.prisoner_id);
-                                    setEditingPrisoner(row);
+                                    // IMPORTANT for role-based: direct Edit from table row for Guard.
+                                    // Explicitly close any open detail/view modal first (setSelectedPrisoner null).
+                                    // Do NOT call loadPrisonerDetail (avoids triggering View modal).
+                                    // This ensures ONLY the Edit modal opens - no stacking.
+                                    // onView (row click / View button) is separate from onEdit (this handler).
+                                    setSelectedPrisoner(null);
+                                    try {
+                                      const res = await api.get(`/prisoners/${row.prisoner_id}`);
+                                      setEditingPrisoner(res.data);
+                                    } catch (err) {
+                                      setEditingPrisoner(row);
+                                    }
                                   }}
                                 >
                                   Edit
