@@ -445,11 +445,15 @@ export default function VisitsPage() {
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
 
-  // Guard is operational staff: can create visits, see requests, approve/reject requests.
-  // Only Viewer is strictly read-only for personal requests.
-  const isReadOnly = isViewer;
-  const canManageVisits = !isViewer; // Guard + higher can create/edit visits
-  const canApproveReject = !isViewer; // Guard allowed to Duyệt / Từ chối
+  // Role-based permissions for Visits (using current_user.role)
+  // - Viewer: only personal requests (read-only, create request only)
+  // - Guard: operational - can view all, create manual Visit, edit Visit, approve/reject requests. NO delete Visit, NO create Request.
+  // - Warden/Admin: full control (create, edit, delete, approve, etc.)
+  const canCreateVisit = !isViewer; // Guard + higher: create manual (approved) Visit
+  const canRequestVisit = isViewer; // Only Viewer creates "Visit Request"
+  const canEditVisit = !isViewer;   // Guard + higher
+  const canDeleteVisit = !isViewer && !isGuard; // Only Warden/Admin
+  const canApproveReject = !isViewer; // Guard + higher can duyệt/từ chối request
 
   const [rows, setRows] = useState([]);
   const [prisoners, setPrisoners] = useState([]);
@@ -475,7 +479,7 @@ export default function VisitsPage() {
   // Selected request for detail modal (Viewer only)
   const [viewingRequest, setViewingRequest] = useState(null);
 
-  // Filters for staff/Guard: status drives server load, prisoner/date are client-side
+  // Filters for staff/Guard table: status (server via load), prisoner + date (client)
   const [filterStatus, setFilterStatus] = useState("Approved");
   const [filterPrisonerId, setFilterPrisonerId] = useState("");
   const [filterDate, setFilterDate] = useState("");
@@ -504,7 +508,9 @@ export default function VisitsPage() {
     }
   };
 
-  // Load visits (for Guard/staff we respect the filterStatus for trạng thái filter)
+  // Load visits rows.
+  // For Guard/staff: use filterStatus so user can filter by trạng thái (server-side).
+  // Viewer always sees only Approved.
   const load = async () => {
     try {
       const statusToLoad = isViewer ? "Approved" : filterStatus;
@@ -516,7 +522,7 @@ export default function VisitsPage() {
   };
 
   const loadPendingRequests = async () => {
-    if (isViewer) return; // Guard is allowed to see and approve/reject requests
+    if (isViewer) return; // Guard + higher can see and manage pending requests
     try {
       const response = await api.get("/visits/requests/pending");
       setPendingRequests(response.data);
@@ -525,7 +531,7 @@ export default function VisitsPage() {
     }
   };
 
-  // Load visits rows (depends on page + filterStatus for Guard)
+  // Load visits + pending (when page or status filter changes)
   useEffect(() => {
     load();
     if (!isViewer) {
@@ -653,36 +659,43 @@ export default function VisitsPage() {
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
-  const canRequest = isViewer;
-
+  // Sidebar actions - strictly controlled by role (no duplicate flags)
   const actions = [];
-  if (canRequest) {
-    // For Viewer: first open the prisoner search/selector modal (no need to manually enter ID)
+  if (canRequestVisit) {
+    // Only Viewer can create "Visit Request" (personal request flow)
     actions.push({ 
       label: "Request Visit", 
       onClick: () => setShowPrisonerSelector(true) 
     });
   }
-  if (canManageVisits) {
+  if (canCreateVisit) {
+    // Guard + Warden + Admin can create manual Visit (thủ công)
     actions.push({ label: "+ Create Visit", onClick: () => setShowCreateModal(true), variant: "create" });
-    // Per-row Edit button in the table is now the recommended way (much better UX)
   }
 
-  // Guard can also see and use the Pending requests section with Duyệt/Từ chối.
+  // Guard can see and manage the Pending requests section (Duyệt / Từ chối).
 
   // Note: Viewer flow for request creation is: Request Visit -> PrisonerSelectorModal -> RequestVisitModal (with prefilled ID)
 
   // Note: For Viewer, the main content is "My Visit Requests" (see branched panel below).
   // Request creation will auto-refresh the list via onSaved in the modal.
 
+  // Layout improvement: if no sidebar actions (or very limited create), hide the left column
+  // and expand the main content area (đẩy thông tin sang, table wider, less wasted space).
+  const hasSidebarActions = actions.length > 0;
+
   return (
     <div className="page-action-layout">
-      <div className="page-action-column">
-        <ActionSidebar title="Actions" actions={actions} />
-      </div>
+      {/* Hide left sidebar when no actions for the role (e.g. very limited create).
+         This expands the main data area (đẩy trường thông tin sang, table + filters wider and cleaner). */}
+      {hasSidebarActions && (
+        <div className="page-action-column">
+          <ActionSidebar title="Actions" actions={actions} />
+        </div>
+      )}
 
-      <div className="page-main-data">
-      <section className="panel">
+      <div className="page-main-data" style={!hasSidebarActions ? { marginLeft: 0 } : {}}>
+      <section className="panel" style={!hasSidebarActions ? { paddingTop: '8px', paddingBottom: '8px' } : {}}>
         <div className="panel-header">
           <h2>{isViewer ? "My Visit Requests" : "Visits"}</h2>
         </div>
@@ -877,13 +890,15 @@ export default function VisitsPage() {
                   <th>Date</th>
                   <th>Status</th>
                   <th>Notes</th>
-                  {canManageVisits && <th style={{ width: "130px" }}>Actions</th>}
+                  {/* Actions column only if Guard or higher has edit/delete rights */}
+                  {(canEditVisit || canDeleteVisit) && <th style={{ width: "130px" }}>Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageVisits ? 7 : 6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
+                    {/* Always 7 columns when Actions are possible; Guard has Edit but no Delete, so still show the column */}
+                    <td colSpan={7} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
                       {searchTerm ? "No visits match your search." : "No visits found."}
                     </td>
                   </tr>
@@ -907,26 +922,31 @@ export default function VisitsPage() {
                           {row.notes || "-"}
                         </td>
 
-                        {canManageVisits && (
+                        {/* Guard: only Edit (no Delete). Warden/Admin: full Edit + Delete. */}
+                        {(canEditVisit || canDeleteVisit) && (
                           <td>
                             <div className="table-actions">
-                              <button
-                                className="btn-sm btn-edit"
-                                onClick={() => setEditingVisit(row)}
-                                title="Edit visit"
-                              >
-                                <Edit2 size={14} style={{ marginRight: 4 }} />
-                                Edit
-                              </button>
+                              {canEditVisit && (
+                                <button
+                                  className="btn-sm btn-edit"
+                                  onClick={() => setEditingVisit(row)}
+                                  title="Edit visit"
+                                >
+                                  <Edit2 size={14} style={{ marginRight: 4 }} />
+                                  Edit
+                                </button>
+                              )}
 
-                              <button
-                                className="btn-sm btn-delete"
-                                onClick={() => deleteVisit(row.visit_id)}
-                                title="Delete visit"
-                              >
-                                <Trash2 size={14} style={{ marginRight: 4 }} />
-                                Delete
-                              </button>
+                              {canDeleteVisit && (
+                                <button
+                                  className="btn-sm btn-delete"
+                                  onClick={() => deleteVisit(row.visit_id)}
+                                  title="Delete visit"
+                                >
+                                  <Trash2 size={14} style={{ marginRight: 4 }} />
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </td>
                         )}
@@ -976,10 +996,13 @@ export default function VisitsPage() {
                     <td>{r.prisoner_id}</td>
                     <td>{String(r.requested_date || "").slice(0, 16)}</td>
                     <td>
-                      <div className="table-actions">
-                        <button className="btn-sm btn-edit" onClick={() => approve(r.request_id)}>Approve</button>
-                        <button className="btn-sm btn-delete" onClick={() => reject(r.request_id)}>Reject</button>
-                      </div>
+                      {/* Guard + higher can Duyệt/Từ chối. Controlled by canApproveReject. */}
+                      {canApproveReject && (
+                        <div className="table-actions">
+                          <button className="btn-sm btn-edit" onClick={() => approve(r.request_id)}>Approve</button>
+                          <button className="btn-sm btn-delete" onClick={() => reject(r.request_id)}>Reject</button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -1025,12 +1048,14 @@ export default function VisitsPage() {
           setSearchTerm={setPrisonerSearchTerm}
         />
       )}
-      {showCreateModal && canManageVisits && (
+      {/* Create Visit (manual thủ công) - only for roles with canCreateVisit (Guard + higher).
+         Viewer cannot create manual Visit, only Request. */}
+      {showCreateModal && canCreateVisit && (
         <CreateVisitModal onClose={() => setShowCreateModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
       )}
 
-      {/* Edit Visit Modal - fetches its own prisoners list on open via useEffect([visit]) */}
-      {editingVisit && canManageVisits && (
+      {/* Edit Visit Modal - Guard + higher (canEditVisit). Guard can edit visits they manage. */}
+      {editingVisit && canEditVisit && (
         <EditVisitModal
           visit={editingVisit}
           onClose={() => setEditingVisit(null)}
