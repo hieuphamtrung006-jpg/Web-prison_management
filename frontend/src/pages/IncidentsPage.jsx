@@ -285,6 +285,13 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
 export default function IncidentsPage() {
   const { user } = useAuth();
   const isGuard = user?.role === "Guard";
+
+  // Role-based permissions for Incidents
+  // Guard: can create + edit only incidents they created (using created_by), no delete
+  // Admin/Warden: full (create, edit any, delete)
+  const canCreate = true; // Guard and higher roles
+  const canDelete = !isGuard;
+
   const [rows, setRows] = useState([]);
   const [prisoners, setPrisoners] = useState([]);
   const [page, setPage] = useState(1);
@@ -293,11 +300,14 @@ export default function IncidentsPage() {
   const [toast, setToast] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  // Per-row editing state (new primary UX)
+  // Per-row editing state
   const [editingIncident, setEditingIncident] = useState(null);
 
-  // Real-time search
+  // Filters state for table (prisoner, date, severity) + search
   const [searchTerm, setSearchTerm] = useState("");
+  const [filterPrisonerId, setFilterPrisonerId] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+  const [filterSeverity, setFilterSeverity] = useState("");
 
   const load = async () => {
     try {
@@ -349,22 +359,32 @@ export default function IncidentsPage() {
     return map;
   }, [prisoners]);
 
-  // Client-side real-time filtering (search by prisoner name, severity, type, description)
+  // Client-side filtering: search + explicit filters (prisoner, date, severity)
   const filteredRows = useMemo(() => {
-    const q = searchTerm;
-    if (!q || !q.trim()) return rows;
+    const q = searchTerm.trim().toLowerCase();
 
     return rows.filter((row) => {
       const prisonerName = prisonerNameById[row.prisoner_id] || "";
-      return (
+
+      const matchesSearch = !q ||
         includesText(prisonerName, q) ||
         includesText(row.severity, q) ||
         includesText(row.incident_type, q) ||
         includesText(row.description, q) ||
-        includesText(row.prisoner_id, q) // fallback to ID
-      );
+        includesText(row.prisoner_id, q);
+
+      const matchesPrisoner = !filterPrisonerId || String(row.prisoner_id) === String(filterPrisonerId);
+      const matchesSeverity = !filterSeverity || row.severity === filterSeverity;
+
+      let matchesDate = true;
+      if (filterDate) {
+        const rowDate = String(row.incident_date || "").slice(0, 10);
+        matchesDate = rowDate === filterDate;
+      }
+
+      return matchesSearch && matchesPrisoner && matchesSeverity && matchesDate;
     });
-  }, [rows, searchTerm, prisonerNameById]);
+  }, [rows, searchTerm, prisonerNameById, filterPrisonerId, filterDate, filterSeverity]);
 
   const deleteIncident = async (incidentId) => {
     const confirmed = window.confirm("Delete this incident permanently?");
@@ -384,12 +404,10 @@ export default function IncidentsPage() {
     }
   };
 
-  const canManage = !isGuard;
-
-  // Sidebar now only has Create (per-row Edit is the main way to edit)
-  const createActions = canManage
+  // Sidebar: Guard gets Create button too (per requirements)
+  const createActions = canCreate
     ? [
-        { label: "+ Create Incident", onClick: () => setShowCreateModal(true), variant: "create" },
+        { label: "+ Create New Incident", onClick: () => setShowCreateModal(true), variant: "create" },
       ]
     : [];
 
@@ -409,9 +427,9 @@ export default function IncidentsPage() {
 
         {error && <p className="error-msg">{error}</p>}
 
-        {/* Search + Pagination controls */}
-        <div className="inline-form" style={{ flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
-          {/* Search bar - real-time filter */}
+        {/* Search + Filters + Pagination */}
+        <div className="inline-form" style={{ flexWrap: "wrap", gap: "12px", marginBottom: "8px" }}>
+          {/* Search bar */}
           <div style={{ flex: 1, minWidth: "260px", maxWidth: "420px" }}>
             <input
               type="text"
@@ -458,6 +476,73 @@ export default function IncidentsPage() {
           )}
         </div>
 
+        {/* Dedicated filters per requirement: prisoner, date, severity */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "12px", alignItems: "flex-end" }}>
+          <label style={{ minWidth: "180px" }}>
+            Tù nhân
+            <select
+              value={filterPrisonerId}
+              onChange={(e) => {
+                setFilterPrisonerId(e.target.value);
+                if (page !== 1) setPage(1);
+              }}
+              style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)" }}
+            >
+              <option value="">Tất cả tù nhân</option>
+              {prisoners.map((p) => (
+                <option key={p.prisoner_id} value={p.prisoner_id}>
+                  {p.full_name} (#{p.prisoner_id})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Ngày sự cố
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => {
+                setFilterDate(e.target.value);
+                if (page !== 1) setPage(1);
+              }}
+              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)" }}
+            />
+          </label>
+
+          <label>
+            Severity
+            <select
+              value={filterSeverity}
+              onChange={(e) => {
+                setFilterSeverity(e.target.value);
+                if (page !== 1) setPage(1);
+              }}
+              style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)" }}
+            >
+              <option value="">Tất cả</option>
+              <option>Low</option>
+              <option>Medium</option>
+              <option>High</option>
+            </select>
+          </label>
+
+          {(filterPrisonerId || filterDate || filterSeverity || searchTerm) && (
+            <button
+              className="secondary-btn"
+              onClick={() => {
+                setFilterPrisonerId("");
+                setFilterDate("");
+                setFilterSeverity("");
+                setSearchTerm("");
+                if (page !== 1) setPage(1);
+              }}
+            >
+              Xóa filter
+            </button>
+          )}
+        </div>
+
         <div className="table-wrap">
           <table>
             <thead>
@@ -468,19 +553,22 @@ export default function IncidentsPage() {
                 <th>Severity</th>
                 <th>Date</th>
                 <th>Description</th>
-                {canManage && <th style={{ width: "120px" }}>Actions</th>}
+                <th style={{ width: "140px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 7 : 6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
-                    {searchTerm ? "No incidents match your search." : "No incidents found."}
+                  <td colSpan={7} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
+                    {(searchTerm || filterPrisonerId || filterDate || filterSeverity) ? "No incidents match filters." : "No incidents found."}
                   </td>
                 </tr>
               ) : (
                 filteredRows.map((row) => {
                   const prisonerName = prisonerNameById[row.prisoner_id];
+                  // Guard can only edit incidents they created (row.created_by from backend)
+                  const canEditThis = !isGuard || (row.created_by && row.created_by === user?.user_id);
+
                   return (
                     <tr key={row.incident_id}>
                       <td>{row.incident_id}</td>
@@ -502,10 +590,9 @@ export default function IncidentsPage() {
                         {row.description || "-"}
                       </td>
 
-                      {canManage && (
-                        <td>
-                          <div className="table-actions">
-                            {/* Per-row Edit button (primary new feature) */}
+                      <td>
+                        <div className="table-actions">
+                          {canEditThis && (
                             <button
                               className="btn-sm btn-edit"
                               onClick={() => setEditingIncident(row)}
@@ -514,7 +601,9 @@ export default function IncidentsPage() {
                               <Edit2 size={14} style={{ marginRight: 4 }} />
                               Edit
                             </button>
+                          )}
 
+                          {canDelete && (
                             <button
                               className="btn-sm btn-delete"
                               onClick={() => deleteIncident(row.incident_id)}
@@ -523,9 +612,14 @@ export default function IncidentsPage() {
                               <Trash2 size={14} style={{ marginRight: 4 }} />
                               Delete
                             </button>
-                          </div>
-                        </td>
-                      )}
+                          )}
+
+                          {/* Guard sees no buttons on incidents they didn't create */}
+                          {isGuard && !canEditThis && (
+                            <span className="muted" style={{ fontSize: "0.75rem" }}>Read-only</span>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })
@@ -534,15 +628,15 @@ export default function IncidentsPage() {
           </table>
         </div>
 
-        {searchTerm && filteredRows.length < rows.length && (
+        {(searchTerm || filterPrisonerId || filterDate || filterSeverity) && filteredRows.length < rows.length && (
           <p className="muted" style={{ marginTop: "8px", fontSize: "0.85rem" }}>
             Showing {filteredRows.length} of {rows.length} incidents on this page (filtered).
           </p>
         )}
       </section>
 
-      {/* Create Modal (existing) */}
-      {showCreateModal && canManage && (
+      {/* Create Modal - Guard can create too */}
+      {showCreateModal && canCreate && (
         <CreateIncidentModal
           onClose={() => setShowCreateModal(false)}
           onSaved={() => load()}
@@ -550,8 +644,8 @@ export default function IncidentsPage() {
         />
       )}
 
-      {/* Edit Modal - fetches its own prisoners list on open via useEffect([incident]) */}
-      {editingIncident && canManage && (
+      {/* Edit Modal - Guard can open only for their own (button visibility controls it) */}
+      {editingIncident && (
         <EditIncidentModal
           incident={editingIncident}
           onClose={() => setEditingIncident(null)}

@@ -30,11 +30,24 @@ const fullNavItems = [
   { to: "/shifts", label: "Shifts", icon: Clock },
 ];
 
+// Viewer: limited personal view
 const viewerNavItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/prisoners", label: "Prisoners", icon: Shield },
   { to: "/visits", label: "Visits", icon: Calendar },
   { to: "/labor", label: "Labor", icon: Briefcase },
+];
+
+// Guard: operational support roles 
+// Allowed menus per requirement: Dashboard, Prisoners, Labor, Incidents, Visits, Schedules
+// Hidden for Guard (using current_user.role): Users, Locations, Shifts and other high-level management pages.
+const guardNavItems = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/prisoners", label: "Prisoners", icon: Shield },
+  { to: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { to: "/visits", label: "Visits", icon: Calendar },
+  { to: "/labor", label: "Labor", icon: Briefcase },
+  { to: "/schedules", label: "Schedules", icon: ClipboardList },
 ];
 
 export default function AppLayout({ children }) {
@@ -46,8 +59,12 @@ export default function AppLayout({ children }) {
   let navItems = user?.role === "Viewer"
     ? viewerNavItems
     : isGuard
-      ? fullNavItems.filter((item) => item.label !== "Dashboard")
+      ? guardNavItems
       : fullNavItems;
+
+  // Role-based menu control using current_user.role
+  // Guard: only operational menus (Dashboard, Prisoners, Incidents, Visits, Labor, Schedules).
+  // Explicitly no Users (high-level), Locations, Shifts etc.
 
   // For Viewer, make the Visits menu label more specific ("My Visit Requests")
   if (user?.role === "Viewer") {

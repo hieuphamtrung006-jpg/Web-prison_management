@@ -84,11 +84,92 @@ function UpdateScheduleModal({ onClose, onSaved, showToast }) {
   );
 }
 
+function CreateScheduleModal({ onClose, onSaved, showToast }) {
+  const [form, setForm] = useState({
+    prisoner_id: "",
+    project_id: "",
+    location_id: "",
+    shift_id: "",
+    start_time: new Date().toISOString().slice(0, 16),
+    end_time: "",
+    status: "Active",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    const payload = {
+      prisoner_id: Number(form.prisoner_id),
+      project_id: form.project_id ? Number(form.project_id) : null,
+      location_id: form.location_id ? Number(form.location_id) : null,
+      shift_id: form.shift_id ? Number(form.shift_id) : null,
+      start_time: form.start_time,
+      end_time: form.end_time,
+      status: form.status,
+    };
+    try {
+      await api.post("/schedules", payload);
+      showToast("Schedule created", "success");
+      onSaved();
+      onClose();
+    } catch (err) {
+      const msg = parseApiError(err);
+      setError(msg);
+      showToast(msg, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Create Schedule</h3>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        {error && <div className="error-msg">{error}</div>}
+        <form className="form-grid" onSubmit={handleSubmit}>
+          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+          <label>Project ID (optional)<input type="number" value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} /></label>
+          <label>Location ID<input type="number" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })} /></label>
+          <label>Shift ID<input type="number" value={form.shift_id} onChange={(e) => setForm({ ...form, shift_id: e.target.value })} /></label>
+          <label>Start Time<input type="datetime-local" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} required /></label>
+          <label>End Time<input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} required /></label>
+          <label>Status
+            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              <option>Active</option>
+              <option>Cancelled</option>
+              <option>Completed</option>
+            </select>
+          </label>
+          <div className="modal-buttons">
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Creating..." : "Create"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function SchedulesPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
-  const isReadOnly = isViewer || isGuard;
+
+  // Role-based permissions
+  // Guard: view all, create schedule, edit schedule. No delete.
+  // Warden/Admin: full (incl. generator, delete)
+  // Viewer: read-only limited view
+  const canCreateSchedule = !isViewer; // Guard + higher
+  const canEditSchedule = !isViewer;
+  const canDeleteSchedule = !isViewer && !isGuard;
+  const isReadOnly = isViewer; // only pure Viewer is read-only for table
+
   const [configs, setConfigs] = useState([]);
   const [selectedConfig, setSelectedConfig] = useState(1);
   const [targetDate, setTargetDate] = useState(new Date().toISOString().slice(0, 10));
@@ -100,6 +181,23 @@ export default function SchedulesPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false); // for Guard create
+
+  // Filters (all client-side for simplicity, works on loaded page data)
+  const [filterDate, setFilterDate] = useState("");
+  const [filterPrisonerId, setFilterPrisonerId] = useState("");
+  const [filterShiftId, setFilterShiftId] = useState("");
+  const [filterStatus, setFilterStatus] = useState(""); // Active / Cancelled / Completed
+
+  // Client-side filtered list for the nice table (Guard sees clean columns + filters)
+  const filteredSchedules = schedules.filter((row) => {
+    const rowDate = String(row.start_time || row.end_time || "").slice(0, 10);
+    const matchesDate = !filterDate || rowDate === filterDate;
+    const matchesPrisoner = !filterPrisonerId || String(row.prisoner_id) === String(filterPrisonerId);
+    const matchesShift = !filterShiftId || String(row.shift_id || row.shift_name || "") === String(filterShiftId);
+    const matchesStatus = !filterStatus || (row.status || "Active") === filterStatus;
+    return matchesDate && matchesPrisoner && matchesShift && matchesStatus;
+  });
 
   const loadConfigs = async () => {
     try {
@@ -155,6 +253,10 @@ export default function SchedulesPage() {
   };
 
   const deleteSchedule = async (scheduleId) => {
+    if (!canDeleteSchedule) {
+      showToast("Bạn không có quyền xóa lịch trình", "error");
+      return;
+    }
     const confirmed = window.confirm("Delete this schedule permanently?");
     if (!confirmed) return;
     setError("");
@@ -169,9 +271,9 @@ export default function SchedulesPage() {
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
-  const canUpdate = !isReadOnly;
-  const scheduleActions = canUpdate
-    ? [{ label: "✎ Update Schedule", onClick: () => setShowUpdateModal(true), variant: "update" }]
+  // Sidebar actions for Guard: Create Schedule (no generator, no bulk update here)
+  const scheduleActions = canCreateSchedule
+    ? [{ label: "+ Create Schedule", onClick: () => setShowCreateModal(true), variant: "create" }]
     : [];
 
   return (
@@ -182,7 +284,8 @@ export default function SchedulesPage() {
 
       <div className="page-main-data">
       <div className="stack-grid">
-      {!isReadOnly && (
+      {/* Generator only for Warden/Admin (high-level) */}
+      {(!isViewer && !isGuard) && (
         <section className="panel">
           <h2>Schedule Generator (Optimizer)</h2>
           {error && <p className="error-msg">{error}</p>}
@@ -204,76 +307,192 @@ export default function SchedulesPage() {
         </section>
       )}
 
+      {/* Daily Grouped Schedule - title per requirement, keep grouped view */}
       <section className="panel">
-        <h2>Daily Grouped Schedule</h2>
-        {daily ? <pre className="json-box">{JSON.stringify(daily, null, 2)}</pre> : <p className="muted">No data loaded</p>}
+        <div className="section-head">
+          <div>
+            <h2>Daily Grouped Schedule</h2>
+            <p>Quản lý lịch lao động, thăm gặp và sinh hoạt của tù nhân.</p>
+          </div>
+          <button className="secondary-btn" onClick={loadDaily}>Refresh</button>
+        </div>
+        {daily ? (
+          <pre className="json-box">{JSON.stringify(daily, null, 2)}</pre>
+        ) : (
+          <div className="loading-state">
+            <p className="muted">Chưa có dữ liệu lịch trình cho ngày này.</p>
+            {canCreateSchedule && (
+              <button className="primary-btn" onClick={() => setShowCreateModal(true)} style={{ marginTop: 8 }}>
+                + Tạo lịch mới
+              </button>
+            )}
+          </div>
+        )}
       </section>
 
+      {/* Main Schedules table - redesigned for Guard (and keep for others) */}
       <section className="panel">
-        <h2>Schedules</h2>
+        <div className="section-head">
+          <div>
+            <h2>Lịch trình (Schedules)</h2>
+            <p className="hint-text">Danh sách lịch chi tiết theo tù nhân.</p>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="secondary-btn" onClick={() => { loadSchedules(); loadDaily(); }}>Refresh</button>
+          </div>
+        </div>
+
         {error && <p className="error-msg">{error}</p>}
-        <div className="inline-form">
+
+        {/* Filters (client-side for Guard): date, prisoner, shift, status */}
+        <div className="inline-form" style={{ marginBottom: 12, flexWrap: "wrap" }}>
+          <label>
+            Ngày
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
+          </label>
+          <label>
+            Tù nhân ID
+            <input
+              type="text"
+              placeholder="Prisoner ID"
+              value={filterPrisonerId}
+              onChange={(e) => setFilterPrisonerId(e.target.value)}
+              style={{ width: 120 }}
+            />
+          </label>
+          <label>
+            Ca (Shift ID)
+            <input
+              type="text"
+              placeholder="Shift ID"
+              value={filterShiftId}
+              onChange={(e) => setFilterShiftId(e.target.value)}
+              style={{ width: 100 }}
+            />
+          </label>
+          <label>
+            Status
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+              <option value="">All</option>
+              <option>Active</option>
+              <option>Cancelled</option>
+              <option>Completed</option>
+            </select>
+          </label>
+          <button className="secondary-btn" onClick={() => {
+            setFilterDate(""); setFilterPrisonerId(""); setFilterShiftId(""); setFilterStatus("");
+          }}>Xóa filter</button>
+        </div>
+
+        {/* Pagination */}
+        <div className="inline-form" style={{ marginBottom: 8 }}>
           <button className="secondary-btn" disabled={schedulePage <= 1} onClick={() => setSchedulePage((p) => Math.max(1, p - 1))}>Prev</button>
           <span className="muted">Page {schedulePage}</span>
           <button className="secondary-btn" onClick={() => setSchedulePage((p) => p + 1)}>Next</button>
         </div>
+
         <div className="table-wrap">
           <table>
-            {isReadOnly ? (
-              <thead>
-                <tr>
-                  <th>Prisoner Name</th>
-                  <th>Prisoner ID</th>
-                  <th>Location ID</th>
-                  <th>Shift (Ca lam)</th>
-                  <th>Start Time</th>
-                  <th>End Time</th>
-                </tr>
-              </thead>
-            ) : (
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Prisoner</th>
-                  <th>Shift</th>
-                  <th>Start</th>
-                  <th>End</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-            )}
+            <thead>
+              <tr>
+                <th>Prisoner Name</th>
+                <th>Prisoner ID</th>
+                <th>Location</th>
+                <th>Shift (Ca làm)</th>
+                <th>Start Time</th>
+                <th>End Time</th>
+                <th>Status</th>
+                {/* Actions: only Edit for Guard, full for higher */}
+                { (canEditSchedule || canDeleteSchedule) && <th>Actions</th> }
+              </tr>
+            </thead>
             <tbody>
-              {schedules.map((row) => (
-                <tr key={row.schedule_id}>
-                  {isReadOnly ? (
-                    <>
-                      <td>{row.prisoner_name || row.prisoner?.full_name || "-"}</td>
-                      <td>{row.prisoner_id}</td>
-                      <td>{row.location_id ?? "-"}</td>
-                      <td>{row.shift_name || row.shift_id}</td>
-                      <td>{String(row.start_time).slice(0, 16)}</td>
-                      <td>{String(row.end_time).slice(0, 16)}</td>
-                    </>
-                  ) : (
-                    <>
-                      <td>{row.schedule_id}</td>
-                      <td>{row.prisoner_id}</td>
-                      <td>{row.shift_id}</td>
-                      <td>{String(row.start_time).slice(0, 16)}</td>
-                      <td>{String(row.end_time).slice(0, 16)}</td>
-                      <td>{row.status}</td>
-                      <td><button className="danger-btn" onClick={() => deleteSchedule(row.schedule_id)}>Delete</button></td>
-                    </>
-                  )}
+              {filteredSchedules.length === 0 ? (
+                <tr>
+                  <td colSpan={ (canEditSchedule || canDeleteSchedule) ? 8 : 7 } style={{ textAlign: "center", padding: "28px", color: "var(--muted)" }}>
+                    {schedules.length === 0 ? (
+                      <>
+                        <p>Chưa có lịch trình nào.</p>
+                        {canCreateSchedule && (
+                          <button className="primary-btn" onClick={() => setShowCreateModal(true)} style={{ marginTop: 8 }}>
+                            + Tạo lịch mới
+                          </button>
+                        )}
+                      </>
+                    ) : "Không có lịch trình khớp với filter."}
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                filteredSchedules.map((row) => {
+                  const prisonerName = row.prisoner_name || row.prisoner?.full_name || "-";
+                  const locationName = row.location_name || row.location?.location_name || row.location_id || "-";
+                  const shiftName = row.shift_name || row.shift_id || "-";
+                  return (
+                    <tr key={row.schedule_id}>
+                      <td>{prisonerName}</td>
+                      <td>{row.prisoner_id}</td>
+                      <td>{locationName}</td>
+                      <td>{shiftName}</td>
+                      <td>{String(row.start_time || "").slice(0, 16)}</td>
+                      <td>{String(row.end_time || "").slice(0, 16)}</td>
+                      <td>
+                        <span className={`status-badge ${row.status === "Active" ? "status-active" : row.status === "Completed" ? "status-active" : "status-inactive"}`}>
+                          {row.status || "Active"}
+                        </span>
+                      </td>
+                      {(canEditSchedule || canDeleteSchedule) && (
+                        <td>
+                          <div className="table-actions">
+                            {canEditSchedule && (
+                              <button
+                                className="btn-sm btn-edit"
+                                onClick={() => {
+                                  // For Guard: open the update modal.
+                                  // (The modal currently requires entering Schedule ID; in real use prefill logic can be enhanced in UpdateScheduleModal)
+                                  setShowUpdateModal(true);
+                                }}
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDeleteSchedule && (
+                              <button
+                                className="btn-sm btn-delete"
+                                onClick={() => deleteSchedule(row.schedule_id)}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
       </section>
 
-      {showUpdateModal && canUpdate && (
+      {/* Create Modal for Guard + higher */}
+      {showCreateModal && canCreateSchedule && (
+        <CreateScheduleModal
+          onClose={() => setShowCreateModal(false)}
+          onSaved={async () => {
+            await loadSchedules();
+            await loadDaily();
+          }}
+          showToast={showToast}
+        />
+      )}
+
+      {/* Update/Edit Modal */}
+      {showUpdateModal && canEditSchedule && (
         <UpdateScheduleModal
           onClose={() => setShowUpdateModal(false)}
           onSaved={async () => {

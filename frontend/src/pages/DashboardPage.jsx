@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 
@@ -16,6 +16,10 @@ import {
   UserCheck,
   AlertCircle,
   Clock,
+  ClipboardCheck,
+  FileText,
+  Calendar,
+  UserPlus,
 } from "lucide-react";
 
 // ============================================
@@ -161,8 +165,9 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const role = user?.role || "Viewer";
   const isViewer = role === "Viewer";
+  const isGuard = role === "Guard";   // Guard = operations staff (labor + incidents + visits view)
 
-  // State for core data
+  // State for core data (used by Admin/Warden)
   const [stats, setStats] = useState({});
   const [recentIncidents, setRecentIncidents] = useState([]);
   const [highOccupancy, setHighOccupancy] = useState([]);
@@ -175,6 +180,16 @@ export default function DashboardPage() {
   const [myRequests, setMyRequests] = useState([]);
   const [viewerLoading, setViewerLoading] = useState(false);
   const [showRequestModal, setShowRequestModal] = useState(false); // for direct request from dashboard for Viewer
+
+  // Guard-specific state (focused operational data - gọn gàng cho vai trò vận hành)
+  const [guardStats, setGuardStats] = useState({
+    inCustody: 0,
+    todayAssignments: 0,
+    openIncidents: 0,
+    pendingVisits: 0,
+  });
+  const [guardAlerts, setGuardAlerts] = useState({ incidents: [], visits: [] });
+  const [guardLoading, setGuardLoading] = useState(true);
 
   // ============================================
   // Data fetching - Core functionality
@@ -263,17 +278,87 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // ============================================
+  // Guard Dashboard Data Loading (Operations-focused)
+  // Tailored for daily Guard work: custody count, labor assignments, incidents, visits
+  // Sử dụng current_user.role === "Guard" để load dữ liệu tập trung, gọn nhẹ.
+  // Bỏ fetch "near full cells" và recent activities để giao diện thoáng hơn.
+  // ============================================
+  const loadGuardDashboard = useCallback(async (isRefresh = false) => {
+    setGuardLoading(true);
+    if (!isRefresh) setError("");
+
+    try {
+      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+      // 1. In Custody
+      let inCustody = 0;
+      try {
+        const pRes = await api.get("/prisoners?page=1&page_size=200");
+        inCustody = Array.isArray(pRes.data) ? pRes.data.length : 0;
+      } catch { inCustody = 0; }
+
+      // 2. Today's Labor Assignments
+      let todayAssignments = 0;
+      try {
+        const aRes = await api.get("/labor/assignments?page=1&page_size=100");
+        const allAssigns = Array.isArray(aRes.data) ? aRes.data : [];
+        todayAssignments = allAssigns.filter((a) => {
+          const d = (a.assignment_date || "").toString().slice(0, 10);
+          return d === today;
+        }).length;
+      } catch { todayAssignments = 0; }
+
+      // 3. Incidents (ưu tiên các sự cố gần đây để Guard xử lý)
+      let openIncidents = 0;
+      let recentInc = [];
+      try {
+        const iRes = await api.get("/incidents?page=1&page_size=20");
+        recentInc = Array.isArray(iRes.data) ? iRes.data : [];
+        // Sắp xếp ưu tiên Severity cao trước
+        recentInc.sort((a, b) => {
+          const order = { High: 3, Medium: 2, Low: 1 };
+          return (order[b.severity] || 0) - (order[a.severity] || 0);
+        });
+        openIncidents = recentInc.length;
+      } catch { recentInc = []; openIncidents = 0; }
+
+      // 4. Pending Visit Requests
+      let pendingVisits = 0;
+      let pendingVisitList = [];
+      try {
+        const vRes = await api.get("/visits?status_filter=Pending&page=1&page_size=30");
+        const visits = Array.isArray(vRes.data) ? vRes.data : [];
+        pendingVisits = visits.length;
+        pendingVisitList = visits.slice(0, 5);
+      } catch { pendingVisits = 0; pendingVisitList = []; }
+
+      setGuardStats({ inCustody, todayAssignments, openIncidents, pendingVisits });
+      setGuardAlerts({ incidents: recentInc.slice(0, 5), visits: pendingVisitList });
+      setLastUpdated(new Date());
+    } catch (err) {
+      const msg = parseApiError(err);
+      setError(msg || "Failed to load guard operations data");
+    } finally {
+      setGuardLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (isViewer) {
       loadViewerDashboard();
+    } else if (isGuard) {
+      loadGuardDashboard();          // Guard role: focused operations data
     } else {
       loadDashboard();
     }
-  }, [isViewer, loadDashboard, loadViewerDashboard]);
+  }, [isViewer, isGuard, loadDashboard, loadViewerDashboard, loadGuardDashboard]);
 
   const handleRefresh = () => {
     if (isViewer) {
       loadViewerDashboard();
+    } else if (isGuard) {
+      loadGuardDashboard(true);
     } else {
       loadDashboard(true);
     }
@@ -338,10 +423,10 @@ export default function DashboardPage() {
         <button
           className="refresh-btn"
           onClick={handleRefresh}
-          disabled={isViewer ? viewerLoading : loading}
+          disabled={isViewer ? viewerLoading : isGuard ? guardLoading : loading}
         >
           <RefreshCw size={16} />
-          {(isViewer ? viewerLoading : loading) ? "Refreshing..." : "Refresh"}
+          {(isViewer ? viewerLoading : isGuard ? guardLoading : loading) ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -355,6 +440,7 @@ export default function DashboardPage() {
 
       {/* ============================================
           ROLE-BASED DASHBOARD CONTENT
+          Guard gets a focused Operations view for daily tasks
           ============================================ */}
       {isViewer ? (
         /* VIEWER DASHBOARD - Focused on personal Visit Requests */
@@ -532,9 +618,255 @@ export default function DashboardPage() {
             )}
           </section>
         </div>
+      ) : isGuard ? (
+        /* ============================================
+           GUARD OPERATIONS DASHBOARD (role-based)
+           Sử dụng current_user.role === "Guard"
+           Layout gọn gàng, tập trung vào công việc vận hành hàng ngày.
+           Bỏ các phần không cần thiết (buồng giam gần đầy, recent activities).
+           ============================================ */
+        <div>
+          {/* HEADER */}
+          <div style={{ marginBottom: 10 }}>
+            <div className="section-head" style={{ marginBottom: 2 }}>
+              <div>
+                <span className="eyebrow">Guard Operations</span>
+                <h2 style={{ marginTop: 2 }}>Bảng điều khiển vận hành</h2>
+              </div>
+              {lastUpdated && (
+                <div className="last-updated">
+                  <Clock size={13} /> Cập nhật {lastUpdated.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+            <p className="muted" style={{ marginTop: 2, fontSize: "0.9rem" }}>
+              Nắm nhanh tình hình lao động, sự cố và thăm gặp hàng ngày.
+            </p>
+          </div>
+
+          {/* PHẦN 1: KEY INDICATORS - 4 card gọn */}
+          <section style={{ marginBottom: 12 }}>
+            <div className="section-head" style={{ marginBottom: 6 }}>
+              <span className="eyebrow">Chỉ số chính</span>
+            </div>
+
+            {guardLoading ? (
+              <div className="loading-grid">
+                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="loading-card" />)}
+              </div>
+            ) : (
+              <div className="metric-grid">
+                <KeyIndicatorCard
+                  title="Tù nhân đang giam giữ"
+                  value={guardStats.inCustody}
+                  sub="hiện tại (In Custody)"
+                  icon={UserCheck}
+                  accent="#10a36e"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Phân công hôm nay"
+                  value={guardStats.todayAssignments}
+                  sub="Today's Assignments"
+                  icon={ClipboardList}
+                  accent="#2563eb"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Sự cố chờ xử lý"
+                  value={guardStats.openIncidents}
+                  sub="Pending Incidents"
+                  icon={AlertTriangle}
+                  accent="#dc2626"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Yêu cầu thăm gặp chờ"
+                  value={guardStats.pendingVisits}
+                  sub="Pending Visit Requests"
+                  icon={Clock}
+                  accent="#7c3aed"
+                  loading={false}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* PHẦN 2: QUICK ACTIONS - Tiếng Việt thống nhất, màu sắc rõ ràng */}
+          <section className="panel" style={{ marginBottom: 12 }}>
+            <div className="section-head" style={{ marginBottom: 4 }}>
+              <div>
+                <span className="eyebrow">Hành động nhanh</span>
+                <h3 style={{ marginTop: 1, fontSize: "1rem" }}>Thực hiện công việc hàng ngày</h3>
+              </div>
+            </div>
+
+            <div className="quick-actions" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
+              {/* Nổi bật: Log Daily Performance - xanh dương cho Assignment/Labor */}
+              <Link to="/labor" className="quick-action" style={{ 
+                border: "2px solid #1e40af", 
+                background: "#eff6ff"
+              }}>
+                <div className="icon-wrap" style={{ background: "#dbeafe", color: "#1e40af" }}>
+                  <ClipboardCheck size={20} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label" style={{ color: "#1e40af", fontWeight: 600, fontSize: "0.95rem" }}>
+                    Ghi nhận hiệu suất lao động
+                  </div>
+                  <div className="qa-desc" style={{ fontSize: "0.8rem" }}>Log Daily Performance</div>
+                </div>
+              </Link>
+
+              {/* Report Incident - đỏ */}
+              <Link to="/incidents" className="quick-action" style={{ border: "1px solid #fecaca", background: "#fef2f2" }}>
+                <div className="icon-wrap" style={{ background: "#fee2e2", color: "#b91c1c" }}>
+                  <AlertTriangle size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label" style={{ fontWeight: 600 }}>Báo cáo sự cố mới</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Report New Incident</div>
+                </div>
+              </Link>
+
+              {/* Create Labor Assignment - xanh dương */}
+              <Link to="/labor" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#dbeafe", color: "#1e40af" }}>
+                  <UserPlus size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">Tạo phân công lao động</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Create Labor Assignment</div>
+                </div>
+              </Link>
+
+              {/* View Today's Assignments - xanh dương */}
+              <Link to="/labor" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#dbeafe", color: "#1e40af" }}>
+                  <Calendar size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">Xem phân công hôm nay</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>View Today's Assignments</div>
+                </div>
+              </Link>
+
+              {/* View Pending Visit Requests - tím */}
+              <Link to="/visits" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#f3e8ff", color: "#6b21a8" }}>
+                  <FileText size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">Xem yêu cầu thăm gặp chờ</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>View Pending Visit Requests</div>
+                </div>
+              </Link>
+            </div>
+
+            <div style={{ marginTop: 4, fontSize: "0.72rem", color: "var(--muted)" }}>
+              Bấm nút để thực hiện ngay (chuyển trang). Sau khi lưu, quay lại Dashboard và nhấn <strong>Refresh</strong> hoặc nút "Làm mới" bên dưới để cập nhật số liệu.
+            </div>
+          </section>
+
+          {/* PHẦN 3: CẦN CHÚ Ý NGAY (chỉ Incidents + Pending Visits, bỏ near full cells) */}
+          <section className="panel" style={{ marginBottom: 8 }}>
+            <div className="section-head" style={{ marginBottom: 6 }}>
+              <div>
+                <span className="eyebrow">Cần chú ý ngay</span>
+              </div>
+              <button 
+                className="secondary-btn" 
+                style={{ fontSize: "0.75rem", padding: "2px 8px" }} 
+                onClick={() => loadGuardDashboard(true)}
+                disabled={guardLoading}
+              >
+                Làm mới
+              </button>
+            </div>
+
+            <div className="split-grid" style={{ alignItems: "start", gap: "12px" }}>
+              {/* Sự cố cần xử lý - đỏ, ưu tiên High */}
+              <div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#b91c1c", marginBottom: 4 }}>
+                  Sự cố cần xử lý
+                </div>
+                {guardLoading ? (
+                  <div className="loading-state" style={{ padding: "10px 0" }}><div className="spinner" /></div>
+                ) : guardAlerts.incidents.length > 0 ? (
+                  <div className="alert-list" style={{ maxHeight: "180px", overflowY: "auto" }}>
+                    {guardAlerts.incidents.map((inc, idx) => (
+                      <div key={idx} className="alert-item" style={{ borderLeft: "3px solid #dc2626", padding: "6px 8px" }}>
+                        <div className="alert-icon" style={{ color: "#dc2626" }}>
+                          <AlertCircle size={16} />
+                        </div>
+                        <div className="alert-text">
+                          <strong>{inc.incident_type || "Sự cố"}</strong>
+                          {inc.severity && (
+                            <span className="status-badge" style={{ 
+                              marginLeft: 6, 
+                              background: inc.severity === "High" ? "#fee2e2" : "#fef3c7",
+                              color: inc.severity === "High" ? "#9f1239" : "#92400e",
+                              fontSize: "0.65rem"
+                            }}>
+                              {inc.severity}
+                            </span>
+                          )}
+                          <div style={{ fontSize: "0.75rem", marginTop: 1, color: "var(--muted)" }}>
+                            {inc.description ? inc.description.slice(0, 55) + "..." : ""}
+                          </div>
+                        </div>
+                        <div className="alert-meta" style={{ fontSize: "0.7rem" }}>{formatShortDate(inc.incident_date)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="alert-item" style={{ padding: "6px 8px" }}>
+                    <div className="alert-text" style={{ fontSize: "0.85rem" }}>Không có sự cố cần xử lý.</div>
+                  </div>
+                )}
+                <Link to="/incidents" className="muted-link" style={{ fontSize: "0.72rem", marginTop: 4, display: "inline-block" }}>
+                  Xem tất cả sự cố →
+                </Link>
+              </div>
+
+              {/* Yêu cầu thăm gặp đang chờ - tím */}
+              <div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#6b21a8", marginBottom: 4 }}>
+                  Yêu cầu thăm gặp đang chờ
+                </div>
+                {guardLoading ? (
+                  <div className="loading-state" style={{ padding: "10px 0" }}><div className="spinner" /></div>
+                ) : guardAlerts.visits.length > 0 ? (
+                  <div className="alert-list" style={{ maxHeight: "180px", overflowY: "auto" }}>
+                    {guardAlerts.visits.map((v, i) => (
+                      <div key={i} className="alert-item" style={{ borderLeft: "3px solid #7c3aed", padding: "6px 8px" }}>
+                        <div className="alert-icon" style={{ color: "#6b21a8" }}>
+                          <Clock size={16} />
+                        </div>
+                        <div className="alert-text">
+                          <strong>#{v.prisoner_id}</strong> — {v.visitor_name || "Người thăm"}
+                          <div style={{ fontSize: "0.75rem", color: "var(--muted)", marginTop: 1 }}>
+                            {v.visit_date ? new Date(v.visit_date).toLocaleDateString() : ""}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="alert-item" style={{ padding: "6px 8px" }}>
+                    <div className="alert-text" style={{ fontSize: "0.85rem" }}>Không có yêu cầu thăm gặp chờ.</div>
+                  </div>
+                )}
+                <Link to="/visits" className="muted-link" style={{ fontSize: "0.72rem", marginTop: 4, display: "inline-block" }}>
+                  Xem tất cả yêu cầu thăm gặp →
+                </Link>
+              </div>
+            </div>
+          </section>
+        </div>
       ) : (
         <>
-          {/* STAFF / OPERATIONS DASHBOARD - Original full view */}
+          {/* STAFF / OPERATIONS DASHBOARD - Original full view (Warden/Admin) */}
           {/* KEY INDICATORS (4 core cards) */}
           <section>
             <div className="section-head" style={{ marginBottom: 12 }}>
@@ -708,6 +1040,7 @@ export default function DashboardPage() {
       <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>
         Data refreshed from backend. Use the Refresh button for the latest snapshot.
         {isViewer && " (Personal read-only view)"}
+        {isGuard && " (Guard operations view — focused on daily tasks)"}
       </div>
 
       {/* Request New Visit Modal for Viewer (opened directly from Quick Action) */}
