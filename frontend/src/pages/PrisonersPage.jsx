@@ -83,8 +83,9 @@ function RiskBadge({ value }) {
 }
 
 function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, showToast }) {
-  const canEditAll = userRole === "Admin" || userRole === "Warden";
-  const isGuardRole = userRole === "Guard"; // Guard: chỉ được sửa Current Location + Status (các trường khác read-only)
+  const canEditAll = userRole === "Admin" || userRole === "Warden"; // Full edit for Warden/Admin: all fields (name, crime, sentence, risk, etc.)
+  const isGuardRole = userRole === "Guard"; // Guard: only Current Location + Status editable; others read-only or hidden
+
 
   const [form, setForm] = useState({
     full_name: prisoner?.full_name || "",
@@ -612,12 +613,15 @@ export default function PrisonersPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
+  const isWarden = user?.role === "Warden";
 
   // Role-based permissions (dựa trên current_user.role)
-  const canCreate = user?.role === "Admin" || user?.role === "Warden";
-  // Guard: được phép Edit limited (chỉ Current Location + Status), không Create, không Delete
-  const canEdit = user?.role === "Admin" || user?.role === "Warden" || isGuard;
-  const canDelete = user?.role === "Admin" || user?.role === "Warden";
+  // Warden and Admin: FULL permissions - Create, Edit (all fields in modal), Delete
+  // Guard: limited to Edit (only Current Location + Status read-only others), no Create/Delete
+  // Viewer: read-only view only, no sidebar actions, no DOB/Crime columns
+  const canCreate = isWarden || user?.role === "Admin";
+  const canEdit = canCreate || isGuard;
+  const canDelete = canCreate;
 
   const [rows, setRows] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -762,7 +766,8 @@ export default function PrisonersPage() {
       ]
     : [];
 
-  // For layout: roles without Create permission (Guard + Viewer) get the full-width main area (no left action column wasting space)
+  // Layout control based on canCreate (Warden/Admin have full sidebar with Create button and full columns)
+  // Guard/Viewer: no sidebar (wider table), no DOB/Crime columns, tighter padding
   const hasCreateAction = canCreate;
 
   // Open detail modal for a prisoner
@@ -893,7 +898,7 @@ export default function PrisonersPage() {
                     <tr>
                       <th>ID</th>
                       <th>Name</th>
-                      {/* Chỉ Admin/Warden (có nút Create) mới thấy DOB và Crime để nới rộng Name/Location/Status cho Guard */}
+                      {/* DOB and Crime columns shown only when canCreate (Warden/Admin have full layout with Create sidebar) */}
                       {canCreate && <th>DOB</th>}
                       {canCreate && <th>Crime</th>}
                       <th>Risk Level</th>

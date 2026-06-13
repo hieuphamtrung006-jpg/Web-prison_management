@@ -351,11 +351,11 @@ export default function LaborPage() {
   const isViewer = user?.role === "Viewer";
   // current_user.role controls:
   // - Viewer: read-only on everything, no performance, special fetch (vw_ Basic), no sidebar, tighter layout.
-  // - Guard: full control on Assignments + Performance (Create/Edit/Delete + Log), but only VIEW on Projects (no create/edit/delete on projects).
-  // - Admin/Warden: full control on Projects + Labor.
+  // - Guard: full on Assignments + Performance (Create/Edit/Delete + Log), only VIEW on Projects (no create/edit/delete on projects, no Actions column).
+  // - Warden/Admin: FULL on Projects (Create/Edit/Delete + all buttons) + full on Assignments + Performance (Log + History). All sections visible, no hiding.
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
-  const canCreateAssignment = canManageLabor; // Guard needs full Create on Assignments
+  const canCreateAssignment = canManageLabor; // Guard + Warden/Admin need full Create on Assignments
   // Note: Guard will load full (non-vw) data paths → no Network Error from viewer raw query issues.
 
   const [projects, setProjects] = useState([]);
@@ -785,8 +785,8 @@ export default function LaborPage() {
             actions={[
               ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
               ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
-              // Only show Log Performance for non-Viewer roles (Guard/Warden/Admin)
-              ...(!isViewer ? [{ label: "Log Performance", onClick: () => setShowLogPerformance(true) }] : []),
+              // Log Performance shown if canManageLabor (includes Guard + Warden + Admin)
+              ...(canManageLabor ? [{ label: "Log Performance", onClick: () => setShowLogPerformance(true) }] : []),
             ]}
           />
         </div>
@@ -795,8 +795,9 @@ export default function LaborPage() {
       <div className="page-main-data">
       <div style={{ display: 'block' }}>
         <div className="labor-stack">
-          {/* For Viewer: tighter margins (no performance section + no sidebar).
-              Guard sees full sections (Assignments + full Performance) with normal spacing, but clean read-only Projects table (no Actions column). */}
+          {/* For Viewer: tighter margins (no performance, no sidebar).
+              Guard: clean read-only Projects (no Actions column), but full Assignments + Performance (normal spacing).
+              Warden/Admin: full everything, normal spacing. */}
           <section className="panel" style={isViewer ? { marginBottom: '8px' } : {}}>
             <div className="section-head">
               <div>
@@ -891,7 +892,7 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Assignments section always shown for Guard (full management) and higher roles. */}
+          {/* Assignments section shown for canManageLabor roles (Guard full on assignments, Warden/Admin full). */}
           <section className="panel" style={isViewer ? { marginTop: '8px' } : {}}>
             <div className="section-head">
               <div>
@@ -970,7 +971,9 @@ export default function LaborPage() {
                       <th>Assigned Date</th>
                       <th>Hours</th>
                       <th>Assigned By</th>
-                      {!isViewer && <th>Actions</th>}
+                      {/* Actions column for Assignments: shown for roles with canManageLabor (Guard + Warden + Admin).
+                          Guard has full on assignments (Create/Edit/Delete). */}
+                      {canManageLabor && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -981,7 +984,7 @@ export default function LaborPage() {
                         <td>{formatDateOnly(assignment.assignment_date)}</td>
                         <td>{formatDecimal(assignment.hours_assigned)}</td>
                         <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
-                        {!isViewer && (
+                        {canManageLabor && (
                           <td>
                             <div className="table-actions">
                               {canManageLabor && (
@@ -1001,9 +1004,9 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Performance History + Log fully hidden only for Viewer.
-             Guard (canManageLabor) sees the full Performance section + Log button + History, just like Admin/Warden. */}
-          {!isViewer && (
+          {/* Performance History + Log: shown for roles with canManageLabor (Guard + Warden + Admin).
+             Hidden only for Viewer (who has no labor management rights). */}
+          {canManageLabor && (
           <section className="panel">
             <div className="history-header">
               <div>
@@ -1108,7 +1111,7 @@ export default function LaborPage() {
       </div> {/* close style block */}
 
       {/* Create modals as popups from left sidebar */}
-      {showCreateProject && (
+      {showCreateProject && canManageProjects && (
         <div className="modal-overlay" onClick={() => setShowCreateProject(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -1213,8 +1216,8 @@ export default function LaborPage() {
         </div>
       )}
 
-      {/* Hide Log Performance modal for Viewer too */}
-      {!isViewer && showLogPerformance && (
+      {/* Log Performance modal: shown if canManageLabor (Guard + Warden + Admin) */}
+      {canManageLabor && showLogPerformance && (
         <div className="modal-overlay" onClick={() => setShowLogPerformance(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">

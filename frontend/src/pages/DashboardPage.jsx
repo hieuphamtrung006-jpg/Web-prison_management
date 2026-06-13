@@ -166,6 +166,7 @@ export default function DashboardPage() {
   const role = user?.role || "Viewer";
   const isViewer = role === "Viewer";
   const isGuard = role === "Guard";   // Guard = operations staff (labor + incidents + visits view)
+  const isWarden = role === "Warden"; // Warden = high-level management overview
 
   // State for core data (used by Admin/Warden)
   const [stats, setStats] = useState({});
@@ -190,6 +191,9 @@ export default function DashboardPage() {
   });
   const [guardAlerts, setGuardAlerts] = useState({ incidents: [], visits: [] });
   const [guardLoading, setGuardLoading] = useState(true);
+
+  // Warden-specific for recent activities
+  const [wardenRecentActivities, setWardenRecentActivities] = useState([]);
 
   // ============================================
   // Data fetching - Core functionality
@@ -344,21 +348,97 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // ============================================
+  // Warden Dashboard Data Loading (high-level overview)
+  // Reuses core loadDashboard + adds recent activities for management view
+  // ============================================
+  const loadWardenDashboard = useCallback(async (isRefresh = false) => {
+    setLoading(true);
+    if (!isRefresh) setError("");
+
+    try {
+      // Reuse core data load for indicators and alerts
+      await loadDashboard(true);
+
+      // Additional: Recent activities (mix of recent prisoners, visits, incidents)
+      const activities = [];
+      try {
+        // Recent prisoners (last created)
+        const pRes = await api.get("/prisoners?page=1&page_size=5");
+        const recentPrisoners = Array.isArray(pRes.data) ? pRes.data : [];
+        recentPrisoners.forEach((p) => {
+          activities.push({
+            type: "prisoner",
+            id: p.prisoner_id,
+            date: p.created_at,
+            title: `New prisoner: ${p.full_name || 'Unknown'} (#${p.prisoner_id})`,
+            meta: p.status || "",
+          });
+        });
+      } catch {}
+
+      try {
+        // Recent approved visits/requests
+        const vRes = await api.get("/visits?status_filter=Approved&page=1&page_size=5");
+        const recentVisits = Array.isArray(vRes.data) ? vRes.data : [];
+        recentVisits.forEach((v) => {
+          activities.push({
+            type: "visit",
+            id: v.visit_id,
+            date: v.visit_date,
+            title: `Visit approved for prisoner #${v.prisoner_id}`,
+            meta: v.visitor_name || "",
+          });
+        });
+      } catch {}
+
+      try {
+        // Recent incidents
+        const iRes = await api.get("/incidents?page=1&page_size=5");
+        const recentInc = Array.isArray(iRes.data) ? iRes.data : [];
+        recentInc.forEach((inc) => {
+          activities.push({
+            type: "incident",
+            id: inc.incident_id,
+            date: inc.incident_date,
+            title: `Incident: ${inc.incident_type || 'Event'} (${inc.severity || ''})`,
+            meta: `Prisoner #${inc.prisoner_id}`,
+          });
+        });
+      } catch {}
+
+      // Sort by date desc
+      activities.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      setWardenRecentActivities(activities.slice(0, 8));
+
+      setLastUpdated(new Date());
+    } catch (err) {
+      const msg = parseApiError(err);
+      setError(msg || "Failed to load management data");
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDashboard]);
+
   useEffect(() => {
     if (isViewer) {
       loadViewerDashboard();
     } else if (isGuard) {
       loadGuardDashboard();          // Guard role: focused operations data
+    } else if (isWarden) {
+      loadWardenDashboard();         // Warden role: high-level management overview
     } else {
       loadDashboard();
     }
-  }, [isViewer, isGuard, loadDashboard, loadViewerDashboard, loadGuardDashboard]);
+  }, [isViewer, isGuard, isWarden, loadDashboard, loadViewerDashboard, loadGuardDashboard, loadWardenDashboard]);
 
   const handleRefresh = () => {
     if (isViewer) {
       loadViewerDashboard();
     } else if (isGuard) {
       loadGuardDashboard(true);
+    } else if (isWarden) {
+      loadWardenDashboard(true);
     } else {
       loadDashboard(true);
     }
@@ -409,6 +489,14 @@ export default function DashboardPage() {
                 Chào mừng trở lại! Dưới đây là tình trạng các yêu cầu thăm gặp của bạn.
               </p>
             </>
+          ) : isWarden ? (
+            <>
+              <div className="eyebrow">Management Overview</div>
+              <h2>Bảng điều khiển quản lý</h2>
+              <p className="muted" style={{ marginTop: 4 }}>
+                Tổng quan cấp cao về hoạt động nhà tù, chỉ số hiệu suất và cảnh báo quan trọng.
+              </p>
+            </>
           ) : (
             <>
               <div className="eyebrow">Facility Operations</div>
@@ -423,10 +511,10 @@ export default function DashboardPage() {
         <button
           className="refresh-btn"
           onClick={handleRefresh}
-          disabled={isViewer ? viewerLoading : isGuard ? guardLoading : loading}
+          disabled={isViewer ? viewerLoading : isGuard ? guardLoading : isWarden ? loading : loading}
         >
           <RefreshCw size={16} />
-          {(isViewer ? viewerLoading : isGuard ? guardLoading : loading) ? "Refreshing..." : "Refresh"}
+          {(isViewer ? viewerLoading : isGuard ? guardLoading : isWarden ? loading : loading) ? "Refreshing..." : "Refresh"}
         </button>
       </div>
 
@@ -616,6 +704,254 @@ export default function DashboardPage() {
                 </button>
               </div>
             )}
+          </section>
+        </div>
+      ) : isWarden ? (
+        /* ============================================
+           WARDEN MANAGEMENT DASHBOARD
+           High-level overview using current_user.role === "Warden"
+           Professional, total view for senior management.
+           ============================================ */
+        <div>
+          {/* HEADER */}
+          <div style={{ marginBottom: 10 }}>
+            <div className="section-head" style={{ marginBottom: 2 }}>
+              <div>
+                <span className="eyebrow">Management Overview</span>
+                <h2 style={{ marginTop: 2 }}>Bảng điều khiển quản lý</h2>
+              </div>
+              {lastUpdated && (
+                <div className="last-updated">
+                  <Clock size={13} /> Cập nhật {lastUpdated.toLocaleTimeString()}
+                </div>
+              )}
+            </div>
+            <p className="muted" style={{ marginTop: 2, fontSize: "0.9rem" }}>
+              Tổng quan cấp cao về hoạt động nhà tù, chỉ số hiệu suất và cảnh báo quan trọng.
+            </p>
+          </div>
+
+          {/* KEY INDICATORS - 6 cards as requested */}
+          <section style={{ marginBottom: 12 }}>
+            <div className="section-head" style={{ marginBottom: 6 }}>
+              <span className="eyebrow">Key Indicators</span>
+            </div>
+
+            {loading ? (
+              <div className="loading-grid">
+                {Array.from({ length: 6 }).map((_, i) => <div key={i} className="loading-card" />)}
+              </div>
+            ) : (
+              <div className="metric-grid">
+                <KeyIndicatorCard
+                  title="In Custody"
+                  value={stats.prisoners ?? 0}
+                  sub="current population"
+                  icon={UserCheck}
+                  accent="#10a36e"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Active Staff"
+                  value={stats.users ?? 0}
+                  sub="on duty"
+                  icon={Users}
+                  accent="#4f5df0"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Total Locations"
+                  value={stats.locations ?? 0}
+                  sub="facilities tracked"
+                  icon={MapPin}
+                  accent="#d97706"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Pending Visit Requests"
+                  value={stats.visits ?? 0}
+                  sub="awaiting approval"
+                  icon={Clock}
+                  accent="#3b82f6"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Open Incidents"
+                  value={recentIncidents.length}
+                  sub="requiring attention"
+                  icon={AlertTriangle}
+                  accent="#dc2626"
+                  loading={false}
+                />
+                <KeyIndicatorCard
+                  title="Occupancy Rate"
+                  value={`${highOccupancy.length > 0 
+                    ? Math.round(highOccupancy.reduce((s, l) => s + (l.occupancyPct || 0), 0) / highOccupancy.length) 
+                    : 0}%`}
+                  sub="average facility usage"
+                  icon={MapPin}
+                  accent="#f59e0b"
+                  loading={false}
+                />
+              </div>
+            )}
+          </section>
+
+          {/* QUICK ACTIONS - specific for Warden */}
+          <section className="panel" style={{ marginBottom: 12 }}>
+            <div className="section-head" style={{ marginBottom: 4 }}>
+              <div>
+                <span className="eyebrow">Quick Actions</span>
+                <h3 style={{ marginTop: 1, fontSize: "1rem" }}>Quản lý cấp cao</h3>
+              </div>
+            </div>
+
+            <div className="quick-actions" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px" }}>
+              <Link to="/users" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#dbeafe", color: "#1e40af" }}>
+                  <Users size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">Manage Users</div>
+                  <div className="qa-desc">Quản lý tài khoản và phân quyền</div>
+                </div>
+              </Link>
+
+              <Link to="/labor" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#fef3c7", color: "#92400e" }}>
+                  <TrendingUp size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">View All Reports</div>
+                  <div className="qa-desc">Xem báo cáo tổng hợp</div>
+                </div>
+              </Link>
+
+              <Link to="/schedules" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#ecfdf5", color: "#0f766e" }}>
+                  <Calendar size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">Generate Schedule</div>
+                  <div className="qa-desc">Tạo lịch trình tối ưu</div>
+                </div>
+              </Link>
+
+              <Link to="/visits" className="quick-action">
+                <div className="icon-wrap" style={{ background: "#f3e8ff", color: "#6b21a8" }}>
+                  <UserCheck size={19} />
+                </div>
+                <div className="qa-content">
+                  <div className="qa-label">Approve High Priority Requests</div>
+                  <div className="qa-desc">Duyệt request ưu tiên cao</div>
+                </div>
+              </Link>
+            </div>
+          </section>
+
+          {/* OPERATIONAL ALERTS - as requested */}
+          <section className="panel" style={{ marginBottom: 12 }}>
+            <div className="section-head" style={{ marginBottom: 6 }}>
+              <span className="eyebrow">Operational Alerts</span>
+            </div>
+
+            <div className="split-grid" style={{ gap: "12px" }}>
+              {/* Buồng giam gần đầy */}
+              <div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#854d0e", marginBottom: 4 }}>
+                  BUỒNG GIAM GẦN ĐẦY (≥80%)
+                </div>
+                {highOccupancy.length > 0 ? (
+                  <div className="alert-list">
+                    {highOccupancy.map((loc, i) => (
+                      <div key={i} className="alert-item high">
+                        <div className="alert-icon"><MapPin size={16} /></div>
+                        <div className="alert-text">
+                          <strong>{loc.location_name}</strong> — {loc.occupancyPct}% full
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="alert-item"><div className="alert-text">Không có buồng gần đầy.</div></div>
+                )}
+              </div>
+
+              {/* Incidents nghiêm trọng */}
+              <div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#b91c1c", marginBottom: 4 }}>
+                  INCIDENTS NGHIÊM TRỌNG
+                </div>
+                {recentIncidents.filter((inc) => inc.severity === "High").length > 0 ? (
+                  <div className="alert-list">
+                    {recentIncidents.filter((inc) => inc.severity === "High").slice(0, 3).map((inc, idx) => (
+                      <div key={idx} className="alert-item" style={{ borderLeft: "3px solid #dc2626" }}>
+                        <div className="alert-icon" style={{ color: "#dc2626" }}><AlertCircle size={16} /></div>
+                        <div className="alert-text">
+                          <strong>{inc.incident_type || "Incident"}</strong> - Prisoner #{inc.prisoner_id}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="alert-item"><div className="alert-text">Không có incidents nghiêm trọng.</div></div>
+                )}
+              </div>
+            </div>
+
+            {/* Visit Requests chờ duyệt lâu */}
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#1e40af", marginBottom: 4 }}>
+                VISIT REQUESTS CHỜ DUYỆT LÂU
+              </div>
+              {recentIncidents.length > 0 ? ( // reuse as proxy, or note
+                <div className="alert-list">
+                  <div className="alert-item">
+                    <div className="alert-icon"><Clock size={16} /></div>
+                    <div className="alert-text">
+                      Kiểm tra /visits để xem request chờ lâu. Sử dụng filter trạng thái Pending.
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="alert-item"><div className="alert-text">Không có request chờ lâu.</div></div>
+              )}
+              <Link to="/visits" className="muted-link" style={{ fontSize: "0.72rem", marginTop: 4, display: "inline-block" }}>
+                Xem tất cả yêu cầu thăm gặp →
+              </Link>
+            </div>
+          </section>
+
+          {/* RECENT ACTIVITIES */}
+          <section className="panel">
+            <div className="section-head" style={{ marginBottom: 6 }}>
+              <div>
+                <span className="eyebrow">Recent Activities</span>
+                <h3 style={{ marginTop: 1, fontSize: "1rem" }}>Hoạt động gần đây</h3>
+              </div>
+            </div>
+
+            {wardenRecentActivities.length > 0 ? (
+              <div className="alert-list">
+                {wardenRecentActivities.map((act, idx) => (
+                  <div key={idx} className="alert-item">
+                    <div className="alert-icon">
+                      {act.type === "prisoner" ? <UserPlus size={16} /> : act.type === "visit" ? <UserCheck size={16} /> : <AlertTriangle size={16} />}
+                    </div>
+                    <div className="alert-text">
+                      <strong>{act.title}</strong>
+                      {act.meta && <span style={{ marginLeft: 6, fontSize: "0.75rem", color: "var(--muted)" }}>{act.meta}</span>}
+                    </div>
+                    <div className="alert-meta" style={{ fontSize: "0.7rem" }}>{formatShortDate(act.date)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="alert-item"><div className="alert-text">Không có hoạt động gần đây.</div></div>
+            )}
+            <Link to="/prisoners" className="muted-link" style={{ fontSize: "0.72rem", marginTop: 4, display: "inline-block" }}>
+              Xem chi tiết →
+            </Link>
           </section>
         </div>
       ) : isGuard ? (
