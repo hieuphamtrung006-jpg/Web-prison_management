@@ -5,6 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_roles
+from app.db.models.incident import Incident
 from app.db.models.labor import LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
@@ -126,15 +127,48 @@ def delete_location(
     if not location:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    has_prisoners = (
-        db.query(Prisoner.prisoner_id)
+    # Count constraints precisely (do not delete if any exist)
+    # Prisoners: only non-released (consistent with occupancy logic)
+    prisoner_count = (
+        db.query(func.count(Prisoner.prisoner_id))
         .filter(Prisoner.current_location_id == location_id, Prisoner.status != "Released")
-        .first()
-    )
-    has_projects = db.query(LaborProject.project_id).filter(LaborProject.location_id == location_id).first()
-    has_schedules = db.query(Schedule.schedule_id).filter(Schedule.location_id == location_id).first()
-    if has_prisoners or has_projects or has_schedules:
-        raise HTTPException(status_code=400, detail="Location has related records and cannot be deleted")
+        .scalar()
+    ) or 0
+
+    incident_count = (
+        db.query(func.count(Incident.incident_id))
+        .filter(Incident.location_id == location_id)
+        .scalar()
+    ) or 0
+
+    project_count = (
+        db.query(func.count(LaborProject.project_id))
+        .filter(LaborProject.location_id == location_id)
+        .scalar()
+    ) or 0
+
+    schedule_count = (
+        db.query(func.count(Schedule.schedule_id))
+        .filter(Schedule.location_id == location_id)
+        .scalar()
+    ) or 0
+
+    constraints = []
+    if prisoner_count > 0:
+        constraints.append(f"- {prisoner_count} tù nhân đang cư trú")
+    if incident_count > 0:
+        constraints.append(f"- {incident_count} sự cố đã ghi nhận")
+    if project_count > 0:
+        constraints.append(f"- {project_count} dự án lao động đang sử dụng")
+    if schedule_count > 0:
+        constraints.append(f"- {schedule_count} lịch trình đang sử dụng vị trí này")
+
+    if constraints:
+        msg = (
+            f"Không thể xóa Location '{location.location_name}' vì còn ràng buộc:\n"
+            + "\n".join(constraints)
+        )
+        raise HTTPException(status_code=400, detail=msg)
 
     db.delete(location)
     db.commit()

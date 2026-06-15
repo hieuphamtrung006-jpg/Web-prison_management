@@ -273,7 +273,11 @@ export default function LocationsPage() {
       <div className="page-main-data">
       <section className="panel">
         <h2>Locations</h2>
-        {error && <div className="error-msg">{error}</div>}
+        {error && (
+          <div className="error-msg" style={{ whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
+            {error}
+          </div>
+        )}
 
         <div className="inline-form pagination">
           <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
