@@ -332,11 +332,36 @@ def delete_project(
 ) -> MessageResponse:
     project = _get_project_or_404(db, project_id)
 
-    has_assignments = db.query(LaborAssignment.assignment_id).filter(LaborAssignment.project_id == project_id).first()
-    has_performance = db.query(DailyPerformance.performance_id).filter(DailyPerformance.project_id == project_id).first()
-    has_schedules = db.query(Schedule.schedule_id).filter(Schedule.project_id == project_id).first()
-    if has_assignments or has_performance or has_schedules:
-        raise HTTPException(status_code=400, detail="Project has related records and cannot be deleted")
+    # Check constraints with counts for detailed error message
+    assignment_count = (
+        db.query(func.count(LaborAssignment.assignment_id))
+        .filter(LaborAssignment.project_id == project_id)
+        .scalar()
+    ) or 0
+
+    performance_count = (
+        db.query(func.count(DailyPerformance.performance_id))
+        .filter(DailyPerformance.project_id == project_id)
+        .scalar()
+    ) or 0
+
+    schedule_count = (
+        db.query(func.count(Schedule.schedule_id))
+        .filter(Schedule.project_id == project_id)
+        .scalar()
+    ) or 0
+
+    constraints = []
+    if assignment_count > 0:
+        constraints.append(f"- {assignment_count} Assignments đang liên kết")
+    if performance_count > 0:
+        constraints.append(f"- {performance_count} Daily Performances đã ghi nhận")
+    if schedule_count > 0:
+        constraints.append(f"- {schedule_count} Schedules đang sử dụng")
+
+    if constraints:
+        msg = "Không thể xóa dự án vì còn ràng buộc:\n" + "\n".join(constraints)
+        raise HTTPException(status_code=400, detail=msg)
 
     db.delete(project)
     db.commit()
