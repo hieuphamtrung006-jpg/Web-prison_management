@@ -23,13 +23,15 @@ import {
 } from "lucide-react";
 
 // ============================================
-// CONFIG: Key Indicators - 4 core metrics
+// CONFIG: Key Indicators - 4 core metrics (titles, icons, styling)
+// The actual values now come from the single real /dashboard/stats endpoint
+// (no longer using these .endpoint for .length counts - that was the source of wrong numbers).
 // ============================================
 const KEY_INDICATORS = [
   {
     key: "users",
     title: "Active Staff",
-    endpoint: "/users?active_only=true",
+    // (legacy) was used for paginated count; now provided by backend COUNT
     icon: Users,
     accent: "#4f5df0",
     sub: "on duty",
@@ -37,7 +39,6 @@ const KEY_INDICATORS = [
   {
     key: "prisoners",
     title: "In Custody",
-    endpoint: "/prisoners",
     icon: UserCheck,
     accent: "#10a36e",
     sub: "current population",
@@ -45,7 +46,6 @@ const KEY_INDICATORS = [
   {
     key: "locations",
     title: "Facilities",
-    endpoint: "/locations",
     icon: MapPin,
     accent: "#d97706",
     sub: "locations tracked",
@@ -53,10 +53,9 @@ const KEY_INDICATORS = [
   {
     key: "visits",
     title: "Pending Visits",
-    endpoint: "/visits?status_filter=Pending&today_only=true",
     icon: Clock,
     accent: "#d64343",
-    sub: "today's requests",
+    sub: "awaiting approval",
   },
 ];
 
@@ -197,7 +196,7 @@ export default function DashboardPage() {
 
   // ============================================
   // Data fetching - Core functionality
-  // Fetches Key Indicators + supporting alert data
+  // Fetches Key Indicators (now from dedicated accurate stats endpoint) + supporting alert data
   // ============================================
   const loadDashboard = useCallback(async (isRefresh = false) => {
     setLoading(true);
@@ -206,17 +205,23 @@ export default function DashboardPage() {
     try {
       const result = {};
 
-      // 1. Key Indicators - parallel fetch
-      await Promise.all(
-        KEY_INDICATORS.map(async (card) => {
-          try {
-            const res = await api.get(card.endpoint);
-            result[card.key] = Array.isArray(res.data) ? res.data.length : 0;
-          } catch {
-            result[card.key] = 0;
-          }
-        })
-      );
+      // 1. Key Indicators - single call to real COUNT endpoint (no more paginated list.length hacks)
+      // Backend /dashboard/stats returns the 4 exact aggregates matching the requirement:
+      // activeStaff (Users.IsActive), inCustody (Prisoners.Status='InPrison'),
+      // facilities (Locations.IsActive), pendingVisits (VisitRequests.Status='Pending')
+      try {
+        const statsRes = await api.get("/dashboard/stats");
+        const s = statsRes.data || {};
+        result.users = s.activeStaff ?? 0;       // Active Staff
+        result.prisoners = s.inCustody ?? 0;     // In Custody
+        result.locations = s.facilities ?? 0;    // Facilities
+        result.visits = s.pendingVisits ?? 0;    // Pending Visits (from Visit *Requests*)
+      } catch {
+        result.users = 0;
+        result.prisoners = 0;
+        result.locations = 0;
+        result.visits = 0;
+      }
       setStats(result);
 
       // 2. Recent incidents (for Operational Alerts)
@@ -287,6 +292,7 @@ export default function DashboardPage() {
   // Tailored for daily Guard work: custody count, labor assignments, incidents, visits
   // Sử dụng current_user.role === "Guard" để load dữ liệu tập trung, gọn nhẹ.
   // Bỏ fetch "near full cells" và recent activities để giao diện thoáng hơn.
+  // Uses /dashboard/stats for accurate In Custody + Pending Visit Requests (real COUNTs).
   // ============================================
   const loadGuardDashboard = useCallback(async (isRefresh = false) => {
     setGuardLoading(true);
@@ -295,14 +301,20 @@ export default function DashboardPage() {
     try {
       const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
 
-      // 1. In Custody
+      // 1. Accurate global KPIs from dedicated stats endpoint (fixes previous list.length on paginated/wrong endpoints)
       let inCustody = 0;
+      let pendingVisits = 0;
       try {
-        const pRes = await api.get("/prisoners?page=1&page_size=200");
-        inCustody = Array.isArray(pRes.data) ? pRes.data.length : 0;
-      } catch { inCustody = 0; }
+        const statsRes = await api.get("/dashboard/stats");
+        const s = statsRes.data || {};
+        inCustody = s.inCustody ?? 0;
+        pendingVisits = s.pendingVisits ?? 0;
+      } catch {
+        inCustody = 0;
+        pendingVisits = 0;
+      }
 
-      // 2. Today's Labor Assignments
+      // 2. Today's Labor Assignments (client filter still needed for "today")
       let todayAssignments = 0;
       try {
         const aRes = await api.get("/labor/assignments?page=1&page_size=100");
@@ -327,15 +339,20 @@ export default function DashboardPage() {
         openIncidents = recentInc.length;
       } catch { recentInc = []; openIncidents = 0; }
 
-      // 4. Pending Visit Requests
-      let pendingVisits = 0;
+      // 4. Pending visit list (for guard alerts sidebar) - still fetch some recent pending for display
       let pendingVisitList = [];
       try {
-        const vRes = await api.get("/visits?status_filter=Pending&page=1&page_size=30");
-        const visits = Array.isArray(vRes.data) ? vRes.data : [];
-        pendingVisits = visits.length;
-        pendingVisitList = visits.slice(0, 5);
-      } catch { pendingVisits = 0; pendingVisitList = []; }
+        // Use the visits list only for the small alert preview (not for the count anymore)
+        const vRes = await api.get("/visits/requests/pending?page=1&page_size=5");
+        const reqs = Array.isArray(vRes.data) ? vRes.data : [];
+        pendingVisitList = reqs.slice(0, 5);
+      } catch {
+        // fallback to visits endpoint if requests/pending not used here
+        try {
+          const vRes2 = await api.get("/visits?status_filter=Pending&page=1&page_size=5");
+          pendingVisitList = (Array.isArray(vRes2.data) ? vRes2.data : []).slice(0, 5);
+        } catch { pendingVisitList = []; }
+      }
 
       setGuardStats({ inCustody, todayAssignments, openIncidents, pendingVisits });
       setGuardAlerts({ incidents: recentInc.slice(0, 5), visits: pendingVisitList });
