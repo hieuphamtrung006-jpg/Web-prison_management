@@ -229,16 +229,22 @@ export default function LocationsPage() {
   // Updated load to support search query params from backend
   // search: partial name match (ilike), type: exact type filter
   // Keeps pagination, works for all allowed roles (Admin/Warden/Guard)
-  const load = async (pageNumber = page) => {
+  // load accepts optional overrideSearch and overrideType so callers (button, debounce, delete, modals)
+  // can pass the exact intended values at call time. This avoids any stale closure issues
+  // where an old render's load would fetch without the search params.
+  const load = async (pageNumber = page, overrideSearch, overrideType) => {
     setLoading(true);
     setError("");
     try {
+      const effectiveSearch = overrideSearch !== undefined ? overrideSearch : search;
+      const effectiveType = overrideType !== undefined ? overrideType : typeFilter;
+
       let url = `/locations?page=${pageNumber}&page_size=${pageSize}`;
-      if (search) {
-        url += `&search=${encodeURIComponent(search)}`;
+      if (effectiveSearch) {
+        url += `&search=${encodeURIComponent(effectiveSearch)}`;
       }
-      if (typeFilter) {
-        url += `&type=${encodeURIComponent(typeFilter)}`;
+      if (effectiveType) {
+        url += `&type=${encodeURIComponent(effectiveType)}`;
       }
       const res = await api.get(url);
       setRows(res.data);
@@ -251,9 +257,10 @@ export default function LocationsPage() {
     }
   };
 
-  // Reload when page or active search/type filters change
+  // Reload when page or active search/type filters change.
+  // We pass the current values explicitly to load so the fetch always uses the right search/type.
   useEffect(() => {
-    load(page);
+    load(page, search, typeFilter);
   }, [page, search, typeFilter]);
 
   // Cleanup debounce timer on unmount
@@ -272,7 +279,7 @@ export default function LocationsPage() {
     try {
       await api.delete(`/locations/${loc.location_id}`);
       showToast("Location deleted", "success");
-      await load(page);
+      await load(page, search, typeFilter);
     } catch (err) {
       const message = parseApiError(err);
       setError(message);
@@ -285,9 +292,19 @@ export default function LocationsPage() {
     if (searchDebounceRef.current) {
       clearTimeout(searchDebounceRef.current);
     }
-    setSearch(searchDraft);
-    setTypeFilter(typeDraft);
+    const newSearch = searchDraft;
+    const newType = typeDraft;
+
+    // Update the applied state (for UI consistency and future effect-driven loads)
+    setSearch(newSearch);
+    setTypeFilter(newType);
     setPage(1);
+
+    // CRITICAL: Immediately call load with the exact values from the button click.
+    // This guarantees the API is called with the search params right now,
+    // bypassing any potential timing/closure issues with the batched setState + useEffect.
+    // This is the most likely fix for "click search but data stays the same as before search".
+    load(1, newSearch, newType);
   };
 
   const handleResetFilters = () => {
@@ -299,6 +316,9 @@ export default function LocationsPage() {
     setSearch("");
     setTypeFilter("");
     setPage(1);
+
+    // Explicit load with cleared filters so the table immediately shows all data
+    load(1, "", "");
   };
 
   const canWrite = user?.role === "Admin" || user?.role === "Warden";
@@ -348,6 +368,8 @@ export default function LocationsPage() {
                 searchDebounceRef.current = setTimeout(() => {
                   setSearch(val);
                   setPage(1);
+                  // Explicit load using the value at debounce time + current type
+                  load(1, val, typeFilter);
                 }, 350);
               }}
               placeholder="Search by name (e.g. Phòng Khám)"
@@ -363,6 +385,8 @@ export default function LocationsPage() {
                 setTypeDraft(val);
                 setTypeFilter(val);
                 setPage(1);
+                // Explicit load for immediate type filter
+                load(1, search, val);
               }}
             >
               <option value="">All Types</option>
@@ -463,7 +487,7 @@ export default function LocationsPage() {
         <LocationEditModal
           location={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => load(page)}
+          onSaved={() => load(page, search, typeFilter)}
           showToast={showToast}
         />
       )}
@@ -472,8 +496,10 @@ export default function LocationsPage() {
         <CreateLocationModal
           onClose={() => setShowCreateModal(false)}
           onSaved={() => {
+            // Keep the current active search/type when creating new location
+            // (so the list stays filtered after create)
             setPage(1);
-            load(1);
+            load(1, search, typeFilter);
           }}
           showToast={showToast}
         />
