@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ActionSidebar from "../components/ActionSidebar";
@@ -212,15 +212,35 @@ export default function LocationsPage() {
   const [editing, setEditing] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Search states: draft for inputs (controlled), applied for API calls
+  // Separate for search (text, debounced) and type (select, immediate)
+  const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [typeDraft, setTypeDraft] = useState("");
+
+  // Ref for search debounce timer (to avoid Network spam on keystroke)
+  const searchDebounceRef = useRef(null);
+
   const pageSize = 20;
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
+  // Updated load to support search query params from backend
+  // search: partial name match (ilike), type: exact type filter
+  // Keeps pagination, works for all allowed roles (Admin/Warden/Guard)
   const load = async (pageNumber = page) => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.get(`/locations?page=${pageNumber}&page_size=${pageSize}`);
+      let url = `/locations?page=${pageNumber}&page_size=${pageSize}`;
+      if (search) {
+        url += `&search=${encodeURIComponent(search)}`;
+      }
+      if (typeFilter) {
+        url += `&type=${encodeURIComponent(typeFilter)}`;
+      }
+      const res = await api.get(url);
       setRows(res.data);
     } catch (err) {
       const message = parseApiError(err);
@@ -231,9 +251,19 @@ export default function LocationsPage() {
     }
   };
 
+  // Reload when page or active search/type filters change
   useEffect(() => {
     load(page);
-  }, [page]);
+  }, [page, search, typeFilter]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
 
   const deleteLocation = async (loc) => {
     const confirmed = window.confirm(`Delete location "${loc.location_name}" permanently?`);
@@ -248,6 +278,27 @@ export default function LocationsPage() {
       setError(message);
       showToast(message, "error");
     }
+  };
+
+  // Handlers for search (consistent with other pages like Prisoners)
+  const handleSearch = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setSearch(searchDraft);
+    setTypeFilter(typeDraft);
+    setPage(1);
+  };
+
+  const handleResetFilters = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setSearchDraft("");
+    setTypeDraft("");
+    setSearch("");
+    setTypeFilter("");
+    setPage(1);
   };
 
   const canWrite = user?.role === "Admin" || user?.role === "Warden";
@@ -279,6 +330,59 @@ export default function LocationsPage() {
           </div>
         )}
 
+        {/* Search toolbar - consistent with Prisoners/Labor pages dark theme */}
+        {/* Name search: debounced realtime (350ms) for smooth UX, no Network spam */}
+        {/* Type: instant apply on change. Buttons for explicit control */}
+        {/* Viewer (if ever accesses): sees search but no create/edit/delete (per canWrite/canCreateLoc) */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px", alignItems: "flex-end" }}>
+          <label style={{ minWidth: 200, flex: "1 1 200px" }}>
+            Location Name
+            <input
+              type="text"
+              value={searchDraft}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearchDraft(val);
+                // Debounce search input
+                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+                searchDebounceRef.current = setTimeout(() => {
+                  setSearch(val);
+                  setPage(1);
+                }, 350);
+              }}
+              placeholder="Search by name (e.g. Phòng Khám)"
+            />
+          </label>
+
+          <label style={{ minWidth: 140 }}>
+            Type
+            <select
+              value={typeDraft}
+              onChange={(e) => {
+                const val = e.target.value;
+                setTypeDraft(val);
+                setTypeFilter(val);
+                setPage(1);
+              }}
+            >
+              <option value="">All Types</option>
+              <option>Cell</option>
+              <option>Workshop</option>
+              <option>Dining</option>
+              <option>Yard</option>
+              <option>Hospital</option>
+            </select>
+          </label>
+
+          <button className="primary-btn" type="button" onClick={handleSearch}>
+            Search
+          </button>
+
+          <button className="secondary-btn" type="button" onClick={handleResetFilters}>
+            Reset
+          </button>
+        </div>
+
         <div className="inline-form pagination">
           <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
             Prev
@@ -296,7 +400,11 @@ export default function LocationsPage() {
           </div>
         ) : rows.length === 0 ? (
           <div className="loading-state">
-            <p>No locations found</p>
+            <p>
+              {(search || typeFilter)
+                ? `Không tìm thấy Location nào khớp với từ khóa${search ? ` "${search}"` : ""}${typeFilter ? ` và loại "${typeFilter}"` : ""}.`
+                : "No locations found"}
+            </p>
           </div>
         ) : (
           <div className="table-wrap">

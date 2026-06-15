@@ -21,26 +21,38 @@ router = APIRouter()
 def list_locations(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    search: str | None = Query(default=None, min_length=1, max_length=100),
+    type: str | None = Query(default=None, max_length=30),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles("Admin", "Warden", "Guard", "Viewer")),
 ) -> list[LocationOccupancyRead]:
     offset = (page - 1) * page_size
+
+    # Build base query with occupancy join (always, for all roles that can list)
+    q = db.query(
+        Location.location_id,
+        Location.location_name,
+        Location.type,
+        Location.capacity,
+        Location.security_level,
+        Location.is_active,
+        func.count(Prisoner.prisoner_id).label("current_occupancy"),
+    ).outerjoin(
+        Prisoner,
+        (Prisoner.current_location_id == Location.location_id)
+        & (Prisoner.status != "Released"),
+    )
+
+    # Search by name (partial, case-insensitive) - matches frontend requirement
+    if search:
+        q = q.filter(Location.location_name.ilike(f"%{search}%"))
+
+    # Filter by type if provided (e.g. Cell, Workshop, etc.)
+    if type:
+        q = q.filter(Location.type == type)
+
     rows = (
-        db.query(
-            Location.location_id,
-            Location.location_name,
-            Location.type,
-            Location.capacity,
-            Location.security_level,
-            Location.is_active,
-            func.count(Prisoner.prisoner_id).label("current_occupancy"),
-        )
-        .outerjoin(
-            Prisoner,
-            (Prisoner.current_location_id == Location.location_id)
-            & (Prisoner.status != "Released"),
-        )
-        .group_by(
+        q.group_by(
             Location.location_id,
             Location.location_name,
             Location.type,
