@@ -112,7 +112,7 @@ function CreateScheduleModal({ onClose, onSaved, showToast }) {
     };
     try {
       await api.post("/schedules", payload);
-      showToast("Schedule created", "success");
+      showToast("Đã tạo lịch trình", "success");
       onSaved();
       onClose();
     } catch (err) {
@@ -128,7 +128,7 @@ function CreateScheduleModal({ onClose, onSaved, showToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Create Schedule</h3>
+          <h3>Tạo Lịch trình</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         {error && <div className="error-msg">{error}</div>}

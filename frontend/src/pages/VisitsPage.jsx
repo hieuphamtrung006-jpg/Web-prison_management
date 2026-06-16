@@ -57,11 +57,11 @@ function RequestVisitModal({ onClose, onSaved, showToast, initialPrisonerId }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header"><h3>Request a Visit</h3><button className="close-btn" onClick={onClose}>×</button></div>
+        <div className="modal-header"><h3>Tạo Yêu cầu Thăm gặp</h3><button className="close-btn" onClick={onClose}>×</button></div>
         {error && <div className="error-msg">{error}</div>}
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
-            Prisoner ID
+            Mã Tù nhân
             <input 
               type="number" 
               value={form.prisoner_id} 
@@ -69,12 +69,12 @@ function RequestVisitModal({ onClose, onSaved, showToast, initialPrisonerId }) {
               required 
               disabled={!!initialPrisonerId} // For Viewer, pre-selected via modal
             />
-            {initialPrisonerId && <span className="hint-text" style={{fontSize: '0.75rem'}}> (Selected via search)</span>}
+            {initialPrisonerId && <span className="hint-text" style={{fontSize: '0.75rem'}}> (Đã chọn qua tìm kiếm)</span>}
           </label>
-          <label>Requested date<input type="datetime-local" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} required /></label>
+          <label>Ngày yêu cầu<input type="datetime-local" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} required /></label>
           <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Submitting..." : "Submit Request"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Đang gửi..." : "Gửi Yêu cầu"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Hủy</button>
           </div>
         </form>
       </div>
@@ -98,14 +98,14 @@ function PrisonerSelectorModal({ onClose, onSelect, prisoners, searchTerm, setSe
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Select Prisoner</h3>
+          <h3>Chọn Tù nhân</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
 
         <div style={{ padding: "16px" }}>
           <input
             type="text"
-            placeholder="Search by name, risk level or ID..."
+            placeholder="Tìm theo tên, mức rủi ro hoặc ID..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{ width: "100%", marginBottom: "12px" }}
@@ -134,18 +134,18 @@ function PrisonerSelectorModal({ onClose, onSelect, prisoners, searchTerm, setSe
                       {p.current_location_name && ` • ${p.current_location_name}`}
                     </div>
                   </div>
-                  <button className="btn-sm btn-edit" style={{ pointerEvents: "none" }}>Select</button>
+                  <button className="btn-sm btn-edit" style={{ pointerEvents: "none" }}>Chọn</button>
                 </div>
               ))
             ) : (
               <div style={{ padding: "20px", textAlign: "center", color: "var(--muted)" }}>
-                No prisoners found matching your search.
+                Không tìm thấy tù nhân nào khớp tìm kiếm của bạn.
               </div>
             )}
           </div>
 
           <div style={{ marginTop: "12px", fontSize: "0.75rem", color: "var(--muted)" }}>
-            Select a prisoner to continue with your visit request.
+            Chọn một tù nhân để tiếp tục yêu cầu thăm gặp của bạn.
           </div>
         </div>
 
@@ -179,16 +179,16 @@ function CreateVisitModal({ onClose, onSaved, showToast }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header"><h3>Create Visit</h3><button className="close-btn" onClick={onClose}>×</button></div>
+        <div className="modal-header"><h3>Tạo Thăm gặp</h3><button className="close-btn" onClick={onClose}>×</button></div>
         {error && <div className="error-msg">{error}</div>}
         <form className="form-grid" onSubmit={handleSubmit}>
-          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
-          <label>Visitor<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
-          <label>Date<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
-          <label>Notes<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
+          <label>Mã Tù nhân<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
+          <label>Người thăm<input value={form.visitor_name} onChange={(e) => setForm({ ...form, visitor_name: e.target.value })} required /></label>
+          <label>Ngày<input type="datetime-local" value={form.visit_date} onChange={(e) => setForm({ ...form, visit_date: e.target.value })} required /></label>
+          <label>Ghi chú<textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></label>
           <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Creating..." : "Create"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Đang tạo..." : "Tạo"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Hủy</button>
           </div>
         </form>
       </div>
@@ -291,7 +291,7 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Edit Visit #{visit.visit_id}</h3>
+          <h3>Sửa Thăm gặp #{visit.visit_id}</h3>
           <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
 
@@ -299,14 +299,14 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
 
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
-            Prisoner
+            Tù nhân
             <select
               value={form.prisoner_id}
               onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })}
               required
               disabled={loadingPrisoners}
             >
-              <option value="">Select prisoner</option>
+              <option value="">Chọn tù nhân</option>
               {loadingPrisoners && (
                 <option value="" disabled>Loading prisoners...</option>
               )}
@@ -323,7 +323,7 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
           </label>
 
           <label>
-            Visitor Name
+            Tên Người thăm
             <input
               value={form.visitor_name}
               onChange={(e) => setForm({ ...form, visitor_name: e.target.value })}
@@ -332,7 +332,7 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
           </label>
 
           <label>
-            Visit Date
+            Ngày Thăm
             <input
               type="datetime-local"
               value={form.visit_date}
@@ -342,14 +342,14 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
           </label>
 
           <label>
-            Status
+            Trạng thái
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
             >
-              <option>Pending</option>
-              <option>Approved</option>
-              <option>Rejected</option>
+              <option>Chờ duyệt</option>
+              <option>Đã phê duyệt</option>
+              <option>Đã từ chối</option>
             </select>
           </label>
 
@@ -364,10 +364,10 @@ function EditVisitModal({ visit, onClose, onSaved, showToast }) {
 
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>
-              {loading ? "Saving..." : "Save Changes"}
+              {loading ? "Đang lưu..." : "Lưu Thay đổi"}
             </button>
             <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>
@@ -397,24 +397,24 @@ function MyRequestDetailModal({ request, onClose, prisonerNameById }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Request Detail #{request.request_id}</h3>
+          <h3>Chi tiết Yêu cầu #{request.request_id}</h3>
           <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
 
         <div style={{ padding: "20px 24px" }}>
           {/* Detail rows using similar structure to other detail modals */}
           <div className="detail-item" style={{ marginBottom: "8px" }}>
-            <span>Prisoner</span>
+            <span>Tù nhân</span>
             <strong>{prisonerName}</strong>
           </div>
 
           <div className="detail-item" style={{ marginBottom: "8px" }}>
-            <span>Visit Date</span>
+            <span>Ngày Thăm</span>
             <strong>{String(request.requested_date || "").slice(0, 16)}</strong>
           </div>
 
           <div className="detail-item" style={{ marginBottom: "8px" }}>
-            <span>Status</span>
+            <span>Trạng thái</span>
             <div>
               <span className={`status-badge ${getStatusBadgeClass(request.status)}`}>
                 {request.status}
@@ -423,7 +423,7 @@ function MyRequestDetailModal({ request, onClose, prisonerNameById }) {
           </div>
 
           <div className="detail-item" style={{ marginBottom: "8px" }}>
-            <span>Notes</span>
+            <span>Ghi chú</span>
             <strong style={{ whiteSpace: "pre-wrap" }}>
               {request.notes || "Không có ghi chú"}
             </strong>
@@ -628,7 +628,7 @@ export default function VisitsPage() {
   };
 
   const reject = async (requestId) => {
-    const confirmed = window.confirm("Reject this visit request?");
+    const confirmed = window.confirm("Từ chối yêu cầu thăm gặp này?");
     if (!confirmed) return;
 
     try {
@@ -641,7 +641,7 @@ export default function VisitsPage() {
   };
 
   const deleteVisit = async (visitId) => {
-    const confirmed = window.confirm("Delete this visit permanently?");
+    const confirmed = window.confirm("Xóa thăm gặp này vĩnh viễn?");
     if (!confirmed) return;
 
     if (editingVisit?.visit_id === visitId) {
@@ -664,13 +664,13 @@ export default function VisitsPage() {
   if (canRequestVisit) {
     // Only Viewer can create "Visit Request" (personal request flow)
     actions.push({ 
-      label: "Request Visit", 
+      label: "Yêu cầu Thăm gặp", 
       onClick: () => setShowPrisonerSelector(true) 
     });
   }
   if (canCreateVisit) {
     // Guard + Warden + Admin can create manual Visit (thủ công)
-    actions.push({ label: "+ Create Visit", onClick: () => setShowCreateModal(true), variant: "create" });
+    actions.push({ label: "+ Tạo Thăm gặp", onClick: () => setShowCreateModal(true), variant: "create" });
   }
 
   // Guard can see and manage the Pending requests section (Duyệt / Từ chối).
@@ -690,14 +690,14 @@ export default function VisitsPage() {
          This expands the main data area (đẩy trường thông tin sang, table + filters wider and cleaner). */}
       {hasSidebarActions && (
         <div className="page-action-column">
-          <ActionSidebar title="Actions" actions={actions} />
+          <ActionSidebar title="Hành động" actions={actions} />
         </div>
       )}
 
       <div className="page-main-data" style={!hasSidebarActions ? { marginLeft: 0 } : {}}>
       <section className="panel" style={!hasSidebarActions ? { paddingTop: '8px', paddingBottom: '8px' } : {}}>
         <div className="panel-header">
-          <h2>{isViewer ? "My Visit Requests" : "Visits"}</h2>
+          <h2>{isViewer ? "Yêu cầu Thăm gặp Của Tôi" : "Thăm gặp"}</h2>
         </div>
 
         {isViewer && (
@@ -713,7 +713,7 @@ export default function VisitsPage() {
           <div style={{ flex: 1, minWidth: "260px", maxWidth: "420px" }}>
             <input
               type="text"
-              placeholder={isViewer ? "Search your requests by prisoner, date or status..." : "Search by prisoner, visitor name, notes or status..."}
+              placeholder={isViewer ? "Tìm yêu cầu của bạn theo tù nhân, ngày hoặc trạng thái..." : "Tìm theo tù nhân, tên người thăm, ghi chú hoặc trạng thái..."}
               value={searchTerm}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
@@ -739,18 +739,18 @@ export default function VisitsPage() {
                 disabled={page <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
-                Prev
+                Trước
               </button>
-              <span className="muted">Page {page}</span>
+              <span className="muted">Trang {page}</span>
               <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>
-                Next
+                Sau
               </button>
             </div>
           )}
 
           {searchTerm && (
             <button className="secondary-btn" onClick={() => setSearchTerm("")} style={{ marginLeft: "auto" }}>
-              Clear search
+              Xóa tìm kiếm
             </button>
           )}
         </div>
@@ -842,8 +842,8 @@ export default function VisitsPage() {
                   <tr>
                     <td colSpan={6} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
                       {searchTerm 
-                        ? "No matching requests found." 
-                        : <>Bạn chưa có yêu cầu thăm gặp nào.<br />Nhấn nút <strong>“Request Visit”</strong> để tạo đơn mới.</>}
+                        ? "Không tìm thấy yêu cầu nào khớp." 
+                        : <>Bạn chưa có yêu cầu thăm gặp nào.<br />Nhấn nút <strong>“Yêu cầu Thăm gặp”</strong> để tạo đơn mới.</>}
                     </td>
                   </tr>
                 ) : (
@@ -866,9 +866,9 @@ export default function VisitsPage() {
                           <button 
                             className="btn-sm btn-edit" 
                             onClick={() => setViewingRequest(r)}
-                            title="View request details"
+                            title="Xem chi tiết yêu cầu"
                           >
-                            View
+                            Xem
                           </button>
                         </td>
                       </tr>
@@ -891,7 +891,7 @@ export default function VisitsPage() {
                   <th>Status</th>
                   <th>Notes</th>
                   {/* Actions column only if Guard or higher has edit/delete rights */}
-                  {(canEditVisit || canDeleteVisit) && <th style={{ width: "130px" }}>Actions</th>}
+                  {(canEditVisit || canDeleteVisit) && <th style={{ width: "130px" }}>Hành động</th>}
                 </tr>
               </thead>
               <tbody>
@@ -899,7 +899,7 @@ export default function VisitsPage() {
                   <tr>
                     {/* Always 7 columns when Actions are possible; Guard has Edit but no Delete, so still show the column */}
                     <td colSpan={7} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
-                      {searchTerm ? "No visits match your search." : "No visits found."}
+                      {searchTerm ? "Không có thăm gặp nào khớp tìm kiếm của bạn." : "Không tìm thấy thăm gặp nào."}
                     </td>
                   </tr>
                 ) : (
@@ -930,10 +930,10 @@ export default function VisitsPage() {
                                 <button
                                   className="btn-sm btn-edit"
                                   onClick={() => setEditingVisit(row)}
-                                  title="Edit visit"
+                                  title="Sửa thăm gặp"
                                 >
                                   <Edit2 size={14} style={{ marginRight: 4 }} />
-                                  Edit
+                                  Sửa
                                 </button>
                               )}
 
@@ -941,10 +941,10 @@ export default function VisitsPage() {
                                 <button
                                   className="btn-sm btn-delete"
                                   onClick={() => deleteVisit(row.visit_id)}
-                                  title="Delete visit"
+                                  title="Xóa thăm gặp"
                                 >
                                   <Trash2 size={14} style={{ marginRight: 4 }} />
-                                  Delete
+                                  Xóa
                                 </button>
                               )}
                             </div>
@@ -978,7 +978,7 @@ export default function VisitsPage() {
       {/* Pending visit requests section - visible for Guard (canApproveReject) and higher roles */}
       {!isViewer && pendingRequests.length > 0 && (
         <section className="panel">
-          <h3>Pending visit requests</h3>
+          <h3>Yêu cầu thăm gặp đang chờ</h3>
           <div className="table-wrap">
             <table>
               <thead>
@@ -999,8 +999,8 @@ export default function VisitsPage() {
                       {/* Guard + higher can Duyệt/Từ chối. Controlled by canApproveReject. */}
                       {canApproveReject && (
                         <div className="table-actions">
-                          <button className="btn-sm btn-edit" onClick={() => approve(r.request_id)}>Approve</button>
-                          <button className="btn-sm btn-delete" onClick={() => reject(r.request_id)}>Reject</button>
+                          <button className="btn-sm btn-edit" onClick={() => approve(r.request_id)}>Phê duyệt</button>
+                          <button className="btn-sm btn-delete" onClick={() => reject(r.request_id)}>Từ chối</button>
                         </div>
                       )}
                     </td>

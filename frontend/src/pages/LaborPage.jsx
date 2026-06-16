@@ -179,7 +179,7 @@ function ProjectEditModal({ project, locations, onClose, onSaved, showToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Edit project: {project?.project_name}</h3>
+          <h3>Sửa Dự án: {project?.project_name}</h3>
           <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
 
@@ -228,8 +228,8 @@ function ProjectEditModal({ project, locations, onClose, onSaved, showToast }) {
           </label>
 
           <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Save"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Đang lưu..." : "Lưu"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Hủy</button>
           </div>
         </form>
       </div>
@@ -285,7 +285,7 @@ function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Edit assignment: {assignment?.prisoner_name || `#${assignment?.prisoner_id}`}</h3>
+          <h3>Sửa Phân công: {assignment?.prisoner_name || `#${assignment?.prisoner_id}`}</h3>
           <button className="close-btn" type="button" onClick={onClose}>×</button>
         </div>
 
@@ -305,9 +305,9 @@ function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved
           </label>
 
           <label>
-            Project
+            Dự án
             <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} required>
-              <option value="">Select a project</option>
+              <option value="">Chọn dự án</option>
               {projects.map((project) => (
                 <option key={project.project_id} value={project.project_id}>
                   {project.project_name}
@@ -317,18 +317,18 @@ function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved
           </label>
 
           <label>
-            Assignment Date
+            Ngày Phân công
             <input type="date" value={form.assignment_date} onChange={(e) => setForm({ ...form, assignment_date: e.target.value })} required />
           </label>
 
           <label>
-            Hours Assigned
+            Số giờ Phân công
             <input type="number" step="0.25" min="0.25" value={form.hours_assigned} onChange={(e) => setForm({ ...form, hours_assigned: e.target.value })} required />
           </label>
 
           <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Saving..." : "Save"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Đang lưu..." : "Lưu"}</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Hủy</button>
           </div>
         </form>
       </div>
@@ -1112,46 +1112,46 @@ export default function LaborPage() {
         <div className="modal-overlay" onClick={() => setShowCreateProject(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Create Project</h3>
+              <h3>Tạo Dự án</h3>
               <button className="close-btn" onClick={() => setShowCreateProject(false)}>×</button>
             </div>
             {!canManageProjects && <div className="readonly-note">Admin and Warden only.</div>}
             <form className="form-grid" onSubmit={handleCreateProject}>
               <label>
-                Name
+                Tên
                 <input value={projectForm.project_name} onChange={(e) => setProjectForm({ ...projectForm, project_name: e.target.value })} required disabled={!canManageProjects} />
               </label>
               <label>
-                Location
+                Địa điểm
                 <select value={projectForm.location_id} onChange={(e) => setProjectForm({ ...projectForm, location_id: e.target.value })} disabled={!canManageProjects || loadingLocations}>
-                  <option value="">Unassigned</option>
+                  <option value="">Chưa gán</option>
                   {locations.map((location) => (
                     <option key={location.location_id} value={location.location_id}>{location.location_name} ({location.capacity})</option>
                   ))}
                 </select>
               </label>
               <label>
-                Revenue / Hour
+                Doanh thu / Giờ
                 <input type="number" step="0.01" min="0" value={projectForm.revenue_per_hour} onChange={(e) => setProjectForm({ ...projectForm, revenue_per_hour: e.target.value })} required disabled={!canManageProjects} />
               </label>
               <label>
-                Priority Score
+                Điểm Ưu tiên
                 <input type="number" min="0" value={projectForm.priority_score} onChange={(e) => setProjectForm({ ...projectForm, priority_score: e.target.value })} disabled={!canManageProjects} />
               </label>
               <label>
-                Max Workers
+                Số công nhân tối đa
                 <input type="number" min="1" value={projectForm.max_workers} onChange={(e) => setProjectForm({ ...projectForm, max_workers: e.target.value })} required disabled={!canManageProjects} />
               </label>
               <label>
-                Required Skills
+                Kỹ năng yêu cầu
                 <textarea value={projectForm.required_skills} onChange={(e) => setProjectForm({ ...projectForm, required_skills: e.target.value })} disabled={!canManageProjects} />
               </label>
               <label>
-                <input type="checkbox" checked={projectForm.is_active} onChange={(e) => setProjectForm({ ...projectForm, is_active: e.target.checked })} disabled={!canManageProjects} /> Active
+                <input type="checkbox" checked={projectForm.is_active} onChange={(e) => setProjectForm({ ...projectForm, is_active: e.target.checked })} disabled={!canManageProjects} /> Hoạt động
               </label>
               <div className="modal-buttons">
-                <button className="primary-btn" type="submit" disabled={!canManageProjects || savingProject}>{savingProject ? "Creating..." : "Create Project"}</button>
-                <button className="secondary-btn" type="button" onClick={() => setShowCreateProject(false)} disabled={savingProject}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={!canManageProjects || savingProject}>{savingProject ? "Đang tạo..." : "Tạo Dự án"}</button>
+                <button className="secondary-btn" type="button" onClick={() => setShowCreateProject(false)} disabled={savingProject}>Hủy</button>
               </div>
             </form>
           </div>
@@ -1162,13 +1162,13 @@ export default function LaborPage() {
         <div className="modal-overlay" onClick={() => setShowCreateAssignment(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Create Assignment</h3>
+              <h3>Tạo Phân công</h3>
               <button className="close-btn" onClick={() => setShowCreateAssignment(false)}>×</button>
             </div>
             <form className="form-grid" onSubmit={handleCreateAssignment}>
               <label>
-                Search prisoner
-                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Type prisoner name" />
+                Tìm tù nhân
+                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Tìm theo ID hoặc tên (ví dụ 523 hoặc tên)" />
               </label>
               <div className="searchable-picker">
                 <div className="search-status">
@@ -1205,8 +1205,8 @@ export default function LaborPage() {
                 <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required />
               </label>
               <div className="modal-buttons">
-                <button className="primary-btn" type="submit" disabled={savingAssignment}>{savingAssignment ? "Assigning..." : "Assign Prisoner"}</button>
-                <button className="secondary-btn" type="button" onClick={() => setShowCreateAssignment(false)} disabled={savingAssignment}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={savingAssignment}>{savingAssignment ? "Đang phân công..." : "Phân công Tù nhân"}</button>
+                <button className="secondary-btn" type="button" onClick={() => setShowCreateAssignment(false)} disabled={savingAssignment}>Hủy</button>
               </div>
             </form>
           </div>
@@ -1218,7 +1218,7 @@ export default function LaborPage() {
         <div className="modal-overlay" onClick={() => setShowLogPerformance(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>Log Performance</h3>
+              <h3>Ghi Hiệu suất</h3>
               <button className="close-btn" onClick={() => setShowLogPerformance(false)}>×</button>
             </div>
             {!canManageLabor && <div className="readonly-note">Limited to Admin, Warden, Guard.</div>}
@@ -1241,29 +1241,29 @@ export default function LaborPage() {
                 <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
               </div>
               <label>
-                Project
+                Dự án
                 <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
-                  <option value="">Select a project</option>
+                  <option value="">Chọn dự án</option>
                   {projects.map((project) => (
                     <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
                   ))}
                 </select>
               </label>
               <label>
-                Work Date
+                Ngày làm việc
                 <input type="date" value={performanceForm.work_date} onChange={(e) => setPerformanceForm({ ...performanceForm, work_date: e.target.value })} required disabled={!canManageLabor} />
               </label>
               <label>
-                Productivity
+                Năng suất
                 <input type="number" step="0.01" min="0" max="100" value={performanceForm.productivity} onChange={(e) => setPerformanceForm({ ...performanceForm, productivity: e.target.value })} required disabled={!canManageLabor} />
               </label>
               <label>
-                Notes
+                Ghi chú
                 <textarea value={performanceForm.notes} onChange={(e) => setPerformanceForm({ ...performanceForm, notes: e.target.value })} disabled={!canManageLabor} />
               </label>
               <div className="modal-buttons">
-                <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Saving..." : "Save Performance"}</button>
-                <button className="secondary-btn" type="button" onClick={() => setShowLogPerformance(false)} disabled={savingPerformance}>Cancel</button>
+                <button className="primary-btn" type="submit" disabled={!canManageLabor || savingPerformance}>{savingPerformance ? "Đang lưu..." : "Lưu Hiệu suất"}</button>
+                <button className="secondary-btn" type="button" onClick={() => setShowLogPerformance(false)} disabled={savingPerformance}>Hủy</button>
               </div>
             </form>
           </div>

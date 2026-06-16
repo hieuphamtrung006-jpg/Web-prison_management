@@ -28,35 +28,35 @@ import {
 const KEY_INDICATORS = [
   {
     key: "users",
-    title: "Active Staff",
+    title: "Nhân viên đang hoạt động",
     endpoint: "/users?active_only=true",
     icon: Users,
     accent: "#4f5df0",
-    sub: "on duty",
+    sub: "đang làm việc",
   },
   {
     key: "prisoners",
-    title: "In Custody",
+    title: "Tù nhân đang giam giữ",
     endpoint: "/prisoners",
     icon: UserCheck,
     accent: "#10a36e",
-    sub: "current population",
+    sub: "dân số hiện tại",
   },
   {
     key: "locations",
-    title: "Facilities",
+    title: "Cơ sở giam giữ",
     endpoint: "/locations",
     icon: MapPin,
     accent: "#d97706",
-    sub: "locations tracked",
+    sub: "địa điểm theo dõi",
   },
   {
     key: "visits",
-    title: "Pending Visits",
+    title: "Yêu cầu thăm gặp chờ",
     endpoint: "/visits?status_filter=Pending&today_only=true",
     icon: Clock,
     accent: "#d64343",
-    sub: "today's requests",
+    sub: "yêu cầu hôm nay",
   },
 ];
 
@@ -65,43 +65,43 @@ const KEY_INDICATORS = [
 // ============================================
 const QUICK_ACTIONS = [
   {
-    label: "Duyệt Visit Requests",
-    desc: "Approve or reject pending visitor requests",
+    label: "Duyệt Yêu cầu Thăm gặp",
+    desc: "Phê duyệt hoặc từ chối yêu cầu thăm gặp đang chờ",
     to: "/visits",
     icon: UserCheck,
     roles: ["Warden", "Guard", "Admin"],
   },
   {
-    label: "Overloaded Locations",
-    desc: "View facilities near or at capacity",
+    label: "Địa điểm Quá tải",
+    desc: "Xem các cơ sở gần hoặc đạt công suất",
     to: "/locations",
     icon: MapPin,
     roles: ["Warden", "Admin"],
   },
   {
-    label: "Log Daily Performance",
-    desc: "Record prisoner work productivity score",
+    label: "Ghi nhận Hiệu suất Hàng ngày",
+    desc: "Ghi điểm năng suất lao động của tù nhân",
     to: "/labor",
     icon: ClipboardList,
     roles: ["Guard", "Admin", "Warden"],
   },
   {
-    label: "Report Incident",
-    desc: "Quickly log a new security or disciplinary event",
+    label: "Báo cáo Sự cố",
+    desc: "Ghi nhanh sự cố an ninh hoặc kỷ luật mới",
     to: "/incidents",
     icon: AlertTriangle,
     roles: ["Guard", "Admin", "Warden"],
   },
   {
-    label: "Today's Assignments",
-    desc: "View current labor and schedule assignments",
+    label: "Phân công Hôm nay",
+    desc: "Xem phân công lao động và lịch trình hiện tại",
     to: "/schedules",
     icon: Activity,
     roles: ["Guard", "Admin", "Warden", "Viewer"],
   },
   {
-    label: "Labor Productivity",
-    desc: "Review daily performance and reports",
+    label: "Năng suất Lao động",
+    desc: "Xem xét hiệu suất hàng ngày và báo cáo",
     to: "/labor",
     icon: TrendingUp,
     roles: ["Warden", "Guard", "Admin", "Viewer"],
@@ -248,7 +248,7 @@ export default function DashboardPage() {
       setLastUpdated(new Date());
     } catch (err) {
       const msg = parseApiError(err);
-      setError(msg || "Failed to load operations data");
+      setError(msg || "Không tải được dữ liệu vận hành");
     } finally {
       setLoading(false);
     }
@@ -271,7 +271,7 @@ export default function DashboardPage() {
       setLastUpdated(new Date());
     } catch (err) {
       const msg = parseApiError(err);
-      setError(msg || "Failed to load your requests");
+      setError(msg || "Không tải được yêu cầu của bạn");
       setMyRequests([]);
     } finally {
       setViewerLoading(false);
@@ -338,7 +338,7 @@ export default function DashboardPage() {
       setLastUpdated(new Date());
     } catch (err) {
       const msg = parseApiError(err);
-      setError(msg || "Failed to load guard operations data");
+      setError(msg || "Không tải được dữ liệu vận hành của giám thị");
     } finally {
       setGuardLoading(false);
     }
@@ -426,7 +426,7 @@ export default function DashboardPage() {
           disabled={isViewer ? viewerLoading : isGuard ? guardLoading : loading}
         >
           <RefreshCw size={16} />
-          {(isViewer ? viewerLoading : isGuard ? guardLoading : loading) ? "Refreshing..." : "Refresh"}
+          {(isViewer ? viewerLoading : isGuard ? guardLoading : loading) ? "Đang làm mới..." : "Làm mới"}
         </button>
       </div>
 
@@ -434,7 +434,7 @@ export default function DashboardPage() {
       {error && (
         <div className="error-banner">
           <AlertCircle size={18} />
-          <span>{error}. Some data may be stale.</span>
+          <span>{error}. Một số dữ liệu có thể đã cũ.</span>
         </div>
       )}
 
@@ -451,7 +451,7 @@ export default function DashboardPage() {
               <span className="eyebrow">Your Request Summary</span>
               {lastUpdated && (
                 <div className="last-updated">
-                  <Clock size={14} /> Last updated {lastUpdated.toLocaleTimeString()}
+                  <Clock size={14} /> Cập nhật lần cuối {lastUpdated.toLocaleTimeString()}
                 </div>
               )}
             </div>
@@ -504,8 +504,8 @@ export default function DashboardPage() {
           <section className="panel" style={{ marginTop: 16 }}>
             <div className="section-head">
               <div>
-                <span className="eyebrow">Quick Actions</span>
-                <h3 style={{ marginTop: 2 }}>What would you like to do?</h3>
+                <span className="eyebrow">Hành động nhanh</span>
+                <h3 style={{ marginTop: 2 }}>Bạn muốn làm gì?</h3>
               </div>
             </div>
 
@@ -525,8 +525,8 @@ export default function DashboardPage() {
                   <UserCheck size={22} />
                 </div>
                 <div className="qa-content">
-                  <div className="qa-label" style={{ fontSize: "1.05rem" }}>Request New Visit</div>
-                  <div className="qa-desc">Submit a new visit request for a prisoner</div>
+                  <div className="qa-label" style={{ fontSize: "1.05rem" }}>Tạo Yêu cầu Thăm gặp Mới</div>
+                  <div className="qa-desc">Gửi yêu cầu thăm gặp mới cho tù nhân</div>
                 </div>
               </button>
 
@@ -536,8 +536,8 @@ export default function DashboardPage() {
                   <ClipboardList size={20} />
                 </div>
                 <div className="qa-content">
-                  <div className="qa-label">View My Requests</div>
-                  <div className="qa-desc">See the complete history and current status of all your requests</div>
+                  <div className="qa-label">Xem Yêu cầu Của Tôi</div>
+                  <div className="qa-desc">Xem lịch sử đầy đủ và trạng thái hiện tại của tất cả yêu cầu</div>
                 </div>
               </Link>
             </div>
@@ -547,25 +547,25 @@ export default function DashboardPage() {
           <section className="panel" style={{ marginTop: 16 }}>
             <div className="section-head">
               <div>
-                <span className="eyebrow">Recent Activity</span>
-                <h3 style={{ marginTop: 2 }}>My Recent Visit Requests</h3>
+                <span className="eyebrow">Hoạt động Gần đây</span>
+                <h3 style={{ marginTop: 2 }}>Yêu cầu Thăm gặp Gần Đây Của Tôi</h3>
               </div>
             </div>
 
             {viewerLoading ? (
               <div className="loading-state">
                 <div className="spinner" />
-                <p>Loading your recent requests...</p>
+                <p>Đang tải yêu cầu gần đây của bạn...</p>
               </div>
             ) : recentMyRequests.length > 0 ? (
               <div className="table-wrap" style={{ marginTop: 8 }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>Prisoner</th>
-                      <th>Visit Date</th>
-                      <th>Status</th>
-                      <th style={{ width: 80 }}>Action</th>
+                      <th>Tù nhân</th>
+                      <th>Ngày Thăm</th>
+                      <th>Trạng thái</th>
+                      <th style={{ width: 80 }}>Hành động</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -586,9 +586,9 @@ export default function DashboardPage() {
                             <Link 
                               to="/visits" 
                               className="btn-sm btn-edit"
-                              title="View details on My Visit Requests page"
+                              title="Xem chi tiết trên trang Yêu cầu Thăm gặp Của Tôi"
                             >
-                              View
+                              Xem
                             </Link>
                           </td>
                         </tr>
@@ -612,7 +612,7 @@ export default function DashboardPage() {
                   className="primary-btn" 
                   onClick={() => setShowRequestModal(true)}
                 >
-                  Request New Visit
+                  Tạo Yêu cầu Thăm gặp Mới
                 </button>
               </div>
             )}
@@ -714,7 +714,7 @@ export default function DashboardPage() {
                   <div className="qa-label" style={{ color: "#1e40af", fontWeight: 600, fontSize: "0.95rem" }}>
                     Ghi nhận hiệu suất lao động
                   </div>
-                  <div className="qa-desc" style={{ fontSize: "0.8rem" }}>Log Daily Performance</div>
+                  <div className="qa-desc" style={{ fontSize: "0.8rem" }}>Ghi Hiệu suất Hàng ngày</div>
                 </div>
               </Link>
 
@@ -725,7 +725,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="qa-content">
                   <div className="qa-label" style={{ fontWeight: 600 }}>Báo cáo sự cố mới</div>
-                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Report New Incident</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Báo cáo Sự cố Mới</div>
                 </div>
               </Link>
 
@@ -736,7 +736,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="qa-content">
                   <div className="qa-label">Tạo phân công lao động</div>
-                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Create Labor Assignment</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Tạo Phân công Lao động</div>
                 </div>
               </Link>
 
@@ -747,7 +747,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="qa-content">
                   <div className="qa-label">Xem phân công hôm nay</div>
-                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>View Today's Assignments</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Xem Phân công Hôm nay</div>
                 </div>
               </Link>
 
@@ -758,7 +758,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="qa-content">
                   <div className="qa-label">Xem yêu cầu thăm gặp chờ</div>
-                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>View Pending Visit Requests</div>
+                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Xem Yêu cầu Thăm gặp Chờ</div>
                 </div>
               </Link>
             </div>
@@ -870,10 +870,10 @@ export default function DashboardPage() {
           {/* KEY INDICATORS (4 core cards) */}
           <section>
             <div className="section-head" style={{ marginBottom: 12 }}>
-              <span className="eyebrow">Key Indicators</span>
+              <span className="eyebrow">Chỉ số Chính</span>
               {lastUpdated && (
                 <div className="last-updated">
-                  <Clock size={14} /> Last updated {lastUpdated.toLocaleTimeString()}
+                  <Clock size={14} /> Cập nhật lần cuối {lastUpdated.toLocaleTimeString()}
                 </div>
               )}
             </div>
@@ -924,7 +924,7 @@ export default function DashboardPage() {
                   ))}
                 </div>
               ) : (
-                <p className="muted">No quick actions available for your role.</p>
+                <p className="muted">Không có hành động nhanh nào cho vai trò của bạn.</p>
               )}
 
               <div style={{ marginTop: 16, fontSize: "0.8rem", color: "var(--muted)" }}>
@@ -940,7 +940,7 @@ export default function DashboardPage() {
                   <h3 style={{ marginTop: 2 }}>Requires attention</h3>
                 </div>
                 <Link to="/incidents" className="muted-link" style={{ fontSize: "0.85rem" }}>
-                  View incidents →
+                  Xem sự cố →
                 </Link>
               </div>
 
@@ -980,7 +980,7 @@ export default function DashboardPage() {
                     <div className="alert-icon">
                       <Shield size={18} />
                     </div>
-                    <div className="alert-text">No recent incidents reported.</div>
+                    <div className="alert-text">Không có sự cố nào được báo cáo gần đây.</div>
                   </div>
                 ) : (
                   <div className="alert-list">
@@ -1038,8 +1038,8 @@ export default function DashboardPage() {
 
       {/* Footer / status note */}
       <div style={{ textAlign: "center", fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>
-        Data refreshed from backend. Use the Refresh button for the latest snapshot.
-        {isViewer && " (Personal read-only view)"}
+        Dữ liệu đã được làm mới từ máy chủ. Sử dụng nút Làm mới để có bản chụp mới nhất.
+        {isViewer && " (Chế độ xem cá nhân chỉ đọc)"}
         {isGuard && " (Guard operations view — focused on daily tasks)"}
       </div>
 
@@ -1078,7 +1078,7 @@ function RequestVisitModalForDashboard({ onClose, onSuccess }) {
       });
       onSuccess(); // will refresh dashboard data and close
     } catch (err) {
-      setError(parseApiError(err) || "Failed to submit request");
+      setError(parseApiError(err) || "Không gửi được yêu cầu");
     } finally {
       setLoading(false);
     }
@@ -1088,7 +1088,7 @@ function RequestVisitModalForDashboard({ onClose, onSuccess }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Request a Visit</h3>
+          <h3>Tạo Yêu cầu Thăm gặp</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
 
@@ -1096,7 +1096,7 @@ function RequestVisitModalForDashboard({ onClose, onSuccess }) {
 
         <form className="form-grid" onSubmit={handleSubmit} style={{ padding: "18px 20px 20px" }}>
           <label>
-            Prisoner ID
+            Mã Tù nhân
             <input 
               type="number" 
               value={form.prisoner_id} 
@@ -1105,7 +1105,7 @@ function RequestVisitModalForDashboard({ onClose, onSuccess }) {
             />
           </label>
           <label>
-            Requested date
+            Ngày yêu cầu
             <input 
               type="datetime-local" 
               value={form.requested_date} 
@@ -1116,10 +1116,10 @@ function RequestVisitModalForDashboard({ onClose, onSuccess }) {
 
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>
-              {loading ? "Submitting..." : "Submit Request"}
+              {loading ? "Đang gửi..." : "Gửi Yêu cầu"}
             </button>
             <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>

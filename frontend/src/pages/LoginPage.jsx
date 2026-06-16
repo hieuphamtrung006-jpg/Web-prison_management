@@ -37,7 +37,7 @@ export default function LoginPage() {
     try {
       if (mode === "signup") {
         if (password !== confirmPassword) {
-          setLocalError("Password confirmation does not match");
+          setLocalError("Xác nhận mật khẩu không khớp");
           return;
         }
         await signup({
@@ -52,7 +52,7 @@ export default function LoginPage() {
         await login(username, password);
       }
     } catch (err) {
-      setLocalError(err?.response?.data?.detail || err?.message || "Login failed");
+      setLocalError(err?.response?.data?.detail || err?.message || "Đăng nhập thất bại");
     } finally {
       setLoading(false);
     }
@@ -65,12 +65,12 @@ export default function LoginPage() {
           <div className="cyber-seal">
             <Fingerprint className="pulse-cyan" size={32} />
           </div>
-          <span className="terminal-status">[ SECURE LINK ACTIVE ]</span>
+          <span className="terminal-status">[ LIÊN KẾT AN TOÀN ĐANG HOẠT ĐỘNG ]</span>
         </div>
 
         <div className="login-title-section">
-          <h1>PRISON COMMAND</h1>
-          <p className="terminal-subtitle">SYSTEM LOG: AUTHENTICATION REQUIRED</p>
+          <h1>CHỈ HUY NHÀ TÙ</h1>
+          <p className="terminal-subtitle">NHẬT KÝ HỆ THỐNG: YÊU CẦU XÁC THỰC</p>
         </div>
 
         <div className="auth-switch-row">
@@ -83,7 +83,7 @@ export default function LoginPage() {
             }}
           >
             <LogIn size={14} />
-            <span>SIGN IN</span>
+            <span>ĐĂNG NHẬP</span>
           </button>
           <button
             type="button"
@@ -94,25 +94,25 @@ export default function LoginPage() {
             }}
           >
             <UserPlus size={14} />
-            <span>CREATE KEY</span>
+            <span>TẠO KHÓA</span>
           </button>
         </div>
 
         <p className="auth-description">
           {mode === "signin"
-            ? "Enter credentials to unlock operations and security modules."
-            : "Register new operator key. Higher roles require Warden authorization."}
+            ? "Nhập thông tin đăng nhập để mở khóa các mô-đun vận hành và an ninh."
+            : "Đăng ký khóa vận hành mới. Vai trò cao hơn cần ủy quyền của Giám thị trưởng."}
         </p>
 
         <form className="form-grid" onSubmit={onSubmit}>
           {mode === "signup" && (
             <div className="input-group">
-              <label>Full name</label>
+              <label>Họ và tên</label>
               <div className="input-wrapper">
                 <User className="input-field-icon" size={16} />
                 <input
                   type="text"
-                  placeholder="e.g. John Doe"
+                  placeholder="ví dụ: Nguyễn Văn A"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   required
@@ -122,12 +122,12 @@ export default function LoginPage() {
           )}
 
           <div className="input-group">
-            <label>Username</label>
+            <label>Tên đăng nhập</label>
             <div className="input-wrapper">
               <User className="input-field-icon" size={16} />
               <input
                 type="text"
-                placeholder="Operator ID"
+                placeholder="Mã người dùng"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -136,21 +136,21 @@ export default function LoginPage() {
           </div>
           {mode === "signup" && (
             <div className="input-group">
-              <label>Role</label>
+              <label>Vai trò</label>
               <div className="input-wrapper">
                 <Shield className="input-field-icon" size={16} />
                 <select value={role} onChange={(e) => setRole(e.target.value)}>
-                  <option value="Viewer">Viewer (Read-only)</option>
-                  <option value="Guard">Guard (Operator)</option>
-                  <option value="Warden">Warden (Supervisor)</option>
-                  <option value="Admin">Admin (Full access)</option>
+                  <option value="Viewer">Người xem (Chỉ đọc)</option>
+                  <option value="Guard">Giám thị (Vận hành)</option>
+                  <option value="Warden">Giám thị trưởng (Giám sát)</option>
+                  <option value="Admin">Quản trị viên (Toàn quyền)</option>
                 </select>
               </div>
             </div>
           )}
 
           <div className="input-group">
-            <label>Password</label>
+            <label>Mật khẩu</label>
             <div className="input-wrapper">
               <Lock className="input-field-icon" size={16} />
               <input
@@ -166,7 +166,7 @@ export default function LoginPage() {
           {mode === "signup" && (
             <>
               <div className="input-group">
-                <label>Confirm password</label>
+                <label>Xác nhận mật khẩu</label>
                 <div className="input-wrapper">
                   <Lock className="input-field-icon" size={16} />
                   <input
@@ -185,7 +185,7 @@ export default function LoginPage() {
                   <Mail className="input-field-icon" size={16} />
                   <input
                     type="email"
-                    placeholder="operator@prison.gov"
+                    placeholder="quanly@nhatu.gov.vn"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                   />
@@ -193,12 +193,12 @@ export default function LoginPage() {
               </div>
 
               <div className="input-group">
-                <label>Phone</label>
+                <label>Điện thoại</label>
                 <div className="input-wrapper">
                   <Phone className="input-field-icon" size={16} />
                   <input
                     type="text"
-                    placeholder="+1 (555) 000-0000"
+                    placeholder="+84 123 456 789"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                   />
@@ -218,16 +218,16 @@ export default function LoginPage() {
             {loading ? (
               <span className="spinner-small"></span>
             ) : mode === "signup" ? (
-              "REGISTER SECURITY KEY"
+              "ĐĂNG KÝ KHÓA BẢO MẬT"
             ) : (
-              "EXECUTE SIGN IN"
+              "THỰC HIỆN ĐĂNG NHẬP"
             )}
           </button>
         </form>
 
         <div className="login-footer">
-          <p>AUTHORIZED SECURITY PERSONNEL ONLY</p>
-          <p className="muted-code">IP_LOGGING: ON • AES_256: ACTIVE</p>
+          <p>CHỈ DÀNH CHO NHÂN VIÊN AN NINH ĐƯỢC ỦY QUYỀN</p>
+          <p className="muted-code">GHI LOG IP: BẬT • AES_256: HOẠT ĐỘNG</p>
         </div>
       </div>
     </div>

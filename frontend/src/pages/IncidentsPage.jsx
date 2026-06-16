@@ -60,7 +60,7 @@ function CreateIncidentModal({ onClose, onSaved, showToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Create Incident</h3>
+          <h3>Tạo Sự cố</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         {error && <div className="error-msg">{error}</div>}
@@ -74,7 +74,7 @@ function CreateIncidentModal({ onClose, onSaved, showToast }) {
           <label>Description<textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Creating..." : "Create"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
+            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Hủy</button>
           </div>
         </form>
       </div>
@@ -196,10 +196,10 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
             >
               <option value="">Select prisoner</option>
               {loadingPrisoners && (
-                <option value="" disabled>Loading prisoners...</option>
+                <option value="" disabled>Đang tải tù nhân...</option>
               )}
               {!loadingPrisoners && dropdownPrisoners.length === 0 && (
-                <option value="" disabled>No prisoners loaded (check console for errors)</option>
+                <option value="" disabled>Không tải được tù nhân (kiểm tra console)</option>
               )}
               {dropdownPrisoners.map((p) => (
                 <option key={p.prisoner_id} value={p.prisoner_id}>
@@ -207,11 +207,11 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
                 </option>
               ))}
             </select>
-            {loadingPrisoners && <span style={{ fontSize: "0.8rem", marginLeft: "8px", color: "var(--muted)" }}>Loading...</span>}
+            {loadingPrisoners && <span style={{ fontSize: "0.8rem", marginLeft: "8px", color: "var(--muted)" }}>Đang tải...</span>}
           </label>
 
           <label>
-            Location ID
+            Mã Địa điểm
             <input
               type="number"
               value={form.location_id}
@@ -220,7 +220,7 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
           </label>
 
           <label>
-            Incident date
+            Ngày sự cố
             <input
               type="datetime-local"
               value={form.incident_date}
@@ -230,23 +230,23 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
           </label>
 
           <label>
-            Type
+            Loại
             <input
               value={form.incident_type}
               onChange={(e) => setForm({ ...form, incident_type: e.target.value })}
-              placeholder="e.g. Fight, Theft, Medical"
+              placeholder="ví dụ: Đánh nhau, Trộm cắp, Y tế"
             />
           </label>
 
           <label>
-            Severity
+            Mức độ
             <select
               value={form.severity}
               onChange={(e) => setForm({ ...form, severity: e.target.value })}
             >
-              <option>Low</option>
-              <option>Medium</option>
-              <option>High</option>
+              <option>Thấp</option>
+              <option>Trung bình</option>
+              <option>Cao</option>
             </select>
           </label>
 
@@ -270,10 +270,10 @@ function EditIncidentModal({ incident, onClose, onSaved, showToast }) {
 
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>
-              {loading ? "Saving..." : "Save Changes"}
+              {loading ? "Đang lưu..." : "Lưu Thay đổi"}
             </button>
             <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>
@@ -407,7 +407,7 @@ export default function IncidentsPage() {
   // Sidebar: Guard gets Create button too (per requirements)
   const createActions = canCreate
     ? [
-        { label: "+ Create New Incident", onClick: () => setShowCreateModal(true), variant: "create" },
+        { label: "+ Tạo Sự cố Mới", onClick: () => setShowCreateModal(true), variant: "create" },
       ]
     : [];
 
@@ -422,7 +422,7 @@ export default function IncidentsPage() {
       <div className="page-main-data">
       <section className="panel">
         <div className="panel-header">
-          <h2>Incidents</h2>
+          <h2>Sự cố</h2>
         </div>
 
         {error && <p className="error-msg">{error}</p>}
@@ -457,11 +457,11 @@ export default function IncidentsPage() {
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
-              Prev
+              Trước
             </button>
-            <span className="muted">Page {page}</span>
+            <span className="muted">Trang {page}</span>
             <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>
-              Next
+              Sau
             </button>
           </div>
 
@@ -560,7 +560,7 @@ export default function IncidentsPage() {
               {filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={7} style={{ textAlign: "center", padding: "24px", color: "var(--muted)" }}>
-                    {(searchTerm || filterPrisonerId || filterDate || filterSeverity) ? "No incidents match filters." : "No incidents found."}
+                    {(searchTerm || filterPrisonerId || filterDate || filterSeverity) ? "Không có sự cố nào khớp bộ lọc." : "Không tìm thấy sự cố nào."}
                   </td>
                 </tr>
               ) : (

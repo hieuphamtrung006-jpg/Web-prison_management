@@ -21,12 +21,12 @@ export default function ShiftsPage() {
 
   return (
     <section className="panel">
-      <h2>Shifts</h2>
+      <h2>Ca làm việc</h2>
       {error && <p className="error-msg">{error}</p>}
       <div className="inline-form">
-        <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-        <span className="muted">Page {page}</span>
-        <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Next</button>
+        <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Trước</button>
+        <span className="muted">Trang {page}</span>
+        <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>Sau</button>
       </div>
       <div className="table-wrap">
         <table>

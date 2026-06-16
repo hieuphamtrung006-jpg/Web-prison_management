@@ -55,7 +55,7 @@ function UserEditModal({ user, onClose, onSave }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Edit User: {user?.username}</h3>
+          <h3>Sửa Người dùng: {user?.username}</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
 
@@ -63,7 +63,7 @@ function UserEditModal({ user, onClose, onSave }) {
 
         <form onSubmit={handleSubmit} className="form-grid">
           <label>
-            Full Name
+            Họ tên
             <input
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
@@ -72,12 +72,12 @@ function UserEditModal({ user, onClose, onSave }) {
           </label>
 
           <label>
-            Role
+            Vai trò
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Admin</option>
-              <option>Warden</option>
-              <option>Guard</option>
-              <option>Viewer</option>
+              <option>Quản trị viên</option>
+              <option>Giám thị trưởng</option>
+              <option>Giám thị</option>
+              <option>Người xem</option>
             </select>
           </label>
 
@@ -99,7 +99,7 @@ function UserEditModal({ user, onClose, onSave }) {
           </label>
 
           <label>
-            New Password (leave blank to keep current)
+            Mật khẩu Mới (để trống để giữ nguyên)
             <input
               type="password"
               value={form.password}
@@ -113,15 +113,15 @@ function UserEditModal({ user, onClose, onSave }) {
               checked={form.is_active}
               onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
             />
-            Active
+            Hoạt động
           </label>
 
           <div className="modal-buttons">
             <button type="submit" className="primary-btn" disabled={loading}>
-              {loading ? "Saving..." : "Save"}
+              {loading ? "Đang lưu..." : "Lưu"}
             </button>
             <button type="button" className="secondary-btn" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>
@@ -142,7 +142,7 @@ function CreateUserModal({ onClose, onSave, showToast }) {
 
     try {
       await api.post("/users", form);
-      showToast("User created successfully", "success");
+      showToast("Đã tạo người dùng", "success");
       setForm(initialForm);
       onSave();
       onClose();
@@ -165,7 +165,7 @@ function CreateUserModal({ onClose, onSave, showToast }) {
 
         <form onSubmit={handleSubmit} className="form-grid">
           <label>
-            Username
+            Tên đăng nhập
             <input
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -173,7 +173,7 @@ function CreateUserModal({ onClose, onSave, showToast }) {
             />
           </label>
           <label>
-            Full Name
+            Họ tên
             <input
               value={form.full_name}
               onChange={(e) => setForm({ ...form, full_name: e.target.value })}
@@ -181,12 +181,12 @@ function CreateUserModal({ onClose, onSave, showToast }) {
             />
           </label>
           <label>
-            Role
+            Vai trò
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Admin</option>
-              <option>Warden</option>
-              <option>Guard</option>
-              <option>Viewer</option>
+              <option>Quản trị viên</option>
+              <option>Giám thị trưởng</option>
+              <option>Giám thị</option>
+              <option>Người xem</option>
             </select>
           </label>
           <label>
@@ -194,11 +194,11 @@ function CreateUserModal({ onClose, onSave, showToast }) {
             <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </label>
           <label>
-            Phone
+            Điện thoại
             <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </label>
           <label>
-            Password
+            Mật khẩu
             <input
               type="password"
               value={form.password}
@@ -208,10 +208,10 @@ function CreateUserModal({ onClose, onSave, showToast }) {
           </label>
           <div className="modal-buttons">
             <button type="submit" className="primary-btn" disabled={loading}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? "Đang tạo..." : "Tạo"}
             </button>
             <button type="button" className="secondary-btn" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>
@@ -275,7 +275,7 @@ export default function UsersPage() {
 
     try {
       await api.delete(`/users/${userId}`);
-      showToast("User deleted successfully", "success");
+      showToast("Đã xóa người dùng", "success");
       await load();
     } catch (err) {
       const errorMsg = parseApiError(err);
@@ -300,32 +300,32 @@ export default function UsersPage() {
   return (
     <div className="page-action-layout">
       <div className="page-action-column">
-        <ActionSidebar title="Actions" actions={createActions} />
+        <ActionSidebar title="Hành động" actions={createActions} />
       </div>
 
       <div className="page-main-data">
       <section className="panel">
-        <h2>Users</h2>
+        <h2>Người dùng</h2>
         {error && <div className="error-msg">{error}</div>}
 
         <div className="inline-form">
           <button className="secondary-btn" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            ← Prev
+            ← Trước
           </button>
-          <span className="muted">Page {page}</span>
+          <span className="muted">Trang {page}</span>
           <button className="secondary-btn" onClick={() => setPage((p) => p + 1)}>
-            Next →
+            Sau →
           </button>
         </div>
 
         {loading ? (
           <div className="loading-state">
             <div className="spinner"></div>
-            <p>Loading users...</p>
+            <p>Đang tải người dùng...</p>
           </div>
         ) : visibleRows.length === 0 ? (
           <div className="loading-state">
-            <p>No users found</p>
+            <p>Không tìm thấy người dùng</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -333,12 +333,12 @@ export default function UsersPage() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Username</th>
-                  <th>Full Name</th>
-                  <th>Role</th>
+                  <th>Tên đăng nhập</th>
+                  <th>Họ tên</th>
+                  <th>Vai trò</th>
                   <th>Email</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th>Trạng thái</th>
+                  <th>Hành động</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,7 +351,7 @@ export default function UsersPage() {
                     <td>{row.email || "-"}</td>
                     <td>
                       <span className={`status-badge status-${row.is_active ? "active" : "inactive"}`}>
-                        {row.is_active ? "Active" : "Inactive"}
+                        {row.is_active ? "Hoạt động" : "Không hoạt động"}
                       </span>
                     </td>
                     <td>
@@ -360,13 +360,13 @@ export default function UsersPage() {
                           className="btn-sm btn-edit"
                           onClick={() => setEditingUser(row)}
                         >
-                          Edit
+                          Sửa
                         </button>
                         <button
                           className="btn-sm btn-delete"
                           onClick={() => deleteUser(row.user_id, row.username)}
                         >
-                          Delete
+                          Xóa
                         </button>
                       </div>
                     </td>
@@ -383,7 +383,7 @@ export default function UsersPage() {
           user={editingUser}
           onClose={() => setEditingUser(null)}
           onSave={() => {
-            showToast("User updated successfully", "success");
+            showToast("Đã cập nhật người dùng", "success");
             load();
           }}
         />
