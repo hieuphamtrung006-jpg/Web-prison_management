@@ -235,7 +235,15 @@ function Toast({ message, type = "info", onClose }) {
 
 export default function UsersPage() {
   const { user } = useAuth();
+
+  // Role-based permissions using current_user.role (Warden has full management on Users)
+  // Per requirement: Warden = full quyền Create + Edit + Active/Inactive user (same as Admin for this page).
+  // Route protection (App.jsx) already limits /users to ["Admin", "Warden"].
+  const isWarden = user?.role === "Warden";
+  const isAdmin = user?.role === "Admin";
+  // Legacy isGuard kept only for safety (Guard cannot reach this page due to RoleBasedRoute).
   const isGuard = user?.role === "Guard";
+
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -254,7 +262,9 @@ export default function UsersPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await api.get(`/users?active_only=true&page=${page}&page_size=${pageSize}`);
+      // Use active_only=false so Warden/Admin can see Inactive users and toggle Active/Inactive via Edit.
+      // (Backend supports the flag; default was true which hid inactives.)
+      const response = await api.get(`/users?active_only=false&page=${page}&page_size=${pageSize}`);
       setRows(response.data);
     } catch (err) {
       const errorMsg = parseApiError(err);
@@ -284,9 +294,14 @@ export default function UsersPage() {
     }
   };
 
+  // For Admin + Warden: see ALL users (active + inactive) so they can manage Active/Inactive status.
+  // Guard filter kept only as dead-code guard (unreachable).
   const visibleRows = isGuard ? rows.filter((row) => row.role === "Viewer") : rows;
 
-  const canCreateUser = !isGuard;
+  // Warden + Admin: full quyền Create (button in sidebar) + Edit (incl. role + is_active for Active/Inactive)
+  const canCreateUser = isAdmin || isWarden;
+  const canDeleteUser = isAdmin; // Backend delete restricted to Admin only; Warden gets Create/Edit/Status
+
   const createActions = canCreateUser
     ? [
         {
@@ -296,6 +311,10 @@ export default function UsersPage() {
         },
       ]
     : [];
+
+  // Layout: show left Actions sidebar only when the role has Create (Warden/Admin).
+  // This pushes the main table content ("đẩy trường thông tin sang") when no create (future-proof).
+  const hasCreateAction = canCreateUser;
 
   return (
     <div className="page-action-layout">

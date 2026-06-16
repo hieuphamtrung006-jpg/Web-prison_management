@@ -84,7 +84,7 @@ def list_my_visit_requests(
 def approve_visit_request(
     request_id: int,
     request: Request,
-    current_user: User = Depends(require_roles("Warden", "Guard")),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
 ):
     # Set audit context manually
@@ -122,7 +122,7 @@ def approve_visit_request(
 def reject_visit_request(
     request_id: int,
     request: Request,
-    current_user: User = Depends(require_roles("Warden", "Guard")),
+    current_user: User = Depends(require_roles("Admin", "Warden", "Guard")),
     db: Session = Depends(get_db),
 ):
     # Set audit context manually

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ActionSidebar from "../components/ActionSidebar";
@@ -212,15 +212,41 @@ export default function LocationsPage() {
   const [editing, setEditing] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Search states: draft for inputs (controlled), applied for API calls
+  // Separate for search (text, debounced) and type (select, immediate)
+  const [search, setSearch] = useState("");
+  const [searchDraft, setSearchDraft] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [typeDraft, setTypeDraft] = useState("");
+
+  // Ref for search debounce timer (to avoid Network spam on keystroke)
+  const searchDebounceRef = useRef(null);
+
   const pageSize = 20;
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
-  const load = async (pageNumber = page) => {
+  // Updated load to support search query params from backend
+  // search: partial name match (ilike), type: exact type filter
+  // Keeps pagination, works for all allowed roles (Admin/Warden/Guard)
+  // load accepts optional overrideSearch and overrideType so callers (button, debounce, delete, modals)
+  // can pass the exact intended values at call time. This avoids any stale closure issues
+  // where an old render's load would fetch without the search params.
+  const load = async (pageNumber = page, overrideSearch, overrideType) => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.get(`/locations?page=${pageNumber}&page_size=${pageSize}`);
+      const effectiveSearch = overrideSearch !== undefined ? overrideSearch : search;
+      const effectiveType = overrideType !== undefined ? overrideType : typeFilter;
+
+      let url = `/locations?page=${pageNumber}&page_size=${pageSize}`;
+      if (effectiveSearch) {
+        url += `&search=${encodeURIComponent(effectiveSearch)}`;
+      }
+      if (effectiveType) {
+        url += `&type=${encodeURIComponent(effectiveType)}`;
+      }
+      const res = await api.get(url);
       setRows(res.data);
     } catch (err) {
       const message = parseApiError(err);
@@ -231,9 +257,20 @@ export default function LocationsPage() {
     }
   };
 
+  // Reload when page or active search/type filters change.
+  // We pass the current values explicitly to load so the fetch always uses the right search/type.
   useEffect(() => {
-    load(page);
-  }, [page]);
+    load(page, search, typeFilter);
+  }, [page, search, typeFilter]);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
 
   const deleteLocation = async (loc) => {
     const confirmed = window.confirm(`Xóa địa điểm "${loc.location_name}" vĩnh viễn?`);
@@ -248,6 +285,40 @@ export default function LocationsPage() {
       setError(message);
       showToast(message, "error");
     }
+  };
+
+  // Handlers for search (consistent with other pages like Prisoners)
+  const handleSearch = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    const newSearch = searchDraft;
+    const newType = typeDraft;
+
+    // Update the applied state (for UI consistency and future effect-driven loads)
+    setSearch(newSearch);
+    setTypeFilter(newType);
+    setPage(1);
+
+    // CRITICAL: Immediately call load with the exact values from the button click.
+    // This guarantees the API is called with the search params right now,
+    // bypassing any potential timing/closure issues with the batched setState + useEffect.
+    // This is the most likely fix for "click search but data stays the same as before search".
+    load(1, newSearch, newType);
+  };
+
+  const handleResetFilters = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setSearchDraft("");
+    setTypeDraft("");
+    setSearch("");
+    setTypeFilter("");
+    setPage(1);
+
+    // Explicit load with cleared filters so the table immediately shows all data
+    load(1, "", "");
   };
 
   const canWrite = user?.role === "Admin" || user?.role === "Warden";
@@ -351,7 +422,7 @@ export default function LocationsPage() {
         <LocationEditModal
           location={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => load(page)}
+          onSaved={() => load(page, search, typeFilter)}
           showToast={showToast}
         />
       )}
@@ -360,8 +431,10 @@ export default function LocationsPage() {
         <CreateLocationModal
           onClose={() => setShowCreateModal(false)}
           onSaved={() => {
+            // Keep the current active search/type when creating new location
+            // (so the list stays filtered after create)
             setPage(1);
-            load(1);
+            load(1, search, typeFilter);
           }}
           showToast={showToast}
         />

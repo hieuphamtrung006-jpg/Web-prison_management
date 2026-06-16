@@ -246,6 +246,27 @@ function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [prisonerSearch, setPrisonerSearch] = useState("");
+
+  // Local filtered for this modal's prisoner search (supports ID and name)
+  const filteredPrisoners = useMemo(() => {
+    const search = prisonerSearch.trim().toLowerCase();
+    if (!search) return prisoners;
+    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(String(prisoner.prisoner_id), search));
+  }, [prisoners, prisonerSearch]);
+
+  const selectedPrisonerName = useMemo(() => {
+    const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(form.prisoner_id));
+    return found?.full_name || "";
+  }, [form.prisoner_id, prisoners]);
+
+  // Options: filtered search results + ensure the currently selected prisoner is always in the list (even if search doesn't match it)
+  const editPrisonerOptions = useMemo(() => {
+    const options = [...filteredPrisoners];
+    const selected = prisoners.find((item) => String(item.prisoner_id) === String(form.prisoner_id));
+    if (selected && !options.some((item) => item.prisoner_id === selected.prisoner_id)) options.unshift(selected);
+    return options;
+  }, [filteredPrisoners, prisoners, form.prisoner_id]);
 
   useEffect(() => {
     setForm({
@@ -255,6 +276,7 @@ function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved
       hours_assigned: assignment?.hours_assigned ?? 1,
     });
     setError("");
+    setPrisonerSearch(""); // reset search when opening different assignment
   }, [assignment]);
 
   const handleSubmit = async (event) => {
@@ -293,16 +315,36 @@ function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved
 
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
-            Prisoner
-            <select value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required>
-              <option value="">Select prisoner</option>
-              {prisoners.map((prisoner) => (
-                <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                  {prisoner.full_name} (#{prisoner.prisoner_id})
-                </option>
-              ))}
-            </select>
+            Search prisoner
+            <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Search by ID or name (e.g. 523 or name)" />
           </label>
+          {prisonerSearch.trim() ? (
+            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '4px', marginTop: '4px' }}>
+              {editPrisonerOptions.length === 0 ? (
+                <div style={{ padding: '8px', color: 'var(--muted)', fontSize: '0.85rem' }}>No matches found</div>
+              ) : (
+                editPrisonerOptions.map((prisoner) => (
+                  <div
+                    key={prisoner.prisoner_id}
+                    onClick={() => setForm({ ...form, prisoner_id: prisoner.prisoner_id })}
+                    style={{
+                      padding: '6px 8px',
+                      cursor: 'pointer',
+                      background: String(form.prisoner_id) === String(prisoner.prisoner_id) ? 'var(--accent)' : 'transparent',
+                      color: String(form.prisoner_id) === String(prisoner.prisoner_id) ? '#fff' : 'inherit',
+                      borderBottom: '1px solid #eee',
+                      fontSize: '0.9rem'
+                    }}
+                  >
+                    #{prisoner.prisoner_id} - {prisoner.full_name}
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}>Type to search prisoners by ID or name</div>
+          )}
+          <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
 
           <label>
             Dự án
@@ -351,11 +393,11 @@ export default function LaborPage() {
   const isViewer = user?.role === "Viewer";
   // current_user.role controls:
   // - Viewer: read-only on everything, no performance, special fetch (vw_ Basic), no sidebar, tighter layout.
-  // - Guard: full control on Assignments + Performance (Create/Edit/Delete + Log), but only VIEW on Projects (no create/edit/delete on projects).
-  // - Admin/Warden: full control on Projects + Labor.
+  // - Guard: full on Assignments + Performance (Create/Edit/Delete + Log), only VIEW on Projects (no create/edit/delete on projects, no Actions column).
+  // - Warden/Admin: FULL on Projects (Create/Edit/Delete + all buttons) + full on Assignments + Performance (Log + History). All sections visible, no hiding.
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
-  const canCreateAssignment = canManageLabor; // Guard needs full Create on Assignments
+  const canCreateAssignment = canManageLabor; // Guard + Warden/Admin need full Create on Assignments
   // Note: Guard will load full (non-vw) data paths → no Network Error from viewer raw query issues.
 
   const [projects, setProjects] = useState([]);
@@ -363,7 +405,8 @@ export default function LaborPage() {
   const [performanceRows, setPerformanceRows] = useState([]);
   const [locations, setLocations] = useState([]);
   const [prisoners, setPrisoners] = useState([]);
-  const [prisonerSearch, setPrisonerSearch] = useState("");
+  const [prisonerSearch, setPrisonerSearch] = useState(""); // for Create Assignment
+  const [performancePrisonerSearch, setPerformancePrisonerSearch] = useState(""); // for Log Performance
   const [projectSearch, setProjectSearch] = useState("");
   const [assignmentSearch, setAssignmentSearch] = useState("");
   const [performanceSearch, setPerformanceSearch] = useState("");
@@ -402,8 +445,23 @@ export default function LaborPage() {
   const filteredPrisoners = useMemo(() => {
     const search = prisonerSearch.trim().toLowerCase();
     if (!search) return prisoners;
-    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(prisoner.prisoner_id, search));
+    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(String(prisoner.prisoner_id), search));
   }, [prisoners, prisonerSearch]);
+
+  // Separate filtered list for Log Performance modal to allow independent search
+  const performanceFilteredPrisoners = useMemo(() => {
+    const search = performancePrisonerSearch.trim().toLowerCase();
+    if (!search) return prisoners;
+    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(String(prisoner.prisoner_id), search));
+  }, [prisoners, performancePrisonerSearch]);
+
+  // Options for performance: filtered + ensure currently selected prisoner is included even if not in current search results
+  const performancePrisonerOptions = useMemo(() => {
+    const options = [...performanceFilteredPrisoners];
+    const selected = prisoners.find((item) => String(item.prisoner_id) === String(performanceForm.prisoner_id));
+    if (selected && !options.some((item) => item.prisoner_id === selected.prisoner_id)) options.unshift(selected);
+    return options;
+  }, [performanceFilteredPrisoners, prisoners, performanceForm.prisoner_id]);
 
   const selectedPrisonerName = useMemo(() => {
     const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(assignmentForm.prisoner_id));
@@ -448,13 +506,12 @@ export default function LaborPage() {
     }
   };
 
-  const loadPrisoners = async (search = prisonerSearch) => {
+  const loadPrisoners = async () => {
     setLoadingPrisoners(true);
     try {
+      // Always load full list (page_size 100 sufficient); search/filter is done client-side per modal for smoothness
+      // Backend supports ?name= or ?prisoner_id= for cases where server-side search is used (e.g. Prisoners page)
       const params = new URLSearchParams({ page: "1", page_size: "100" });
-      if (search.trim()) {
-        params.set("name", search.trim());
-      }
       const response = await api.get(`/prisoners?${params.toString()}`);
       setPrisoners(response.data);
     } catch (err) {
@@ -522,7 +579,7 @@ export default function LaborPage() {
     const loads = [
       loadProjects(),
       ...(isViewer ? [] : [loadLocations()]),
-      loadPrisoners(prisonerSearch),
+      loadPrisoners(),
       loadAssignments(assignmentPage, assignmentFilters),
     ];
     if (!isViewer) {
@@ -536,10 +593,8 @@ export default function LaborPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    loadPrisoners(prisonerSearch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prisonerSearch]);
+  // Load full prisoners list once on mount (client-side search in modals for smooth UX)
+  // Server-side search param supported in backend for other pages (e.g. PrisonersPage)
 
   const reloadAssignments = async (nextPage = assignmentPage) => {
     await loadAssignments(nextPage, assignmentFilters);
@@ -785,8 +840,8 @@ export default function LaborPage() {
             actions={[
               ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
               ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
-              // Only show Log Performance for non-Viewer roles (Guard/Warden/Admin)
-              ...(!isViewer ? [{ label: "Log Performance", onClick: () => setShowLogPerformance(true) }] : []),
+              // Log Performance shown if canManageLabor (includes Guard + Warden + Admin)
+              ...(canManageLabor ? [{ label: "Log Performance", onClick: () => setShowLogPerformance(true) }] : []),
             ]}
           />
         </div>
@@ -795,8 +850,9 @@ export default function LaborPage() {
       <div className="page-main-data">
       <div style={{ display: 'block' }}>
         <div className="labor-stack">
-          {/* For Viewer: tighter margins (no performance section + no sidebar).
-              Guard sees full sections (Assignments + full Performance) with normal spacing, but clean read-only Projects table (no Actions column). */}
+          {/* For Viewer: tighter margins (no performance, no sidebar).
+              Guard: clean read-only Projects (no Actions column), but full Assignments + Performance (normal spacing).
+              Warden/Admin: full everything, normal spacing. */}
           <section className="panel" style={isViewer ? { marginBottom: '8px' } : {}}>
             <div className="section-head">
               <div>
@@ -891,7 +947,7 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Assignments section always shown for Guard (full management) and higher roles. */}
+          {/* Assignments section shown for canManageLabor roles (Guard full on assignments, Warden/Admin full). */}
           <section className="panel" style={isViewer ? { marginTop: '8px' } : {}}>
             <div className="section-head">
               <div>
@@ -970,7 +1026,9 @@ export default function LaborPage() {
                       <th>Assigned Date</th>
                       <th>Hours</th>
                       <th>Assigned By</th>
-                      {!isViewer && <th>Actions</th>}
+                      {/* Actions column for Assignments: shown for roles with canManageLabor (Guard + Warden + Admin).
+                          Guard has full on assignments (Create/Edit/Delete). */}
+                      {canManageLabor && <th>Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -981,7 +1039,7 @@ export default function LaborPage() {
                         <td>{formatDateOnly(assignment.assignment_date)}</td>
                         <td>{formatDecimal(assignment.hours_assigned)}</td>
                         <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
-                        {!isViewer && (
+                        {canManageLabor && (
                           <td>
                             <div className="table-actions">
                               {canManageLabor && (
@@ -1001,9 +1059,9 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Performance History + Log fully hidden only for Viewer.
-             Guard (canManageLabor) sees the full Performance section + Log button + History, just like Admin/Warden. */}
-          {!isViewer && (
+          {/* Performance History + Log: shown for roles with canManageLabor (Guard + Warden + Admin).
+             Hidden only for Viewer (who has no labor management rights). */}
+          {canManageLabor && (
           <section className="panel">
             <div className="history-header">
               <div>
@@ -1108,7 +1166,7 @@ export default function LaborPage() {
       </div> {/* close style block */}
 
       {/* Create modals as popups from left sidebar */}
-      {showCreateProject && (
+      {showCreateProject && canManageProjects && (
         <div className="modal-overlay" onClick={() => setShowCreateProject(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -1170,23 +1228,33 @@ export default function LaborPage() {
                 Tìm tù nhân
                 <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Tìm theo ID hoặc tên (ví dụ 523 hoặc tên)" />
               </label>
-              <div className="searchable-picker">
-                <div className="search-status">
-                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+              {prisonerSearch.trim() ? (
+                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '4px', marginTop: '4px' }}>
+                  {prisonerOptions.length === 0 ? (
+                    <div style={{ padding: '8px', color: 'var(--muted)', fontSize: '0.85rem' }}>No matches found</div>
+                  ) : (
+                    prisonerOptions.map((prisoner) => (
+                      <div
+                        key={prisoner.prisoner_id}
+                        onClick={() => setAssignmentForm({ ...assignmentForm, prisoner_id: prisoner.prisoner_id })}
+                        style={{
+                          padding: '6px 8px',
+                          cursor: 'pointer',
+                          background: String(assignmentForm.prisoner_id) === String(prisoner.prisoner_id) ? 'var(--accent)' : 'transparent',
+                          color: String(assignmentForm.prisoner_id) === String(prisoner.prisoner_id) ? '#fff' : 'inherit',
+                          borderBottom: '1px solid #eee',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        #{prisoner.prisoner_id} - {prisoner.full_name}
+                      </div>
+                    ))
+                  )}
                 </div>
-                <label>
-                  Prisoner
-                  <select value={assignmentForm.prisoner_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, prisoner_id: e.target.value })} required disabled={loadingPrisoners}>
-                    <option value="">Select prisoner by name</option>
-                    {prisonerOptions.map((prisoner) => (
-                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                        {prisoner.full_name} (#{prisoner.prisoner_id})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
-              </div>
+              ) : (
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}>Type to search prisoners by ID or name</div>
+              )}
+              <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
               <label>
                 Project
                 <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required>
@@ -1213,8 +1281,8 @@ export default function LaborPage() {
         </div>
       )}
 
-      {/* Hide Log Performance modal for Viewer too */}
-      {!isViewer && showLogPerformance && (
+      {/* Log Performance modal: shown if canManageLabor (Guard + Warden + Admin) */}
+      {canManageLabor && showLogPerformance && (
         <div className="modal-overlay" onClick={() => setShowLogPerformance(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -1223,23 +1291,37 @@ export default function LaborPage() {
             </div>
             {!canManageLabor && <div className="readonly-note">Limited to Admin, Warden, Guard.</div>}
             <form className="form-grid" onSubmit={handleCreatePerformance}>
-              <div className="searchable-picker">
-                <div className="search-status">
-                  {loadingPrisoners ? "Loading prisoners..." : `Showing ${prisonerOptions.length} match(es)`}
+              <label>
+                Search prisoner
+                <input value={performancePrisonerSearch} onChange={(e) => setPerformancePrisonerSearch(e.target.value)} placeholder="Search by ID or name (e.g. 523 or name)" />
+              </label>
+              {performancePrisonerSearch.trim() ? (
+                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '4px', marginTop: '4px' }}>
+                  {performancePrisonerOptions.length === 0 ? (
+                    <div style={{ padding: '8px', color: 'var(--muted)', fontSize: '0.85rem' }}>No matches found</div>
+                  ) : (
+                    performancePrisonerOptions.map((prisoner) => (
+                      <div
+                        key={prisoner.prisoner_id}
+                        onClick={() => setPerformanceForm({ ...performanceForm, prisoner_id: prisoner.prisoner_id })}
+                        style={{
+                          padding: '6px 8px',
+                          cursor: 'pointer',
+                          background: String(performanceForm.prisoner_id) === String(prisoner.prisoner_id) ? 'var(--accent)' : 'transparent',
+                          color: String(performanceForm.prisoner_id) === String(prisoner.prisoner_id) ? '#fff' : 'inherit',
+                          borderBottom: '1px solid #eee',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        #{prisoner.prisoner_id} - {prisoner.full_name}
+                      </div>
+                    ))
+                  )}
                 </div>
-                <label>
-                  Prisoner
-                  <select value={performanceForm.prisoner_id} onChange={(e) => setPerformanceForm({ ...performanceForm, prisoner_id: e.target.value })} required disabled={!canManageLabor || loadingPrisoners}>
-                    <option value="">Select prisoner by name</option>
-                    {prisonerOptions.map((prisoner) => (
-                      <option key={prisoner.prisoner_id} value={prisoner.prisoner_id}>
-                        {prisoner.full_name} (#{prisoner.prisoner_id})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
-              </div>
+              ) : (
+                <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}>Type to search prisoners by ID or name</div>
+              )}
+              <div className="mini-muted">Selected: {selectedPerformancePrisonerName || "none"}</div>
               <label>
                 Dự án
                 <select value={performanceForm.project_id} onChange={(e) => setPerformanceForm({ ...performanceForm, project_id: e.target.value })} required disabled={!canManageLabor}>
@@ -1268,7 +1350,6 @@ export default function LaborPage() {
             </form>
           </div>
         </div>
-      )}
       )}
 
       {editingProject && (

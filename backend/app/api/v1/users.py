@@ -68,7 +68,7 @@ def get_user(
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles("Admin")),
+    _: User = Depends(require_roles("Admin", "Warden")),
 ) -> User:
     exists = db.query(User).filter(User.username == payload.username).first()
     if exists:

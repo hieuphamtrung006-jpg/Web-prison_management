@@ -50,17 +50,41 @@ const guardNavItems = [
   { to: "/schedules", label: "Lịch trình", icon: ClipboardList },
 ];
 
+// Warden: high-level management role (using current_user.role)
+// Full menus per requirement: Dashboard, Prisoners, Labor, Incidents, Visits, Schedules, Users, Locations
+// (Shifts and other ultra-admin pages remain in fullNavItems for Admin only if needed)
+const wardenNavItems = [
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/prisoners", label: "Prisoners", icon: Shield },
+  { to: "/labor", label: "Labor", icon: Briefcase },
+  { to: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { to: "/visits", label: "Visits", icon: Calendar },
+  { to: "/schedules", label: "Schedules", icon: ClipboardList },
+  { to: "/users", label: "Users", icon: Users },
+  { to: "/locations", label: "Locations", icon: MapPin },
+];
+
 export default function AppLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Role-based menu using current_user.role (from JWT / AuthContext)
+  const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
-  let navItems = user?.role === "Viewer"
-    ? viewerNavItems
-    : isGuard
-      ? guardNavItems
-      : fullNavItems;
+  const isWarden = user?.role === "Warden";
+
+  let navItems;
+  if (isViewer) {
+    navItems = viewerNavItems;
+  } else if (isGuard) {
+    navItems = guardNavItems;
+  } else if (isWarden) {
+    navItems = wardenNavItems;
+  } else {
+    // Admin (and any other high-privileged roles): full access including Shifts etc.
+    navItems = fullNavItems;
+  }
 
   // Role-based menu control using current_user.role
   // Guard: only operational menus (Trang chủ, Tù nhân, Sự cố, Thăm gặp, Lao động, Lịch trình).
