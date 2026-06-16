@@ -5,7 +5,7 @@ export default function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <div className="screen-center">Loading session...</div>;
+    return <div className="screen-center">Đang tải phiên đăng nhập...</div>;
   }
 
   if (!user) {

@@ -855,13 +855,13 @@ export default function PrisonersPage() {
         <div className="page-main-data" style={!hasCreateAction ? { marginLeft: 0 } : {}}>
           {/* Guard/Viewer (no Create): full width + tighter spacing để bảng rộng rãi hơn */}
           <section className="panel" style={!hasCreateAction ? { paddingTop: '8px', paddingBottom: '8px' } : {}}>
-            <h2>Prisoners</h2>
+            <h2>Tù nhân</h2>
             <p className="hint-text" style={!hasCreateAction ? { marginBottom: '6px', fontSize: '0.85rem' } : {}}>
               {isViewer 
-                ? "Smart search: Use 'Prisoner ID' (numbers only, exact) or 'Name' (partial, case-insensitive). Debounced realtime. Supports combined + other filters." 
+                ? "Tìm theo tên hoặc Mã Tù nhân (nhập số cho ID). Nhấp hàng để xem chi tiết." 
                 : isGuard
-                  ? "Guard view: Chỉ được sửa Current Location và Status. ID/Name search is debounced & combined. Click row hoặc nút Edit để chỉnh sửa."
-                  : "Smart search: Prisoner ID (exact) + Name (partial). Debounce on text, instant on dropdowns. Combined filters supported. Click row for details."}
+                  ? "Chế độ Giám thị: Chỉ được sửa Địa điểm Hiện tại và Trạng thái. Nhấp hàng hoặc nút Sửa để chỉnh sửa."
+                  : "Tìm theo tên, mức rủi ro hoặc địa điểm. Nhấp hàng để xem chi tiết đầy đủ trong cửa sổ."}
             </p>
 
             {error && <div className="error-msg">{error}</div>}
@@ -882,70 +882,39 @@ export default function PrisonersPage() {
                 Pagination + all roles supported (params passed through; backend enforces role views).
               */}
               <label>
-                Prisoner ID
+                Mã Tù nhân
                 <input
                   type="text"
                   inputMode="numeric"
                   value={filterDraft.prisoner_id}
-                  onChange={(e) => {
-                    // Enforce numeric only for ID field (important for Guard/Admin with document IDs)
-                    const val = e.target.value.replace(/[^0-9]/g, "");
-                    const updatedDraft = { ...filterDraft, prisoner_id: val };
-                    setFilterDraft(updatedDraft);
-                    // Debounce for smooth realtime search experience
-                    scheduleSearchApply(updatedDraft);
-                  }}
-                  placeholder="Search by Prisoner ID"
+                  onChange={(e) => setFilterDraft(prev => ({ ...prev, prisoner_id: e.target.value }))}
+                  placeholder="Tìm theo Mã Tù nhân"
                 />
               </label>
 
               <label>
-                Name
+                Tên
                 <input
                   value={filterDraft.name}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const updatedDraft = { ...filterDraft, name: val };
-                    setFilterDraft(updatedDraft);
-                    // Debounce for smooth realtime search experience
-                    scheduleSearchApply(updatedDraft);
-                  }}
-                  placeholder="Search by prisoner name"
+                  onChange={(e) => setFilterDraft(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Tìm theo tên tù nhân"
                 />
               </label>
 
               <label>
-                Risk level
-                <select 
-                  value={filterDraft.risk_level} 
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const updatedDraft = { ...filterDraft, risk_level: val };
-                    setFilterDraft(updatedDraft);
-                    // Discrete filter: apply immediately (no debounce)
-                    applyFilters(updatedDraft);
-                  }}
-                >
-                  <option value="">All</option>
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
+                Mức rủi ro
+                <select value={filterDraft.risk_level} onChange={(e) => setFilterDraft(prev => ({ ...prev, risk_level: e.target.value }))}>
+                  <option value="">Tất cả</option>
+                  <option value="Low">Thấp</option>
+                  <option value="Medium">Trung bình</option>
+                  <option value="High">Cao</option>
                 </select>
               </label>
 
               <label>
-                Location
-                <select 
-                  value={filterDraft.location_id} 
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const updatedDraft = { ...filterDraft, location_id: val };
-                    setFilterDraft(updatedDraft);
-                    // Discrete filter: apply immediately (no debounce)
-                    applyFilters(updatedDraft);
-                  }}
-                >
-                  <option value="">All</option>
+                Địa điểm
+                <select value={filterDraft.location_id} onChange={(e) => setFilterDraft(prev => ({ ...prev, location_id: e.target.value }))}>
+                  <option value="">Tất cả</option>
                   {locations.map((location) => (
                     <option key={location.location_id} value={location.location_id}>
                       {location.location_name}
@@ -955,11 +924,11 @@ export default function PrisonersPage() {
               </label>
 
               <button className="primary-btn" type="submit">
-                Search
+                Tìm kiếm
               </button>
 
               <button className="secondary-btn" type="button" onClick={handleResetFilters}>
-                Reset
+                Đặt lại
               </button>
             </form>
 
@@ -988,14 +957,14 @@ export default function PrisonersPage() {
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Name</th>
-                      {/* DOB and Crime columns shown only when canCreate (Warden/Admin have full layout with Create sidebar) */}
-                      {canCreate && <th>DOB</th>}
-                      {canCreate && <th>Crime</th>}
-                      <th>Risk Level</th>
-                      <th>Location</th>
-                      <th>Status</th>
-                      <th>Actions</th>
+                      <th>Tên</th>
+                      {/* Chỉ Admin/Warden (có nút Create) mới thấy DOB và Crime để nới rộng Name/Location/Status cho Guard */}
+                      {canCreate && <th>Ngày sinh</th>}
+                      {canCreate && <th>Tội danh</th>}
+                      <th>Mức Rủi ro</th>
+                      <th>Địa điểm</th>
+                      <th>Trạng thái</th>
+                      <th>Hành động</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1027,7 +996,7 @@ export default function PrisonersPage() {
                                 type="button"
                                 onClick={() => openPrisonerDetail(row.prisoner_id)}
                               >
-                                View
+                                Xem
                               </button>
                               {canEdit && (
                                 <button
@@ -1049,7 +1018,7 @@ export default function PrisonersPage() {
                                     }
                                   }}
                                 >
-                                  Edit
+                                  Sửa
                                 </button>
                               )}
                               {canDelete && (
@@ -1061,7 +1030,7 @@ export default function PrisonersPage() {
                                     handleDelete(row);
                                   }}
                                 >
-                                  Delete
+                                  Xóa
                                 </button>
                               )}
                             </div>

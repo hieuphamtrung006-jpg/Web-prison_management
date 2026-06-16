@@ -57,7 +57,7 @@ function LocationEditModal({ location, onClose, onSaved, showToast }) {
       };
 
       await api.put(`/locations/${location.location_id}`, payload);
-      showToast("Location updated", "success");
+      showToast("Đã cập nhật địa điểm", "success");
       onSaved();
       onClose();
     } catch (err) {
@@ -73,7 +73,7 @@ function LocationEditModal({ location, onClose, onSaved, showToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Edit location: {location?.location_name}</h3>
+          <h3>Sửa địa điểm: {location?.location_name}</h3>
           <button className="close-btn" type="button" onClick={onClose}>
             ×
           </button>
@@ -83,41 +83,41 @@ function LocationEditModal({ location, onClose, onSaved, showToast }) {
 
         <form onSubmit={handleSubmit} className="form-grid">
           <label>
-            Name
+            Tên
             <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
           </label>
 
           <label>
-            Type
+            Loại
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option>Cell</option>
-              <option>Workshop</option>
-              <option>Dining</option>
-              <option>Yard</option>
-              <option>Hospital</option>
+              <option>Buồng giam</option>
+              <option>Phân xưởng</option>
+              <option>Phòng ăn</option>
+              <option>Sân tập</option>
+              <option>Bệnh xá</option>
             </select>
           </label>
 
           <label>
-            Capacity
+            Sức chứa
             <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
           </label>
 
           <label>
-            Security
+            Mức an ninh
             <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
           </label>
 
           <label>
-            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> Active
+            <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} /> Hoạt động
           </label>
 
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>
-              {loading ? "Saving..." : "Save"}
+              {loading ? "Đang lưu..." : "Lưu"}
             </button>
             <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>
@@ -143,7 +143,7 @@ function CreateLocationModal({ onClose, onSaved, showToast }) {
         security_level: form.security_level || null,
         is_active: form.is_active,
       });
-      showToast("Location created", "success");
+      showToast("Đã tạo địa điểm", "success");
       setForm(initialForm);
       onSaved();
       onClose();
@@ -160,39 +160,39 @@ function CreateLocationModal({ onClose, onSaved, showToast }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Create Location</h3>
+          <h3>Tạo Địa điểm</h3>
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
         {error && <div className="error-msg">{error}</div>}
         <form className="form-grid" onSubmit={handleSubmit}>
           <label>
-            Name
+            Tên
             <input value={form.location_name} onChange={(e) => setForm({ ...form, location_name: e.target.value })} required />
           </label>
           <label>
-            Type
+            Loại
             <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              <option>Cell</option>
-              <option>Workshop</option>
-              <option>Dining</option>
-              <option>Yard</option>
-              <option>Hospital</option>
+              <option>Buồng giam</option>
+              <option>Phân xưởng</option>
+              <option>Phòng ăn</option>
+              <option>Sân tập</option>
+              <option>Bệnh xá</option>
             </select>
           </label>
           <label>
-            Capacity
+            Sức chứa
             <input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} min={1} required />
           </label>
           <label>
-            Security
+            Mức an ninh
             <input value={form.security_level} onChange={(e) => setForm({ ...form, security_level: e.target.value })} />
           </label>
           <div className="modal-buttons">
             <button className="primary-btn" type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create"}
+              {loading ? "Đang tạo..." : "Tạo"}
             </button>
             <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>
-              Cancel
+              Hủy
             </button>
           </div>
         </form>
@@ -273,13 +273,13 @@ export default function LocationsPage() {
   }, []);
 
   const deleteLocation = async (loc) => {
-    const confirmed = window.confirm(`Delete location "${loc.location_name}" permanently?`);
+    const confirmed = window.confirm(`Xóa địa điểm "${loc.location_name}" vĩnh viễn?`);
     if (!confirmed) return;
     setError("");
     try {
       await api.delete(`/locations/${loc.location_id}`);
-      showToast("Location deleted", "success");
-      await load(page, search, typeFilter);
+      showToast("Đã xóa địa điểm", "success");
+      await load(page);
     } catch (err) {
       const message = parseApiError(err);
       setError(message);
@@ -328,7 +328,7 @@ export default function LocationsPage() {
   const createActions = canCreateLoc
     ? [
         {
-          label: "+ Create Location",
+          label: "+ Tạo Địa điểm",
           onClick: () => setShowCreateModal(true),
           variant: "create",
         },
@@ -338,97 +338,32 @@ export default function LocationsPage() {
   return (
     <div className="page-action-layout">
       <div className="page-action-column">
-        <ActionSidebar title="Actions" actions={createActions} />
+        <ActionSidebar title="Hành động" actions={createActions} />
       </div>
 
       <div className="page-main-data">
       <section className="panel">
-        <h2>Locations</h2>
-        {error && (
-          <div className="error-msg" style={{ whiteSpace: "pre-wrap", lineHeight: 1.4 }}>
-            {error}
-          </div>
-        )}
-
-        {/* Search toolbar - consistent with Prisoners/Labor pages dark theme */}
-        {/* Name search: debounced realtime (350ms) for smooth UX, no Network spam */}
-        {/* Type: instant apply on change. Buttons for explicit control */}
-        {/* Viewer (if ever accesses): sees search but no create/edit/delete (per canWrite/canCreateLoc) */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "12px", alignItems: "flex-end" }}>
-          <label style={{ minWidth: 200, flex: "1 1 200px" }}>
-            Location Name
-            <input
-              type="text"
-              value={searchDraft}
-              onChange={(e) => {
-                const val = e.target.value;
-                setSearchDraft(val);
-                // Debounce search input
-                if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-                searchDebounceRef.current = setTimeout(() => {
-                  setSearch(val);
-                  setPage(1);
-                  // Explicit load using the value at debounce time + current type
-                  load(1, val, typeFilter);
-                }, 350);
-              }}
-              placeholder="Search by name (e.g. Phòng Khám)"
-            />
-          </label>
-
-          <label style={{ minWidth: 140 }}>
-            Type
-            <select
-              value={typeDraft}
-              onChange={(e) => {
-                const val = e.target.value;
-                setTypeDraft(val);
-                setTypeFilter(val);
-                setPage(1);
-                // Explicit load for immediate type filter
-                load(1, search, val);
-              }}
-            >
-              <option value="">All Types</option>
-              <option>Cell</option>
-              <option>Workshop</option>
-              <option>Dining</option>
-              <option>Yard</option>
-              <option>Hospital</option>
-            </select>
-          </label>
-
-          <button className="primary-btn" type="button" onClick={handleSearch}>
-            Search
-          </button>
-
-          <button className="secondary-btn" type="button" onClick={handleResetFilters}>
-            Reset
-          </button>
-        </div>
+        <h2>Địa điểm</h2>
+        {error && <div className="error-msg">{error}</div>}
 
         <div className="inline-form pagination">
           <button className="secondary-btn" disabled={page <= 1 || loading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-            Prev
+            Trước
           </button>
-          <span className="muted">Page {page}</span>
+          <span className="muted">Trang {page}</span>
           <button className="secondary-btn" disabled={loading} onClick={() => setPage((p) => p + 1)}>
-            Next
+            Sau
           </button>
         </div>
 
         {loading ? (
           <div className="loading-state">
             <div className="spinner" />
-            <p>Loading locations...</p>
+            <p>Đang tải địa điểm...</p>
           </div>
         ) : rows.length === 0 ? (
           <div className="loading-state">
-            <p>
-              {(search || typeFilter)
-                ? `Không tìm thấy Location nào khớp với từ khóa${search ? ` "${search}"` : ""}${typeFilter ? ` và loại "${typeFilter}"` : ""}.`
-                : "No locations found"}
-            </p>
+            <p>Không tìm thấy địa điểm</p>
           </div>
         ) : (
           <div className="table-wrap">
@@ -436,13 +371,13 @@ export default function LocationsPage() {
               <thead>
                 <tr>
                   <th>ID</th>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Capacity</th>
-                  <th>Occupancy</th>
-                  <th>Rate</th>
-                  <th>Status</th>
-                  {showActions && <th>Actions</th>}
+                  <th>Tên</th>
+                  <th>Loại</th>
+                  <th>Sức chứa</th>
+                  <th>Đang ở</th>
+                  <th>Tỷ lệ</th>
+                  <th>Trạng thái</th>
+                  {showActions && <th>Hành động</th>}
                 </tr>
               </thead>
               <tbody>
@@ -466,10 +401,10 @@ export default function LocationsPage() {
                         <td>
                           <div className="table-actions">
                             <button className="btn-sm btn-edit" onClick={() => setEditing(r)} disabled={!canWrite}>
-                              Edit
+                              Sửa
                             </button>
                             <button className="btn-sm btn-delete" onClick={() => deleteLocation(r)} disabled={!canWrite}>
-                              Delete
+                              Xóa
                             </button>
                           </div>
                         </td>

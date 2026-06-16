@@ -19,35 +19,35 @@ import {
 } from "lucide-react";
 
 const fullNavItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/users", label: "Users", icon: Users },
-  { to: "/prisoners", label: "Prisoners", icon: Shield },
-  { to: "/locations", label: "Locations", icon: MapPin },
-  { to: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { to: "/visits", label: "Visits", icon: Calendar },
-  { to: "/labor", label: "Labor", icon: Briefcase },
-  { to: "/schedules", label: "Schedules", icon: ClipboardList },
-  { to: "/shifts", label: "Shifts", icon: Clock },
+  { to: "/", label: "Trang chủ", icon: LayoutDashboard },
+  { to: "/users", label: "Người dùng", icon: Users },
+  { to: "/prisoners", label: "Tù nhân", icon: Shield },
+  { to: "/locations", label: "Địa điểm", icon: MapPin },
+  { to: "/incidents", label: "Sự cố", icon: AlertTriangle },
+  { to: "/visits", label: "Thăm gặp", icon: Calendar },
+  { to: "/labor", label: "Lao động", icon: Briefcase },
+  { to: "/schedules", label: "Lịch trình", icon: ClipboardList },
+  { to: "/shifts", label: "Ca làm việc", icon: Clock },
 ];
 
 // Viewer: limited personal view
 const viewerNavItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/prisoners", label: "Prisoners", icon: Shield },
-  { to: "/visits", label: "Visits", icon: Calendar },
-  { to: "/labor", label: "Labor", icon: Briefcase },
+  { to: "/", label: "Trang chủ", icon: LayoutDashboard },
+  { to: "/prisoners", label: "Tù nhân", icon: Shield },
+  { to: "/visits", label: "Yêu cầu thăm gặp của tôi", icon: Calendar },
+  { to: "/labor", label: "Lao động", icon: Briefcase },
 ];
 
 // Guard: operational support roles 
 // Allowed menus per requirement: Dashboard, Prisoners, Labor, Incidents, Visits, Schedules
 // Hidden for Guard (using current_user.role): Users, Locations, Shifts and other high-level management pages.
 const guardNavItems = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/prisoners", label: "Prisoners", icon: Shield },
-  { to: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { to: "/visits", label: "Visits", icon: Calendar },
-  { to: "/labor", label: "Labor", icon: Briefcase },
-  { to: "/schedules", label: "Schedules", icon: ClipboardList },
+  { to: "/", label: "Trang chủ", icon: LayoutDashboard },
+  { to: "/prisoners", label: "Tù nhân", icon: Shield },
+  { to: "/incidents", label: "Sự cố", icon: AlertTriangle },
+  { to: "/visits", label: "Thăm gặp", icon: Calendar },
+  { to: "/labor", label: "Lao động", icon: Briefcase },
+  { to: "/schedules", label: "Lịch trình", icon: ClipboardList },
 ];
 
 // Warden: high-level management role (using current_user.role)
@@ -87,17 +87,14 @@ export default function AppLayout({ children }) {
   }
 
   // Role-based menu control using current_user.role
-  // - Viewer: limited personal (Dashboard + personal data views)
-  // - Guard: only operational menus (Dashboard, Prisoners, Incidents, Visits, Labor, Schedules). No Users/Locations/Shifts.
-  // - Warden: high-level (Dashboard, Prisoners, Labor, Incidents, Visits, Schedules, Users, Locations) per spec.
-  // - Admin: everything (fullNavItems)
-  // Sidebar selection is driven strictly by user?.role.
+  // Guard: only operational menus (Trang chủ, Tù nhân, Sự cố, Thăm gặp, Lao động, Lịch trình).
+  // Explicitly no Users (high-level), Locations, Shifts etc.
 
-  // For Viewer, make the Visits menu label more specific ("My Visit Requests")
+  // For Viewer, make the Visits menu label more specific ("Yêu cầu thăm gặp của tôi")
   if (user?.role === "Viewer") {
     navItems = navItems.map(item => 
-      item.label === "Visits" 
-        ? { ...item, label: "My Visit Requests" } 
+      item.label === "Thăm gặp" 
+        ? { ...item, label: "Yêu cầu thăm gặp của tôi" } 
         : item
     );
   }
@@ -116,7 +113,7 @@ export default function AppLayout({ children }) {
         </button>
         <Link className="brand" to="/">
           <span className="brand-mark">PC</span>
-          <span>Prison Command</span>
+          <span>Chỉ huy Nhà tù</span>
         </Link>
         <div className="system-status-indicator">
           <span className="status-dot green"></span>
@@ -128,7 +125,7 @@ export default function AppLayout({ children }) {
         <div className="sidebar-header">
           <Link className="brand" to="/" onClick={() => setSidebarOpen(false)}>
             <span className="brand-mark">PC</span>
-            <span className="brand-text">Prison Command</span>
+            <span className="brand-text">Chỉ huy Nhà tù</span>
           </Link>
           <button className="close-sidebar-btn" onClick={() => setSidebarOpen(false)}>
             <X size={20} />
@@ -137,7 +134,7 @@ export default function AppLayout({ children }) {
 
         <div className="system-security-banner">
           <ShieldCheck size={16} />
-          <span>Console: Secure</span>
+          <span>Hệ thống: An toàn</span>
         </div>
 
         <nav className="sidebar-nav">
@@ -165,13 +162,13 @@ export default function AppLayout({ children }) {
               <User size={16} />
             </div>
             <div className="user-meta">
-              <span className="username">{user?.full_name || "Operator"}</span>
-              <span className="user-role">{user?.role || "Warden"}</span>
+              <span className="username">{user?.full_name || "Người dùng"}</span>
+              <span className="user-role">{user?.role || "Giám thị trưởng"}</span>
             </div>
           </div>
           <button className="signout-btn" onClick={handleLogout}>
             <LogOut size={16} />
-            <span>Sign out</span>
+            <span>Đăng xuất</span>
           </button>
         </div>
       </aside>
@@ -183,16 +180,16 @@ export default function AppLayout({ children }) {
       <div className="main-layout">
         <header className="top-workspace-header">
           <div className="breadcrumb">
-            <span className="eyebrow">Prison Operations Command Center</span>
+            <span className="eyebrow">Trung tâm Chỉ huy Hoạt động Nhà tù</span>
           </div>
           <div className="system-vital-badges">
             <div className="vital-badge">
               <span className="vital-dot pulsing-green"></span>
-              <span>NETWORK: ONLINE</span>
+              <span>MẠNG: TRỰC TUYẾN</span>
             </div>
             <div className="vital-badge danger">
               <span className="vital-dot red"></span>
-              <span>ALERTS: ACTIVE</span>
+              <span>CẢNH BÁO: ĐANG HOẠT ĐỘNG</span>
             </div>
           </div>
         </header>
