@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { api, parseApiError } from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import ActionSidebar from "../components/ActionSidebar";
@@ -83,8 +83,9 @@ function RiskBadge({ value }) {
 }
 
 function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, showToast }) {
-  const canEditAll = userRole === "Admin" || userRole === "Warden";
-  const isGuardRole = userRole === "Guard"; // Guard: chỉ được sửa Current Location + Status (các trường khác read-only)
+  const canEditAll = userRole === "Admin" || userRole === "Warden"; // Full edit for Warden/Admin: all fields (name, crime, sentence, risk, etc.)
+  const isGuardRole = userRole === "Guard"; // Guard: only Current Location + Status editable; others read-only or hidden
+
 
   const [form, setForm] = useState({
     full_name: prisoner?.full_name || "",
@@ -612,12 +613,27 @@ export default function PrisonersPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
+  const isWarden = user?.role === "Warden";
+
+  // Ref for debounce timer on search fields (ID + Name) to provide smooth realtime feel without spamming API on every keystroke
+  const searchDebounceRef = useRef(null);
+
+  // Cleanup pending debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
 
   // Role-based permissions (dựa trên current_user.role)
-  const canCreate = user?.role === "Admin" || user?.role === "Warden";
-  // Guard: được phép Edit limited (chỉ Current Location + Status), không Create, không Delete
-  const canEdit = user?.role === "Admin" || user?.role === "Warden" || isGuard;
-  const canDelete = user?.role === "Admin" || user?.role === "Warden";
+  // Warden and Admin: FULL permissions - Create, Edit (all fields in modal), Delete
+  // Guard: limited to Edit (only Current Location + Status read-only others), no Create/Delete
+  // Viewer: read-only view only, no sidebar actions, no DOB/Crime columns
+  const canCreate = isWarden || user?.role === "Admin";
+  const canEdit = canCreate || isGuard;
+  const canDelete = canCreate;
 
   const [rows, setRows] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -664,13 +680,25 @@ export default function PrisonersPage() {
       params.set("page", String(pageNumber));
       params.set("page_size", String(pageSize));
 
-      // Support combined search: prioritize prisoner_id if provided or if name looks like a number (for Viewer convenience)
+      // Improved combined search logic (supports ID + name together as requested):
+      // - prisoner_id: sent as exact match (numeric only)
+      // - name: sent as partial match (case-insensitive on backend via ILIKE)
+      // - If name field contains only digits AND no prisoner_id, fallback to treat as ID (backward compat for old UX)
+      // - Both can be active at same time for combined filtering (backend ANDs the conditions)
+      // This works for all roles (Admin/Warden full, Guard, Viewer uses view + same params)
       if (appliedFilters.prisoner_id) {
         params.set("prisoner_id", appliedFilters.prisoner_id);
-      } else if (appliedFilters.name && /^\d+$/.test(appliedFilters.name.trim())) {
-        params.set("prisoner_id", appliedFilters.name.trim());
-      } else if (appliedFilters.name) {
-        params.set("name", appliedFilters.name);
+      }
+      if (appliedFilters.name) {
+        const nameVal = appliedFilters.name.trim();
+        if (nameVal) {
+          if (!appliedFilters.prisoner_id && /^\d+$/.test(nameVal)) {
+            // Legacy support: numeric entered only in name box → treat as prisoner_id
+            params.set("prisoner_id", nameVal);
+          } else {
+            params.set("name", nameVal);
+          }
+        }
       }
 
       if (appliedFilters.risk_level) {
@@ -713,19 +741,45 @@ export default function PrisonersPage() {
 
   const handleSearch = (event) => {
     event.preventDefault();
+    // Clear any pending debounce timer when user explicitly clicks Search
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
     const newFilters = { ...filterDraft };
     setPage(1);
     setFilters(newFilters);
     setError(""); // clear previous errors on new search
-    // Force load immediately with the new filters to ensure search applies (especially prisoner_id for Viewer)
-    // This prevents any timing issues with useEffect deps and makes search feel responsive.
+    // Force load immediately (explicit button still supported for UX + combined filters)
     loadPrisoners(1, newFilters);
   };
 
   const handleResetFilters = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
     setFilterDraft(initialFilters);
     setPage(1);
     setFilters(initialFilters);
+  };
+
+  // Apply current draft filters (used by both immediate selects and debounced search fields)
+  // This ensures pagination reset + explicit load for responsiveness (consistent with old handleSearch)
+  const applyFilters = (draftToApply) => {
+    const newFilters = { ...draftToApply };
+    setPage(1);
+    setFilters(newFilters);
+    setError(""); // clear errors on new filter application
+    loadPrisoners(1, newFilters);
+  };
+
+  // Schedule debounced apply for ID + Name fields only (350ms for smooth realtime typing without excessive API calls)
+  const scheduleSearchApply = (updatedDraft) => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      applyFilters(updatedDraft);
+    }, 350);
   };
 
   const handleDelete = async (prisoner) => {
@@ -762,7 +816,8 @@ export default function PrisonersPage() {
       ]
     : [];
 
-  // For layout: roles without Create permission (Guard + Viewer) get the full-width main area (no left action column wasting space)
+  // Layout control based on canCreate (Warden/Admin have full sidebar with Create button and full columns)
+  // Guard/Viewer: no sidebar (wider table), no DOB/Crime columns, tighter padding
   const hasCreateAction = canCreate;
 
   // Open detail modal for a prisoner
@@ -803,10 +858,10 @@ export default function PrisonersPage() {
             <h2>Prisoners</h2>
             <p className="hint-text" style={!hasCreateAction ? { marginBottom: '6px', fontSize: '0.85rem' } : {}}>
               {isViewer 
-                ? "Search by name or Prisoner ID (enter number for ID). Click a row to view details." 
+                ? "Smart search: Use 'Prisoner ID' (numbers only, exact) or 'Name' (partial, case-insensitive). Debounced realtime. Supports combined + other filters." 
                 : isGuard
-                  ? "Guard view: Chỉ được sửa Current Location và Status. Click row hoặc nút Edit để chỉnh sửa."
-                  : "Search by name, risk level, or location. Click a row to view full details in a modal."}
+                  ? "Guard view: Chỉ được sửa Current Location và Status. ID/Name search is debounced & combined. Click row hoặc nút Edit để chỉnh sửa."
+                  : "Smart search: Prisoner ID (exact) + Name (partial). Debounce on text, instant on dropdowns. Combined filters supported. Click row for details."}
             </p>
 
             {error && <div className="error-msg">{error}</div>}
@@ -816,13 +871,30 @@ export default function PrisonersPage() {
               onSubmit={handleSearch}
               style={!hasCreateAction ? { marginBottom: '4px' } : {}}
             >
-              {/* Added ID search for Viewer convenience (they often have Prisoner ID from documents) */}
+              {/* 
+                Two dedicated search fields for smart ID + name support (as per requirements):
+                - Prisoner ID: numeric only (sanitized), sent as exact prisoner_id param
+                - Name: free text partial match (case-insensitive via backend ILIKE)
+                Combined filters (ID + name together) are fully supported and sent to API.
+                Risk/Location are discrete filters kept for compatibility.
+                Search on ID/Name: debounced realtime (350ms) for responsive typing.
+                Risk/Location + explicit Search button: apply immediately.
+                Pagination + all roles supported (params passed through; backend enforces role views).
+              */}
               <label>
                 Prisoner ID
                 <input
                   type="text"
+                  inputMode="numeric"
                   value={filterDraft.prisoner_id}
-                  onChange={(e) => setFilterDraft(prev => ({ ...prev, prisoner_id: e.target.value }))}
+                  onChange={(e) => {
+                    // Enforce numeric only for ID field (important for Guard/Admin with document IDs)
+                    const val = e.target.value.replace(/[^0-9]/g, "");
+                    const updatedDraft = { ...filterDraft, prisoner_id: val };
+                    setFilterDraft(updatedDraft);
+                    // Debounce for smooth realtime search experience
+                    scheduleSearchApply(updatedDraft);
+                  }}
                   placeholder="Search by Prisoner ID"
                 />
               </label>
@@ -831,14 +903,29 @@ export default function PrisonersPage() {
                 Name
                 <input
                   value={filterDraft.name}
-                  onChange={(e) => setFilterDraft(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updatedDraft = { ...filterDraft, name: val };
+                    setFilterDraft(updatedDraft);
+                    // Debounce for smooth realtime search experience
+                    scheduleSearchApply(updatedDraft);
+                  }}
                   placeholder="Search by prisoner name"
                 />
               </label>
 
               <label>
                 Risk level
-                <select value={filterDraft.risk_level} onChange={(e) => setFilterDraft(prev => ({ ...prev, risk_level: e.target.value }))}>
+                <select 
+                  value={filterDraft.risk_level} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updatedDraft = { ...filterDraft, risk_level: val };
+                    setFilterDraft(updatedDraft);
+                    // Discrete filter: apply immediately (no debounce)
+                    applyFilters(updatedDraft);
+                  }}
+                >
                   <option value="">All</option>
                   <option value="Low">Low</option>
                   <option value="Medium">Medium</option>
@@ -848,7 +935,16 @@ export default function PrisonersPage() {
 
               <label>
                 Location
-                <select value={filterDraft.location_id} onChange={(e) => setFilterDraft(prev => ({ ...prev, location_id: e.target.value }))}>
+                <select 
+                  value={filterDraft.location_id} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    const updatedDraft = { ...filterDraft, location_id: val };
+                    setFilterDraft(updatedDraft);
+                    // Discrete filter: apply immediately (no debounce)
+                    applyFilters(updatedDraft);
+                  }}
+                >
                   <option value="">All</option>
                   {locations.map((location) => (
                     <option key={location.location_id} value={location.location_id}>
@@ -893,7 +989,7 @@ export default function PrisonersPage() {
                     <tr>
                       <th>ID</th>
                       <th>Name</th>
-                      {/* Chỉ Admin/Warden (có nút Create) mới thấy DOB và Crime để nới rộng Name/Location/Status cho Guard */}
+                      {/* DOB and Crime columns shown only when canCreate (Warden/Admin have full layout with Create sidebar) */}
                       {canCreate && <th>DOB</th>}
                       {canCreate && <th>Crime</th>}
                       <th>Risk Level</th>

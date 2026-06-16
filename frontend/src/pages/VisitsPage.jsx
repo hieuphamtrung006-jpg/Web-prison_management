@@ -444,16 +444,24 @@ export default function VisitsPage() {
   const { user } = useAuth();
   const isViewer = user?.role === "Viewer";
   const isGuard = user?.role === "Guard";
+  const isWarden = user?.role === "Warden";
+  const isAdmin = user?.role === "Admin";
 
   // Role-based permissions for Visits (using current_user.role)
+  // Exact requirement for Warden:
+  // - Full quyền: Xem tất cả Visit Requests và Visits.
+  // - Có quyền Duyệt / Từ chối Visit Request.
+  // - Có nút Create Visit.
+  // - Có nút Edit và Delete (đối với Visit).
+  // - Bảng filter mạnh (theo trạng thái, tù nhân, ngày).
   // - Viewer: only personal requests (read-only, create request only)
-  // - Guard: operational - can view all, create manual Visit, edit Visit, approve/reject requests. NO delete Visit, NO create Request.
-  // - Warden/Admin: full control (create, edit, delete, approve, etc.)
-  const canCreateVisit = !isViewer; // Guard + higher: create manual (approved) Visit
+  // - Guard: operational - view all, create Visit, edit Visit, approve/reject requests. NO delete.
+  // - Warden/Admin: FULL as specified above (all of the above).
+  const canCreateVisit = !isViewer; // Guard + Warden + Admin: nút Create Visit (manual)
   const canRequestVisit = isViewer; // Only Viewer creates "Visit Request"
-  const canEditVisit = !isViewer;   // Guard + higher
-  const canDeleteVisit = !isViewer && !isGuard; // Only Warden/Admin
-  const canApproveReject = !isViewer; // Guard + higher can duyệt/từ chối request
+  const canEditVisit = !isViewer;   // Guard + Warden + Admin
+  const canDeleteVisit = isWarden || isAdmin; // Warden + Admin only (per spec: Edit và Delete đối với Visit)
+  const canApproveReject = !isViewer; // Guard + Warden + Admin: Duyệt / Từ chối Visit Request
 
   const [rows, setRows] = useState([]);
   const [prisoners, setPrisoners] = useState([]);
@@ -509,8 +517,9 @@ export default function VisitsPage() {
   };
 
   // Load visits rows.
-  // For Guard/staff: use filterStatus so user can filter by trạng thái (server-side).
-  // Viewer always sees only Approved.
+  // For Guard/Warden/Admin: use filterStatus (strong filter by trạng thái on server).
+  // Warden: sees ALL visits across statuses + all requests (pending section) per full quyền spec.
+  // Viewer always sees only Approved (via /mine requests + Approved visits).
   const load = async () => {
     try {
       const statusToLoad = isViewer ? "Approved" : filterStatus;
@@ -522,7 +531,7 @@ export default function VisitsPage() {
   };
 
   const loadPendingRequests = async () => {
-    if (isViewer) return; // Guard + higher can see and manage pending requests
+    if (isViewer) return; // Guard + Warden + Admin see and manage ALL pending Visit Requests (full for Warden)
     try {
       const response = await api.get("/visits/requests/pending");
       setPendingRequests(response.data);
@@ -532,6 +541,7 @@ export default function VisitsPage() {
   };
 
   // Load visits + pending (when page or status filter changes)
+  // For Warden: loads full visits (respecting current strong status filter) + all pending requests.
   useEffect(() => {
     load();
     if (!isViewer) {
@@ -617,9 +627,10 @@ export default function VisitsPage() {
     });
   }, [myRequests, searchTerm, prisonerNameById]);
 
-  const approve = async (visitId) => {
+  // Warden + Guard + Admin: Duyệt / Từ chối Visit Request (full for Warden per spec)
+  const approve = async (requestId) => {
     try {
-      await api.put(`/visits/requests/${visitId}/approve`);
+      await api.put(`/visits/requests/${requestId}/approve`);
       await load();
       await loadPendingRequests();
     } catch (err) {
@@ -640,6 +651,7 @@ export default function VisitsPage() {
     }
   };
 
+  // Warden/Admin only (canDeleteVisit): Delete on Visit
   const deleteVisit = async (visitId) => {
     const confirmed = window.confirm("Delete this visit permanently?");
     if (!confirmed) return;
@@ -659,7 +671,7 @@ export default function VisitsPage() {
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
-  // Sidebar actions - strictly controlled by role (no duplicate flags)
+  // Sidebar actions - strictly controlled by role (no duplicate flags, no re-declarations)
   const actions = [];
   if (canRequestVisit) {
     // Only Viewer can create "Visit Request" (personal request flow)
@@ -669,19 +681,17 @@ export default function VisitsPage() {
     });
   }
   if (canCreateVisit) {
-    // Guard + Warden + Admin can create manual Visit (thủ công)
+    // Guard + Warden + Admin: nút Create Visit (manual visit creation)
     actions.push({ label: "+ Create Visit", onClick: () => setShowCreateModal(true), variant: "create" });
   }
 
-  // Guard can see and manage the Pending requests section (Duyệt / Từ chối).
-
   // Note: Viewer flow for request creation is: Request Visit -> PrisonerSelectorModal -> RequestVisitModal (with prefilled ID)
-
   // Note: For Viewer, the main content is "My Visit Requests" (see branched panel below).
-  // Request creation will auto-refresh the list via onSaved in the modal.
+  // Request/Visit creation will auto-refresh via onSaved.
 
-  // Layout improvement: if no sidebar actions (or very limited create), hide the left column
-  // and expand the main content area (đẩy thông tin sang, table wider, less wasted space).
+  // Layout: Warden/Guard/Admin get sidebar with Create Visit (per spec "Có nút Create Visit").
+  // Viewer gets sidebar with Request Visit.
+  // (If in future a role had zero actions, we would hide sidebar + set marginLeft:0 + tighter padding to "đẩy trường thông tin sang".)
   const hasSidebarActions = actions.length > 0;
 
   return (
@@ -708,7 +718,7 @@ export default function VisitsPage() {
 
         {error && <p className="error-msg">{error}</p>}
 
-        {/* Search bar + pagination + explicit filters for Guard (trạng thái, tù nhân, ngày) */}
+        {/* Search bar + pagination + mạnh filter for non-Viewer (Warden/Guard/Admin): theo trạng thái (server), tù nhân, ngày (client) + text search */}
         <div className="inline-form" style={{ flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
           <div style={{ flex: 1, minWidth: "260px", maxWidth: "420px" }}>
             <input
@@ -755,7 +765,7 @@ export default function VisitsPage() {
           )}
         </div>
 
-        {/* Dedicated filters for Guard: status (drives server load), prisoner and date (client-side) */}
+        {/* Bảng filter mạnh (theo trạng thái, tù nhân, ngày) - full for Warden: status drives server load, prisoner+date+search client-filtered. */}
         {!isViewer && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "12px", alignItems: "flex-end" }}>
             <label style={{ minWidth: 140 }}>
@@ -879,7 +889,7 @@ export default function VisitsPage() {
             </table>
           </div>
         ) : (
-          /* Staff: original visits table */
+          /* Staff / Warden / Admin: full visits table + strong filters. Warden sees ALL + full actions (create in sidebar, edit/delete per-row, approve/reject pending). */
           <div className="table-wrap">
             <table>
               <thead>
@@ -890,7 +900,7 @@ export default function VisitsPage() {
                   <th>Date</th>
                   <th>Status</th>
                   <th>Notes</th>
-                  {/* Actions column only if Guard or higher has edit/delete rights */}
+                  {/* Actions column: shown for Guard (Edit only) + Warden/Admin (Edit + Delete per spec) */}
                   {(canEditVisit || canDeleteVisit) && <th style={{ width: "130px" }}>Actions</th>}
                 </tr>
               </thead>
@@ -922,7 +932,7 @@ export default function VisitsPage() {
                           {row.notes || "-"}
                         </td>
 
-                        {/* Guard: only Edit (no Delete). Warden/Admin: full Edit + Delete. */}
+                        {/* Guard: Edit only. Warden (full): Edit + Delete on Visit. Controlled by can* derived from isWarden. */}
                         {(canEditVisit || canDeleteVisit) && (
                           <td>
                             <div className="table-actions">
@@ -975,7 +985,8 @@ export default function VisitsPage() {
         )}
       </section>
 
-      {/* Pending visit requests section - visible for Guard (canApproveReject) and higher roles */}
+      {/* Pending visit requests section - visible for Guard/Warden/Admin (!isViewer).
+         Warden has full quyền xem tất cả Visit Requests (pending + history via status filter) + Duyệt/Từ chối. */}
       {!isViewer && pendingRequests.length > 0 && (
         <section className="panel">
           <h3>Pending visit requests</h3>
@@ -990,13 +1001,15 @@ export default function VisitsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pendingRequests.map((r) => (
+                {pendingRequests.map((r) => {
+                  const prisonerName = prisonerNameById[r.prisoner_id] || `#${r.prisoner_id}`;
+                  return (
                   <tr key={r.request_id}>
                     <td>{r.request_id}</td>
-                    <td>{r.prisoner_id}</td>
+                    <td>{prisonerName}</td>
                     <td>{String(r.requested_date || "").slice(0, 16)}</td>
                     <td>
-                      {/* Guard + higher can Duyệt/Từ chối. Controlled by canApproveReject. */}
+                      {/* Warden/Guard/Admin: Duyệt / Từ chối buttons (canApproveReject). Full for Warden. */}
                       {canApproveReject && (
                         <div className="table-actions">
                           <button className="btn-sm btn-edit" onClick={() => approve(r.request_id)}>Approve</button>
@@ -1005,7 +1018,8 @@ export default function VisitsPage() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1048,13 +1062,12 @@ export default function VisitsPage() {
           setSearchTerm={setPrisonerSearchTerm}
         />
       )}
-      {/* Create Visit (manual thủ công) - only for roles with canCreateVisit (Guard + higher).
-         Viewer cannot create manual Visit, only Request. */}
+      {/* Create Visit (manual) - only when canCreateVisit (Guard + Warden/Admin per spec "Có nút Create Visit"). */}
       {showCreateModal && canCreateVisit && (
         <CreateVisitModal onClose={() => setShowCreateModal(false)} onSaved={() => { setPage(1); load(); }} showToast={showToast} />
       )}
 
-      {/* Edit Visit Modal - Guard + higher (canEditVisit). Guard can edit visits they manage. */}
+      {/* Edit Visit Modal - Guard + Warden/Admin (canEditVisit). Warden has full Edit on Visit. */}
       {editingVisit && canEditVisit && (
         <EditVisitModal
           visit={editingVisit}
