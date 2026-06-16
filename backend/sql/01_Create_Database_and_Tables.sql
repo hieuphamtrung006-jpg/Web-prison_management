@@ -92,20 +92,6 @@ CREATE TABLE Shifts (
     UpdatedAt       DATETIME2 NULL
 );
 
-CREATE TABLE LaborAssignments (
-    AssignmentID    INT IDENTITY(1,1) PRIMARY KEY,
-    PrisonerID      INT NOT NULL,
-    ProjectID       INT NULL,
-    AssignedBy      INT NULL,
-    AssignmentDate  DATE NOT NULL,
-    HoursAssigned   DECIMAL(5,2) NOT NULL,
-    CreatedAt       DATETIME2 DEFAULT GETDATE(),
-    UpdatedAt       DATETIME2 NULL,
-    CONSTRAINT FK_Assignments_Prisoners FOREIGN KEY (PrisonerID) REFERENCES Prisoners(PrisonerID),
-    CONSTRAINT FK_Assignments_Projects FOREIGN KEY (ProjectID) REFERENCES LaborProjects(ProjectID),
-    CONSTRAINT FK_Assignments_Users FOREIGN KEY (AssignedBy) REFERENCES Users(UserID)
-);
-
 CREATE TABLE DailyPerformance (
     PerformanceID   INT IDENTITY(1,1) PRIMARY KEY,
     PrisonerID      INT NOT NULL,

@@ -54,38 +54,6 @@ class LaborProjectSummary(BaseModel):
     open_slots: int
 
 
-class LaborAssignmentBase(BaseModel):
-    prisoner_id: int = Field(..., gt=0)
-    project_id: int = Field(..., gt=0)
-    assignment_date: date
-    hours_assigned: Decimal = condecimal(gt=0, max_digits=5, decimal_places=2)
-
-
-class LaborAssignmentCreate(LaborAssignmentBase):
-    pass
-
-
-class LaborAssignmentUpdate(BaseModel):
-    prisoner_id: int | None = Field(default=None, gt=0)
-    project_id: int | None = Field(default=None, gt=0)
-    assignment_date: date | None = None
-    hours_assigned: Decimal | None = Field(default=None)
-
-
-class LaborAssignmentRead(BaseModel):
-    assignment_id: int
-    prisoner_id: int
-    prisoner_name: str | None = None
-    project_id: int | None = None
-    project_name: str | None = None
-    assigned_by: int | None = None
-    assigned_by_name: str | None = None
-    assignment_date: date
-    hours_assigned: Decimal
-    created_at: datetime
-    updated_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
 
 
 class DailyPerformanceCreate(BaseModel):
@@ -117,8 +85,6 @@ class PrisonerPerformancePoint(BaseModel):
     productivity: float
 
 
-AssignmentCreate = LaborAssignmentCreate
-AssignmentRead = LaborAssignmentRead
 PerformanceCreate = DailyPerformanceCreate
 PerformanceRead = DailyPerformanceRead
 
@@ -143,21 +109,9 @@ class LaborProjectReadBasic(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class LaborAssignmentReadBasic(BaseModel):
-    # Made FKs optional to tolerate dirty data / NULLs in vw_LaborAssignments_Basic (prevents Pydantic ValidationError
-    # like "project_id Input should be a valid integer" when a row has ProjectID=NULL).
-    # Matches the defensive style in LaborAssignmentRead (project_id: int | None).
-    assignment_id: int
-    prisoner_id: int | None = None
-    project_id: int | None = None
-    assignment_date: date
-    hours_assigned: Decimal
-
-    model_config = {"from_attributes": True}
 
 
 class DailyPerformanceReadBasic(BaseModel):
-    # Relaxed for safety (same reason as LaborAssignmentReadBasic)
     performance_id: int
     prisoner_id: int | None = None
     project_id: int | None = None

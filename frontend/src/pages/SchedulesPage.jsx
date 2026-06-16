@@ -84,77 +84,51 @@ function UpdateScheduleModal({ onClose, onSaved, showToast }) {
   );
 }
 
-function CreateScheduleModal({ onClose, onSaved, showToast }) {
-  const [form, setForm] = useState({
-    prisoner_id: "",
-    project_id: "",
-    location_id: "",
-    shift_id: "",
-    start_time: new Date().toISOString().slice(0, 16),
-    end_time: "",
-    status: "Active",
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-    const payload = {
-      prisoner_id: Number(form.prisoner_id),
-      project_id: form.project_id ? Number(form.project_id) : null,
-      location_id: form.location_id ? Number(form.location_id) : null,
-      shift_id: form.shift_id ? Number(form.shift_id) : null,
-      start_time: form.start_time,
-      end_time: form.end_time,
-      status: form.status,
-    };
-    try {
-      await api.post("/schedules", payload);
-      showToast("Đã tạo lịch trình", "success");
-      onSaved();
-      onClose();
-    } catch (err) {
-      const msg = parseApiError(err);
-      setError(msg);
-      showToast(msg, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Tạo Lịch trình</h3>
-          <button className="close-btn" onClick={onClose}>×</button>
-        </div>
-        {error && <div className="error-msg">{error}</div>}
-        <form className="form-grid" onSubmit={handleSubmit}>
-          <label>Prisoner ID<input type="number" value={form.prisoner_id} onChange={(e) => setForm({ ...form, prisoner_id: e.target.value })} required /></label>
-          <label>Project ID (optional)<input type="number" value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} /></label>
-          <label>Location ID<input type="number" value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })} /></label>
-          <label>Shift ID<input type="number" value={form.shift_id} onChange={(e) => setForm({ ...form, shift_id: e.target.value })} /></label>
-          <label>Start Time<input type="datetime-local" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} required /></label>
-          <label>End Time<input type="datetime-local" value={form.end_time} onChange={(e) => setForm({ ...form, end_time: e.target.value })} required /></label>
-          <label>Status
-            <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              <option>Active</option>
-              <option>Cancelled</option>
-              <option>Completed</option>
-            </select>
-          </label>
-          <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Creating..." : "Create"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+const getLocalDefaultDate = () => {
+  const d = new Date();
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const normalizeDate = (dateStr) => {
+  if (!dateStr) return "";
+  
+  // Check if format is DD/MM/YYYY
+  const dmyRegex = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
+  let match = dateStr.match(dmyRegex);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const month = match[2].padStart(2, '0');
+    const year = match[3];
+    return `${year}-${month}-${day}`;
+  }
+  
+  // Check if format is DD/MM (short)
+  const dmRegexShort = /^(\d{1,2})[/-](\d{1,2})$/;
+  match = dateStr.match(dmRegexShort);
+  if (match) {
+    const day = match[1].padStart(2, '0');
+    const month = match[2].padStart(2, '0');
+    const year = new Date().getFullYear();
+    return `${year}-${month}-${day}`;
+  }
+  
+  // Check if format is YYYY-MM-DD
+  const ymdRegex = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/;
+  match = dateStr.match(ymdRegex);
+  if (match) {
+    const year = match[1];
+    const month = match[2].padStart(2, '0');
+    const day = match[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  
+  return dateStr;
+};
 
 export default function SchedulesPage() {
   const { user } = useAuth();
@@ -162,18 +136,16 @@ export default function SchedulesPage() {
   const isGuard = user?.role === "Guard";
 
   // Role-based permissions
-  // Guard: view all, create schedule, edit schedule. No delete.
+  // Guard: view all, edit schedule. No delete.
   // Warden/Admin: full (incl. generator, delete)
   // Viewer: read-only limited view
-  const canCreateSchedule = !isViewer; // Guard + higher
   const canEditSchedule = !isViewer;
   const canDeleteSchedule = !isViewer && !isGuard;
   const isReadOnly = isViewer; // only pure Viewer is read-only for table
 
   const [configs, setConfigs] = useState([]);
   const [selectedConfig, setSelectedConfig] = useState(1);
-  const [targetDate, setTargetDate] = useState(new Date().toISOString().slice(0, 10));
-  const [daily, setDaily] = useState(null);
+  const [targetDate, setTargetDate] = useState(getLocalDefaultDate());
   const [result, setResult] = useState(null);
   const [schedules, setSchedules] = useState([]);
   const [schedulePage, setSchedulePage] = useState(1);
@@ -181,7 +153,6 @@ export default function SchedulesPage() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false); // for Guard create
 
   // Filters (all client-side for simplicity, works on loaded page data)
   const [filterDate, setFilterDate] = useState("");
@@ -220,14 +191,7 @@ export default function SchedulesPage() {
     }
   };
 
-  const loadDaily = async () => {
-    try {
-      const response = await api.get(`/schedules/daily?target_date=${targetDate}&group_by=location`);
-      setDaily(response.data);
-    } catch (err) {
-      setError(parseApiError(err));
-    }
-  };
+
 
   useEffect(() => {
     loadConfigs();
@@ -240,12 +204,12 @@ export default function SchedulesPage() {
   const generate = async () => {
     setError("");
     try {
+      const normalizedDate = normalizeDate(targetDate);
       const response = await api.post("/schedules/generate", {
         config_id: Number(selectedConfig),
-        target_date: targetDate,
+        target_date: normalizedDate,
       });
       setResult(response.data);
-      await loadDaily();
       await loadSchedules();
     } catch (err) {
       setError(parseApiError(err));
@@ -263,7 +227,6 @@ export default function SchedulesPage() {
     try {
       await api.delete(`/schedules/${scheduleId}`);
       await loadSchedules();
-      await loadDaily();
     } catch (err) {
       setError(parseApiError(err));
     }
@@ -271,16 +234,15 @@ export default function SchedulesPage() {
 
   const showToast = (message, type = "info") => setToast({ message, type });
 
-  // Sidebar actions for Guard: Create Schedule (no generator, no bulk update here)
-  const scheduleActions = canCreateSchedule
-    ? [{ label: "+ Create Schedule", onClick: () => setShowCreateModal(true), variant: "create" }]
-    : [];
+  const scheduleActions = [];
 
   return (
     <div className="page-action-layout">
-      <div className="page-action-column">
-        <ActionSidebar title="Actions" actions={scheduleActions} />
-      </div>
+      {scheduleActions.length > 0 && (
+        <div className="page-action-column">
+          <ActionSidebar title="Actions" actions={scheduleActions} />
+        </div>
+      )}
 
       <div className="page-main-data">
       <div className="stack-grid">
@@ -297,38 +259,80 @@ export default function SchedulesPage() {
                 ))}
               </select>
             </label>
-            <label>Target date<input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} /></label>
+            <label>Target date (Ngày/Tháng/Năm hoặc Năm-Tháng-Ngày)
+              <input 
+                type="text" 
+                value={targetDate} 
+                onChange={(e) => setTargetDate(e.target.value)} 
+                placeholder="Ví dụ: 24/06/2026 hoặc 24/6" 
+                style={{ width: 280 }}
+              />
+            </label>
             <button className="primary-btn" onClick={generate}>Generate</button>
-            <button className="secondary-btn" onClick={loadDaily}>Refresh Daily</button>
           </div>
           {result && (
-            <pre className="json-box">{JSON.stringify(result, null, 2)}</pre>
+            <div className="generator-success-card" style={{
+              marginTop: '16px',
+              padding: '20px',
+              borderRadius: '16px',
+              background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.03), rgba(0, 240, 255, 0.08))',
+              border: '1px solid rgba(0, 240, 255, 0.2)',
+              boxShadow: '0 8px 32px 0 rgba(0, 240, 255, 0.03)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+                <span style={{
+                  display: 'inline-grid',
+                  placeItems: 'center',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  background: 'rgba(0, 255, 102, 0.15)',
+                  color: '#00ff66',
+                  fontSize: '1.2rem',
+                  fontWeight: 'bold',
+                  boxShadow: '0 0 10px rgba(0, 255, 102, 0.2)'
+                }}>✓</span>
+                <h3 style={{ margin: 0, color: 'var(--accent)', fontSize: '1.1rem', fontWeight: '600' }}>
+                  Đã tạo lịch trình tự động thành công!
+                </h3>
+              </div>
+              
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                gap: '12px',
+                background: 'rgba(5, 8, 20, 0.6)',
+                padding: '16px',
+                borderRadius: '12px',
+                border: '1px solid var(--line)'
+              }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ngày lập lịch</span>
+                  <strong style={{ color: 'var(--ink)', fontSize: '0.95rem' }}>{result.target_date}</strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Số ca đã phân bổ</span>
+                  <strong style={{ color: 'var(--ink)', fontSize: '0.95rem' }}>{result.count} ca trực</strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trạng thái thuật toán</span>
+                  <strong style={{ color: '#00ff66', fontSize: '0.95rem', fontFamily: 'IBM Plex Mono, monospace' }}>
+                    {result.ai_meta?.solver_status || 'OPTIMAL'}
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Thời gian xử lý AI</span>
+                  <strong style={{ color: 'var(--ink)', fontSize: '0.95rem' }}>
+                    {result.ai_meta?.time_limit_seconds || 12} giây
+                  </strong>
+                </div>
+              </div>
+            </div>
           )}
         </section>
       )}
 
-      {/* Daily Grouped Schedule - title per requirement, keep grouped view */}
-      <section className="panel">
-        <div className="section-head">
-          <div>
-            <h2>Daily Grouped Schedule</h2>
-            <p>Quản lý lịch lao động, thăm gặp và sinh hoạt của tù nhân.</p>
-          </div>
-          <button className="secondary-btn" onClick={loadDaily}>Refresh</button>
-        </div>
-        {daily ? (
-          <pre className="json-box">{JSON.stringify(daily, null, 2)}</pre>
-        ) : (
-          <div className="loading-state">
-            <p className="muted">Chưa có dữ liệu lịch trình cho ngày này.</p>
-            {canCreateSchedule && (
-              <button className="primary-btn" onClick={() => setShowCreateModal(true)} style={{ marginTop: 8 }}>
-                + Tạo lịch mới
-              </button>
-            )}
-          </div>
-        )}
-      </section>
+
 
       {/* Main Schedules table - redesigned for Guard (and keep for others) */}
       <section className="panel">
@@ -338,7 +342,7 @@ export default function SchedulesPage() {
             <p className="hint-text">Danh sách lịch chi tiết theo tù nhân.</p>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button className="secondary-btn" onClick={() => { loadSchedules(); loadDaily(); }}>Refresh</button>
+            <button className="secondary-btn" onClick={() => { loadSchedules(); }}>Refresh</button>
           </div>
         </div>
 
@@ -415,14 +419,7 @@ export default function SchedulesPage() {
                 <tr>
                   <td colSpan={ (canEditSchedule || canDeleteSchedule) ? 8 : 7 } style={{ textAlign: "center", padding: "28px", color: "var(--muted)" }}>
                     {schedules.length === 0 ? (
-                      <>
-                        <p>Chưa có lịch trình nào.</p>
-                        {canCreateSchedule && (
-                          <button className="primary-btn" onClick={() => setShowCreateModal(true)} style={{ marginTop: 8 }}>
-                            + Tạo lịch mới
-                          </button>
-                        )}
-                      </>
+                      <p>Chưa có lịch trình nào.</p>
                     ) : "Không có lịch trình khớp với filter."}
                   </td>
                 </tr>
@@ -479,17 +476,7 @@ export default function SchedulesPage() {
         </div>
       </section>
 
-      {/* Create Modal for Guard + higher */}
-      {showCreateModal && canCreateSchedule && (
-        <CreateScheduleModal
-          onClose={() => setShowCreateModal(false)}
-          onSaved={async () => {
-            await loadSchedules();
-            await loadDaily();
-          }}
-          showToast={showToast}
-        />
-      )}
+
 
       {/* Update/Edit Modal */}
       {showUpdateModal && canEditSchedule && (
@@ -497,7 +484,6 @@ export default function SchedulesPage() {
           onClose={() => setShowUpdateModal(false)}
           onSaved={async () => {
             await loadSchedules();
-            await loadDaily();
           }}
           showToast={showToast}
         />

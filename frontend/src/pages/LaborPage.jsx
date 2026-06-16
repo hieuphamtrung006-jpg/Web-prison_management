@@ -16,24 +16,12 @@ const initialProjectForm = {
   is_active: true,
 };
 
-const initialAssignmentForm = {
-  prisoner_id: "",
-  project_id: "",
-  assignment_date: today,
-  hours_assigned: 4,
-};
-
 const initialPerformanceForm = {
   prisoner_id: "",
   project_id: "",
   work_date: today,
   productivity: 80,
   notes: "",
-};
-
-const initialAssignmentFilters = {
-  prisoner_id: "",
-  project_id: "",
 };
 
 const initialPerformanceFilters = {
@@ -49,12 +37,6 @@ const projectSortOptions = [
   { value: "revenue_per_hour:desc", label: "Highest revenue" },
 ];
 
-const assignmentSortOptions = [
-  { value: "assignment_date:desc", label: "Newest assignments" },
-  { value: "assignment_date:asc", label: "Oldest assignments" },
-  { value: "prisoner_name:asc", label: "Prisoner A-Z" },
-  { value: "project_name:asc", label: "Project A-Z" },
-];
 
 const performanceSortOptions = [
   { value: "work_date:desc", label: "Newest scores" },
@@ -237,147 +219,6 @@ function ProjectEditModal({ project, locations, onClose, onSaved, showToast }) {
   );
 }
 
-function AssignmentEditModal({ assignment, projects, prisoners, onClose, onSaved, showToast }) {
-  const [form, setForm] = useState({
-    prisoner_id: assignment?.prisoner_id ?? "",
-    project_id: assignment?.project_id ?? "",
-    assignment_date: assignment?.assignment_date || today,
-    hours_assigned: assignment?.hours_assigned ?? 1,
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [prisonerSearch, setPrisonerSearch] = useState("");
-
-  // Local filtered for this modal's prisoner search (supports ID and name)
-  const filteredPrisoners = useMemo(() => {
-    const search = prisonerSearch.trim().toLowerCase();
-    if (!search) return prisoners;
-    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(String(prisoner.prisoner_id), search));
-  }, [prisoners, prisonerSearch]);
-
-  const selectedPrisonerName = useMemo(() => {
-    const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(form.prisoner_id));
-    return found?.full_name || "";
-  }, [form.prisoner_id, prisoners]);
-
-  // Options: filtered search results + ensure the currently selected prisoner is always in the list (even if search doesn't match it)
-  const editPrisonerOptions = useMemo(() => {
-    const options = [...filteredPrisoners];
-    const selected = prisoners.find((item) => String(item.prisoner_id) === String(form.prisoner_id));
-    if (selected && !options.some((item) => item.prisoner_id === selected.prisoner_id)) options.unshift(selected);
-    return options;
-  }, [filteredPrisoners, prisoners, form.prisoner_id]);
-
-  useEffect(() => {
-    setForm({
-      prisoner_id: assignment?.prisoner_id ?? "",
-      project_id: assignment?.project_id ?? "",
-      assignment_date: assignment?.assignment_date || today,
-      hours_assigned: assignment?.hours_assigned ?? 1,
-    });
-    setError("");
-    setPrisonerSearch(""); // reset search when opening different assignment
-  }, [assignment]);
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    setLoading(true);
-    setError("");
-
-    try {
-      await api.put(`/labor/assignments/${assignment.assignment_id}`, {
-        prisoner_id: Number(form.prisoner_id),
-        project_id: Number(form.project_id),
-        assignment_date: form.assignment_date,
-        hours_assigned: Number(form.hours_assigned),
-      });
-      showToast("Assignment updated", "success");
-      onSaved();
-      onClose();
-    } catch (err) {
-      const message = parseApiError(err);
-      setError(message);
-      showToast(message, "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Sửa Phân công: {assignment?.prisoner_name || `#${assignment?.prisoner_id}`}</h3>
-          <button className="close-btn" type="button" onClick={onClose}>×</button>
-        </div>
-
-        {error && <div className="error-msg">{error}</div>}
-
-        <form className="form-grid" onSubmit={handleSubmit}>
-          <label>
-            Search prisoner
-            <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Search by ID or name (e.g. 523 or name)" />
-          </label>
-          {prisonerSearch.trim() ? (
-            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '4px', marginTop: '4px' }}>
-              {editPrisonerOptions.length === 0 ? (
-                <div style={{ padding: '8px', color: 'var(--muted)', fontSize: '0.85rem' }}>No matches found</div>
-              ) : (
-                editPrisonerOptions.map((prisoner) => (
-                  <div
-                    key={prisoner.prisoner_id}
-                    onClick={() => setForm({ ...form, prisoner_id: prisoner.prisoner_id })}
-                    style={{
-                      padding: '6px 8px',
-                      cursor: 'pointer',
-                      background: String(form.prisoner_id) === String(prisoner.prisoner_id) ? 'var(--accent)' : 'transparent',
-                      color: String(form.prisoner_id) === String(prisoner.prisoner_id) ? '#fff' : 'inherit',
-                      borderBottom: '1px solid #eee',
-                      fontSize: '0.9rem'
-                    }}
-                  >
-                    #{prisoner.prisoner_id} - {prisoner.full_name}
-                  </div>
-                ))
-              )}
-            </div>
-          ) : (
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}>Type to search prisoners by ID or name</div>
-          )}
-          <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
-
-          <label>
-            Dự án
-            <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })} required>
-              <option value="">Chọn dự án</option>
-              {projects.map((project) => (
-                <option key={project.project_id} value={project.project_id}>
-                  {project.project_name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Ngày Phân công
-            <input type="date" value={form.assignment_date} onChange={(e) => setForm({ ...form, assignment_date: e.target.value })} required />
-          </label>
-
-          <label>
-            Số giờ Phân công
-            <input type="number" step="0.25" min="0.25" value={form.hours_assigned} onChange={(e) => setForm({ ...form, hours_assigned: e.target.value })} required />
-          </label>
-
-          <div className="modal-buttons">
-            <button className="primary-btn" type="submit" disabled={loading}>{loading ? "Đang lưu..." : "Lưu"}</button>
-            <button className="secondary-btn" type="button" onClick={onClose} disabled={loading}>Hủy</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 function SectionLoading({ label }) {
   return (
     <div className="loading-state">
@@ -397,56 +238,37 @@ export default function LaborPage() {
   // - Warden/Admin: FULL on Projects (Create/Edit/Delete + all buttons) + full on Assignments + Performance (Log + History). All sections visible, no hiding.
   const canManageProjects = user?.role === "Admin" || user?.role === "Warden";
   const canManageLabor = canManageProjects || user?.role === "Guard";
-  const canCreateAssignment = canManageLabor; // Guard + Warden/Admin need full Create on Assignments
   // Note: Guard will load full (non-vw) data paths → no Network Error from viewer raw query issues.
 
   const [projects, setProjects] = useState([]);
-  const [assignments, setAssignments] = useState([]);
   const [performanceRows, setPerformanceRows] = useState([]);
   const [locations, setLocations] = useState([]);
   const [prisoners, setPrisoners] = useState([]);
-  const [prisonerSearch, setPrisonerSearch] = useState(""); // for Create Assignment
   const [performancePrisonerSearch, setPerformancePrisonerSearch] = useState(""); // for Log Performance
   const [projectSearch, setProjectSearch] = useState("");
-  const [assignmentSearch, setAssignmentSearch] = useState("");
   const [performanceSearch, setPerformanceSearch] = useState("");
   const [projectSort, setProjectSort] = useState("project_name:asc");
-  const [assignmentSort, setAssignmentSort] = useState("assignment_date:desc");
   const [performanceSort, setPerformanceSort] = useState("work_date:desc");
   const [projectForm, setProjectForm] = useState(initialProjectForm);
-  const [assignmentForm, setAssignmentForm] = useState(initialAssignmentForm);
   const [performanceForm, setPerformanceForm] = useState(initialPerformanceForm);
-  const [assignmentFilters, setAssignmentFilters] = useState(initialAssignmentFilters);
   const [performanceFilters, setPerformanceFilters] = useState(initialPerformanceFilters);
-  const [assignmentPage, setAssignmentPage] = useState(1);
   const [performancePage, setPerformancePage] = useState(1);
-  const [assignmentHasNext, setAssignmentHasNext] = useState(false);
   const [performanceHasNext, setPerformanceHasNext] = useState(false);
   const [loadingProjects, setLoadingProjects] = useState(false);
-  const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [loadingPerformance, setLoadingPerformance] = useState(false);
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [loadingPrisoners, setLoadingPrisoners] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
-  const [savingAssignment, setSavingAssignment] = useState(false);
   const [savingPerformance, setSavingPerformance] = useState(false);
   const [isPerformanceOpen, setIsPerformanceOpen] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [editingProject, setEditingProject] = useState(null);
-  const [editingAssignment, setEditingAssignment] = useState(null);
   const [showCreateProject, setShowCreateProject] = useState(false);
-  const [showCreateAssignment, setShowCreateAssignment] = useState(false);
   const [showLogPerformance, setShowLogPerformance] = useState(false);
 
   const showToast = (message, type = "info") => setToast({ message, type });
-
-  const filteredPrisoners = useMemo(() => {
-    const search = prisonerSearch.trim().toLowerCase();
-    if (!search) return prisoners;
-    return prisoners.filter((prisoner) => includesText(prisoner.full_name, search) || includesText(String(prisoner.prisoner_id), search));
-  }, [prisoners, prisonerSearch]);
 
   // Separate filtered list for Log Performance modal to allow independent search
   const performanceFilteredPrisoners = useMemo(() => {
@@ -462,11 +284,6 @@ export default function LaborPage() {
     if (selected && !options.some((item) => item.prisoner_id === selected.prisoner_id)) options.unshift(selected);
     return options;
   }, [performanceFilteredPrisoners, prisoners, performanceForm.prisoner_id]);
-
-  const selectedPrisonerName = useMemo(() => {
-    const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(assignmentForm.prisoner_id));
-    return found?.full_name || "";
-  }, [assignmentForm.prisoner_id, prisoners]);
 
   const selectedPerformancePrisonerName = useMemo(() => {
     const found = prisoners.find((prisoner) => String(prisoner.prisoner_id) === String(performanceForm.prisoner_id));
@@ -523,34 +340,6 @@ export default function LaborPage() {
     }
   };
 
-  const loadAssignments = async (pageNumber = assignmentPage, filters = assignmentFilters) => {
-    setLoadingAssignments(true);
-    try {
-      const params = new URLSearchParams({ page: String(pageNumber), page_size: String(pageSize) });
-      // Viewer role handling (current_user.role === "Viewer"):
-      // - Skip sending filter params (prisoner_id/project_id) so backend list_assignments does not build conditions.
-      // - Backend will hit get_table_name_for_role("LaborAssignments") === "vw_LaborAssignments_Basic", use execute_viewer_query.
-      // - This avoids the previous double-WHERE bug in where_clause="WHERE ..." + execute adding another WHERE.
-      // - Response uses LaborAssignmentReadBasic (names missing -> UI falls back to #ID), response_model union prevents 500.
-      // Client-side search (assignmentSearch) + sort still works via sortedAssignments useMemo.
-      if (!isViewer) {
-        if (filters.prisoner_id) params.set("prisoner_id", filters.prisoner_id);
-        if (filters.project_id) params.set("project_id", filters.project_id);
-      }
-
-      const response = await api.get(`/labor/assignments?${params.toString()}`);
-      setAssignments(response.data);
-      setAssignmentHasNext(response.data.length === pageSize);
-    } catch (err) {
-      const message = parseApiError(err);
-      // setError removed: previously any assignment load failure would set shared error and show "Network Error" inside Labor Projects panel
-      // even when projects themselves loaded fine. Toast is sufficient for transient load issues.
-      showToast(message, "error");
-    } finally {
-      setLoadingAssignments(false);
-    }
-  };
-
   const loadPerformance = async (pageNumber = performancePage, filters = performanceFilters) => {
     setLoadingPerformance(true);
     try {
@@ -580,7 +369,6 @@ export default function LaborPage() {
       loadProjects(),
       ...(isViewer ? [] : [loadLocations()]),
       loadPrisoners(),
-      loadAssignments(assignmentPage, assignmentFilters),
     ];
     if (!isViewer) {
       loads.push(loadPerformance(performancePage, performanceFilters));
@@ -595,10 +383,6 @@ export default function LaborPage() {
 
   // Load full prisoners list once on mount (client-side search in modals for smooth UX)
   // Server-side search param supported in backend for other pages (e.g. PrisonersPage)
-
-  const reloadAssignments = async (nextPage = assignmentPage) => {
-    await loadAssignments(nextPage, assignmentFilters);
-  };
 
   const reloadPerformance = async (nextPage = performancePage) => {
     await loadPerformance(nextPage, performanceFilters);
@@ -629,32 +413,6 @@ export default function LaborPage() {
       showToast(message, "error");
     } finally {
       setSavingProject(false);
-    }
-  };
-
-  const handleCreateAssignment = async (event) => {
-    event.preventDefault();
-    if (!canCreateAssignment) return;
-
-    setSavingAssignment(true);
-    setError("");
-    try {
-      await api.post("/labor/assignments", {
-        prisoner_id: Number(assignmentForm.prisoner_id),
-        project_id: Number(assignmentForm.project_id),
-        assignment_date: assignmentForm.assignment_date,
-        hours_assigned: Number(assignmentForm.hours_assigned),
-      });
-      setAssignmentForm(initialAssignmentForm);
-      showToast("Assignment created", "success");
-      setAssignmentPage(1);
-      await loadAssignments(1, assignmentFilters);
-    } catch (err) {
-      const message = parseApiError(err);
-      setError(message);
-      showToast(message, "error");
-    } finally {
-      setSavingAssignment(false);
     }
   };
 
@@ -694,41 +452,12 @@ export default function LaborPage() {
       await api.delete(`/labor/projects/${project.project_id}`);
       showToast("Project deleted", "success");
       await loadProjects();
-      await reloadAssignments();
       await reloadPerformance();
     } catch (err) {
       const message = parseApiError(err);
       setError(message);
       showToast(message, "error");
     }
-  };
-
-  const handleDeleteAssignment = async (assignment) => {
-    const confirmed = window.confirm(`Delete assignment for ${assignment.prisoner_name || assignment.prisoner_id}?`);
-    if (!confirmed) return;
-
-    setError("");
-    try {
-      await api.delete(`/labor/assignments/${assignment.assignment_id}`);
-      showToast("Assignment deleted", "success");
-      await reloadAssignments(assignmentPage);
-      await loadProjects();
-    } catch (err) {
-      const message = parseApiError(err);
-      setError(message);
-      showToast(message, "error");
-    }
-  };
-
-  const applyAssignmentFilters = async () => {
-    setAssignmentPage(1);
-    await loadAssignments(1, assignmentFilters);
-  };
-
-  const clearAssignmentFilters = async () => {
-    setAssignmentFilters(initialAssignmentFilters);
-    setAssignmentPage(1);
-    await loadAssignments(1, initialAssignmentFilters);
   };
 
   const applyPerformanceFilters = async () => {
@@ -768,42 +497,6 @@ export default function LaborPage() {
     return sortByField(filtered, projectSort);
   }, [projects, projectSearch, projectSort]);
 
-  const sortedAssignments = useMemo(() => {
-    // Build lookup maps so that for Viewer (who gets LaborAssignmentReadBasic without joined names)
-    // we can still display nice prisoner/project names using data we already loaded (projects + prisoners).
-    // This makes "Assignments" section actually show useful data instead of only #IDs.
-    // Safe against project_id / prisoner_id being null (defensive after the backend filter + relaxed Basic schema).
-    const projectNameById = new Map(projects.map((p) => [p.project_id, p.project_name]));
-    const prisonerNameById = new Map(prisoners.map((pr) => [pr.prisoner_id, pr.full_name]));
-
-    const search = assignmentSearch.trim().toLowerCase();
-    const enriched = assignments.map((assignment) => {
-      const pid = assignment.prisoner_id;
-      const projid = assignment.project_id;
-      const pn = assignment.prisoner_name
-        || (pid != null ? prisonerNameById.get(pid) : null)
-        || (pid != null ? `#${pid}` : '#?');
-      const projn = assignment.project_name
-        || (projid != null ? projectNameById.get(projid) : null)
-        || (projid != null ? `#${projid}` : '#?');
-      return {
-        ...assignment,
-        prisoner_name: pn,
-        project_name: projn,
-      };
-    });
-
-    const filtered = enriched.filter((assignment) => {
-      if (!search) return true;
-      return (
-        includesText(assignment.prisoner_name, search) ||
-        includesText(assignment.project_name, search) ||
-        includesText(assignment.assigned_by_name, search)
-      );
-    });
-    return sortByField(filtered, assignmentSort);
-  }, [assignments, assignmentSearch, assignmentSort, projects, prisoners]);
-
   const sortedPerformance = useMemo(() => {
     const search = performanceSearch.trim().toLowerCase();
     const filtered = performanceRows.filter((record) => {
@@ -816,15 +509,6 @@ export default function LaborPage() {
     });
     return sortByField(filtered, performanceSort);
   }, [performanceRows, performanceSearch, performanceSort]);
-
-  const prisonerOptions = useMemo(() => {
-    const options = [...filteredPrisoners];
-    const assignmentSelected = prisoners.find((item) => String(item.prisoner_id) === String(assignmentForm.prisoner_id));
-    const performanceSelected = prisoners.find((item) => String(item.prisoner_id) === String(performanceForm.prisoner_id));
-    if (assignmentSelected && !options.some((item) => item.prisoner_id === assignmentSelected.prisoner_id)) options.unshift(assignmentSelected);
-    if (performanceSelected && !options.some((item) => item.prisoner_id === performanceSelected.prisoner_id)) options.unshift(performanceSelected);
-    return options;
-  }, [filteredPrisoners, prisoners, assignmentForm.prisoner_id, performanceForm.prisoner_id]);
 
   // showActionColumn: Guard + higher roles see the left sidebar (with only the actions they are allowed via canManage*).
   // Viewer hides it entirely for cleaner full-width layout.
@@ -839,7 +523,6 @@ export default function LaborPage() {
             title="Actions"
             actions={[
               ...(canManageProjects ? [{ label: "+ Create Project", onClick: () => setShowCreateProject(true), variant: "create" }] : []),
-              ...(canManageLabor ? [{ label: "+ Create Assignment", onClick: () => setShowCreateAssignment(true), variant: "create" }] : []),
               // Log Performance shown if canManageLabor (includes Guard + Warden + Admin)
               ...(canManageLabor ? [{ label: "Log Performance", onClick: () => setShowLogPerformance(true) }] : []),
             ]}
@@ -947,117 +630,7 @@ export default function LaborPage() {
             )}
           </section>
 
-          {/* Assignments section shown for canManageLabor roles (Guard full on assignments, Warden/Admin full). */}
-          <section className="panel" style={isViewer ? { marginTop: '8px' } : {}}>
-            <div className="section-head">
-              <div>
-                <h2>Assignments</h2>
-                <p>Search, filter, sort and page through assignment history.</p>
-              </div>
-              <button className="secondary-btn" type="button" onClick={() => loadAssignments(assignmentPage, assignmentFilters)} disabled={loadingAssignments}>Refresh</button>
-            </div>
 
-            <div className="top-search-row">
-              <label>
-                Search assignments
-                <input value={assignmentSearch} onChange={(e) => setAssignmentSearch(e.target.value)} placeholder="Prisoner, project, assigned by" />
-              </label>
-              <label>
-                Sort
-                <select value={assignmentSort} onChange={(e) => setAssignmentSort(e.target.value)}>
-                  {assignmentSortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            {/* Server-side filter bar hidden for Viewer (they use client-side only).
-                Guard and higher roles see and can use the filter bar (full backend query). */}
-            {!isViewer && (
-            <div className="filter-bar">
-              <label>
-                Prisoner
-                <input value={assignmentFilters.prisoner_id} onChange={(e) => setAssignmentFilters({ ...assignmentFilters, prisoner_id: e.target.value })} placeholder="Prisoner ID" />
-              </label>
-              <label>
-                Project
-                <select value={assignmentFilters.project_id} onChange={(e) => setAssignmentFilters({ ...assignmentFilters, project_id: e.target.value })}>
-                  <option value="">All projects</option>
-                  {projects.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>{project.project_name}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="toolbar-row">
-                <button className="primary-btn" type="button" onClick={applyAssignmentFilters}>Apply</button>
-                <button className="secondary-btn" type="button" onClick={clearAssignmentFilters}>Clear</button>
-              </div>
-            </div>
-            )}
-
-            <div className="pagination-bar">
-              <div className="search-status">Page {assignmentPage} {loadingAssignments ? "• loading" : ""}</div>
-              <div className="controls">
-                <button className="secondary-btn" type="button" disabled={assignmentPage <= 1 || loadingAssignments} onClick={async () => {
-                  const nextPage = Math.max(1, assignmentPage - 1);
-                  setAssignmentPage(nextPage);
-                  await loadAssignments(nextPage, assignmentFilters);
-                }}>Prev</button>
-                <button className="secondary-btn" type="button" disabled={!assignmentHasNext || loadingAssignments} onClick={async () => {
-                  const nextPage = assignmentPage + 1;
-                  setAssignmentPage(nextPage);
-                  await loadAssignments(nextPage, assignmentFilters);
-                }}>Next</button>
-              </div>
-            </div>
-
-            {loadingAssignments ? (
-              <SectionLoading label="Loading assignments..." />
-            ) : sortedAssignments.length === 0 ? (
-              <div className="loading-state"><p>No assignments found</p></div>
-            ) : (
-              <div className="table-wrap compact-table">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Prisoner Name</th>
-                      <th>Project</th>
-                      <th>Assigned Date</th>
-                      <th>Hours</th>
-                      <th>Assigned By</th>
-                      {/* Actions column for Assignments: shown for roles with canManageLabor (Guard + Warden + Admin).
-                          Guard has full on assignments (Create/Edit/Delete). */}
-                      {canManageLabor && <th>Actions</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedAssignments.map((assignment) => (
-                      <tr key={assignment.assignment_id}>
-                        <td>{assignment.prisoner_name || (assignment.prisoner_id != null ? `#${assignment.prisoner_id}` : '#?')}</td>
-                        <td>{assignment.project_name || (assignment.project_id != null ? `#${assignment.project_id}` : '#?')}</td>
-                        <td>{formatDateOnly(assignment.assignment_date)}</td>
-                        <td>{formatDecimal(assignment.hours_assigned)}</td>
-                        <td>{assignment.assigned_by_name || assignment.assigned_by || "-"}</td>
-                        {canManageLabor && (
-                          <td>
-                            <div className="table-actions">
-                              {canManageLabor && (
-                                <>
-                                  <button className="btn-sm btn-edit" type="button" onClick={() => setEditingAssignment(assignment)}>Edit</button>
-                                  <button className="btn-sm btn-delete" type="button" onClick={() => handleDeleteAssignment(assignment)}>Delete</button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
 
           {/* Performance History + Log: shown for roles with canManageLabor (Guard + Warden + Admin).
              Hidden only for Viewer (who has no labor management rights). */}
@@ -1216,70 +789,7 @@ export default function LaborPage() {
         </div>
       )}
 
-      {showCreateAssignment && canManageLabor && (
-        <div className="modal-overlay" onClick={() => setShowCreateAssignment(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>Tạo Phân công</h3>
-              <button className="close-btn" onClick={() => setShowCreateAssignment(false)}>×</button>
-            </div>
-            <form className="form-grid" onSubmit={handleCreateAssignment}>
-              <label>
-                Tìm tù nhân
-                <input value={prisonerSearch} onChange={(e) => setPrisonerSearch(e.target.value)} placeholder="Tìm theo ID hoặc tên (ví dụ 523 hoặc tên)" />
-              </label>
-              {prisonerSearch.trim() ? (
-                <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--line)', borderRadius: '4px', marginTop: '4px' }}>
-                  {prisonerOptions.length === 0 ? (
-                    <div style={{ padding: '8px', color: 'var(--muted)', fontSize: '0.85rem' }}>No matches found</div>
-                  ) : (
-                    prisonerOptions.map((prisoner) => (
-                      <div
-                        key={prisoner.prisoner_id}
-                        onClick={() => setAssignmentForm({ ...assignmentForm, prisoner_id: prisoner.prisoner_id })}
-                        style={{
-                          padding: '6px 8px',
-                          cursor: 'pointer',
-                          background: String(assignmentForm.prisoner_id) === String(prisoner.prisoner_id) ? 'var(--accent)' : 'transparent',
-                          color: String(assignmentForm.prisoner_id) === String(prisoner.prisoner_id) ? '#fff' : 'inherit',
-                          borderBottom: '1px solid #eee',
-                          fontSize: '0.9rem'
-                        }}
-                      >
-                        #{prisoner.prisoner_id} - {prisoner.full_name}
-                      </div>
-                    ))
-                  )}
-                </div>
-              ) : (
-                <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginTop: '4px' }}>Type to search prisoners by ID or name</div>
-              )}
-              <div className="mini-muted">Selected: {selectedPrisonerName || "none"}</div>
-              <label>
-                Project
-                <select value={assignmentForm.project_id} onChange={(e) => setAssignmentForm({ ...assignmentForm, project_id: e.target.value })} required>
-                  <option value="">Select a project</option>
-                  {projects.map((project) => (
-                    <option key={project.project_id} value={project.project_id}>{project.project_name} ({project.current_workers}/{project.max_workers})</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Assignment Date
-                <input type="date" value={assignmentForm.assignment_date} onChange={(e) => setAssignmentForm({ ...assignmentForm, assignment_date: e.target.value })} required />
-              </label>
-              <label>
-                Hours Assigned
-                <input type="number" step="0.25" min="0.25" value={assignmentForm.hours_assigned} onChange={(e) => setAssignmentForm({ ...assignmentForm, hours_assigned: e.target.value })} required />
-              </label>
-              <div className="modal-buttons">
-                <button className="primary-btn" type="submit" disabled={savingAssignment}>{savingAssignment ? "Đang phân công..." : "Phân công Tù nhân"}</button>
-                <button className="secondary-btn" type="button" onClick={() => setShowCreateAssignment(false)} disabled={savingAssignment}>Hủy</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* Log Performance modal: shown if canManageLabor (Guard + Warden + Admin) */}
       {canManageLabor && showLogPerformance && (
@@ -1359,22 +869,7 @@ export default function LaborPage() {
           onClose={() => setEditingProject(null)}
           onSaved={async () => {
             await loadProjects();
-            await reloadAssignments();
             await reloadPerformance();
-          }}
-          showToast={showToast}
-        />
-      )}
-
-      {editingAssignment && (
-        <AssignmentEditModal
-          assignment={editingAssignment}
-          projects={projects}
-          prisoners={prisoners}
-          onClose={() => setEditingAssignment(null)}
-          onSaved={async () => {
-            await reloadAssignments();
-            await loadProjects();
           }}
           showToast={showToast}
         />

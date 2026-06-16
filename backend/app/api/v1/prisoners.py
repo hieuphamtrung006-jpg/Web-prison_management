@@ -11,7 +11,7 @@ from app.core.deps import get_db, require_roles
 from app.core.security import execute_viewer_query, get_table_name_for_role
 from app.db.models.user import User
 from app.db.models.incident import Incident
-from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
+from app.db.models.labor import DailyPerformance, LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
 from app.db.models.schedule import Schedule
@@ -251,7 +251,6 @@ def delete_prisoner(
     db.query(VisitRequest).filter(VisitRequest.prisoner_id == prisoner_id).delete(synchronize_session=False)
     db.query(Visit).filter(Visit.prisoner_id == prisoner_id).delete(synchronize_session=False)
     db.query(Incident).filter(Incident.prisoner_id == prisoner_id).delete(synchronize_session=False)
-    db.query(LaborAssignment).filter(LaborAssignment.prisoner_id == prisoner_id).delete(synchronize_session=False)
     db.query(DailyPerformance).filter(DailyPerformance.prisoner_id == prisoner_id).delete(synchronize_session=False)
     db.query(Schedule).filter(Schedule.prisoner_id == prisoner_id).delete(synchronize_session=False)
 

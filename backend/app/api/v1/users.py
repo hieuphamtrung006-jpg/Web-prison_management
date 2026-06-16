@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user, get_db, require_roles
 from app.core.security import hash_password
 from app.db.models.incident import Incident
-from app.db.models.labor import DailyPerformance, LaborAssignment
+from app.db.models.labor import DailyPerformance
 from app.db.models.user import User
 from app.db.models.visit import Visit
 from app.schemas.common import MessageResponse
@@ -125,13 +125,12 @@ def delete_user(
 
     has_incidents = db.query(Incident.incident_id).filter(Incident.created_by == user_id).first()
     has_visits = db.query(Visit.visit_id).filter(Visit.approved_by == user_id).first()
-    has_assignments = db.query(LaborAssignment.assignment_id).filter(LaborAssignment.assigned_by == user_id).first()
     has_performance = (
         db.query(DailyPerformance.performance_id)
         .filter(DailyPerformance.evaluated_by == user_id)
         .first()
     )
-    if has_incidents or has_visits or has_assignments or has_performance:
+    if has_incidents or has_visits or has_performance:
         raise HTTPException(status_code=400, detail="User has related records and cannot be deleted")
 
     db.delete(user)

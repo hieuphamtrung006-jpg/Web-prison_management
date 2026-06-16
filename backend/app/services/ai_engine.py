@@ -108,9 +108,11 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
     shifts = sorted(shifts, key=lambda item: int(item["shift_id"]))
     prisoners_by_id = {int(p["prisoner_id"]): p for p in prisoners}
     locations_by_id = {int(l["location_id"]): l for l in locations}
-    assignments_by_prisoner = {
-        int(a["prisoner_id"]): a for a in assignments if a.get("project_id") is not None
-    }
+    project_by_location: dict[int, dict] = {}
+    for p in projects_list:
+        loc_id = p.get("location_id")
+        if loc_id is not None:
+            project_by_location[int(loc_id)] = p
 
     prisoner_ids = [int(p["prisoner_id"]) for p in prisoners]
     shift_ids = [int(s["shift_id"]) for s in shifts]
@@ -147,18 +149,7 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
             )
 
             shift_class = _classify_shift(shift.get("shift_type"))
-            assignment = assignments_by_prisoner.get(prisoner_id)
-            if shift_class == "labor" and assignment:
-                project_id = int(assignment["project_id"])
-                project = projects.get(project_id)
-                location_id = int(project.get("location_id")) if project else None
-                if location_id is not None and location_id in location_ids:
-                    for loc_id in location_ids:
-                        if loc_id == location_id:
-                            model.Add(x[(prisoner_id, shift_id, loc_id)] == 1)
-                        else:
-                            model.Add(x[(prisoner_id, shift_id, loc_id)] == 0)
-            elif shift_class == "sleep":
+            if shift_class == "sleep":
                 prisoner_obj = prisoners_by_id.get(prisoner_id, {})
                 current_loc_id = prisoner_obj.get("current_location_id")
                 if current_loc_id is not None and current_loc_id in location_ids:
@@ -193,14 +184,9 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
         if not project or project.get("location_id") is None:
             continue
         location_id = int(project["location_id"])
-        assigned_prisoners = [
-            pid
-            for pid, assignment in assignments_by_prisoner.items()
-            if int(assignment["project_id"]) == project_id
-        ]
-        if assigned_prisoners:
+        if location_id in location_ids:
             model.Add(
-                sum(x[(pid, shift_id, location_id)] for pid in assigned_prisoners) <= max_workers
+                sum(x[(pid, shift_id, location_id)] for pid in prisoner_ids) <= max_workers
             )
 
     # Objective: maximize weighted economy + rehab - security penalty.
@@ -219,7 +205,6 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
         for shift in shifts:
             shift_id = int(shift["shift_id"])
             shift_class = _classify_shift(shift.get("shift_type"))
-            assignment = assignments_by_prisoner.get(prisoner_id)
 
             for location_id in location_ids:
                 location = locations_by_id.get(location_id, {})
@@ -230,10 +215,9 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
                 rehab_gain = 0.0
                 security_penalty = 0.0
 
-                if shift_class == "labor" and assignment:
-                    project = projects.get(int(assignment["project_id"]))
-                    project_location = int(project.get("location_id")) if project else None
-                    if project and project_location == location_id:
+                if shift_class == "labor":
+                    project = project_by_location.get(location_id)
+                    if project:
                         economy_gain += productivity + float(project.get("revenue_per_hour") or 0) / 100.0
                 elif shift_class == "general":
                     if loc_type in {"yard", "hospital"}:
@@ -282,10 +266,11 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
                     chosen_location_id = location_id
                     break
 
-            assignment = assignments_by_prisoner.get(prisoner_id)
             project_id = None
-            if shift_class == "labor" and assignment:
-                project_id = int(assignment["project_id"])
+            if shift_class == "labor" and chosen_location_id is not None:
+                project = project_by_location.get(chosen_location_id)
+                if project:
+                    project_id = int(project["project_id"])
 
             schedules.append(
                 {

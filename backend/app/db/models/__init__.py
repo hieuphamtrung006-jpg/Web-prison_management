@@ -1,6 +1,6 @@
 from app.db.models.audit_log import AuditLog
 from app.db.models.incident import Incident
-from app.db.models.labor import DailyPerformance, LaborAssignment, LaborProject
+from app.db.models.labor import DailyPerformance, LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
 from app.db.models.schedule import Schedule, SchedulingConfig, Shift
@@ -16,7 +16,6 @@ __all__ = [
 	"Visit",
 	"VisitRequest",
 	"LaborProject",
-	"LaborAssignment",
 	"DailyPerformance",
 	"Shift",
 	"Schedule",

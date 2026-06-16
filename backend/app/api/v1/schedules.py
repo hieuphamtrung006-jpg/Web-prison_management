@@ -7,7 +7,7 @@ from sqlalchemy import Date as SQLDate
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_roles
-from app.db.models.labor import LaborAssignment, LaborProject
+from app.db.models.labor import LaborProject
 from app.db.models.location import Location
 from app.db.models.prisoner import Prisoner
 from app.db.models.schedule import Schedule, SchedulingConfig, Shift
@@ -109,8 +109,12 @@ def _fallback_schedule(prisoners: list[Prisoner], projects: list[LaborProject], 
         return []
 
     default_shift = shifts[0]
-    start = datetime.combine(target_date, default_shift.start_time or time(8, 0))
-    end = datetime.combine(target_date, default_shift.end_time or time(12, 0))
+    start_t = default_shift.start_time or time(8, 0)
+    end_t = default_shift.end_time or time(12, 0)
+    start = datetime.combine(target_date, start_t)
+    end = datetime.combine(target_date, end_t)
+    if end_t < start_t:
+        end += timedelta(days=1)
     entries: list[dict] = []
     for idx, prisoner in enumerate(prisoners):
         project = projects[idx % len(projects)] if projects else None
@@ -142,17 +146,6 @@ def generate_schedule(
     projects = db.query(LaborProject).filter(LaborProject.is_active == True).all()
     shifts = db.query(Shift).all()
     locations = db.query(Location).filter(Location.is_active == True).all()
-    assignment_rows = (
-        db.query(LaborAssignment)
-        .filter(LaborAssignment.assignment_date <= target_date)
-        .order_by(LaborAssignment.prisoner_id.asc(), LaborAssignment.assignment_date.desc())
-        .all()
-    )
-    assignments_map: dict[int, LaborAssignment] = {}
-    for row in assignment_rows:
-        if row.prisoner_id not in assignments_map:
-            assignments_map[row.prisoner_id] = row
-    assignments = list(assignments_map.values())
 
     ai_result = run_genetic_algorithm(
         {
@@ -182,19 +175,13 @@ def generate_schedule(
                 }
                 for p in projects
             ],
-            "assignments": [
-                {
-                    "prisoner_id": a.prisoner_id,
-                    "project_id": a.project_id,
-                }
-                for a in assignments
-            ],
+            "assignments": [],
             "shifts": [
                 {
                     "shift_id": s.shift_id,
                     "shift_type": s.shift_type,
                     "start_time": datetime.combine(target_date, s.start_time),
-                    "end_time": datetime.combine(target_date, s.end_time),
+                    "end_time": datetime.combine(target_date, s.end_time) + (timedelta(days=1) if s.end_time < s.start_time else timedelta(0)),
                     "is_for_staff": s.is_for_staff,
                 }
                 for s in shifts

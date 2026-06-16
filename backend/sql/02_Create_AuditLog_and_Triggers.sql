@@ -66,38 +66,6 @@ BEGIN
 END;
 GO
 
--- ============================================================
--- TRIGGER CHO BẢNG LABORASSIGNMENTS
--- ============================================================
-CREATE TRIGGER dbo.trg_LaborAssignments_Audit
-ON dbo.LaborAssignments
-AFTER INSERT, UPDATE, DELETE
-AS
-BEGIN
-    SET NOCOUNT ON;
-    DECLARE @UserID INT = CAST(SESSION_CONTEXT(N'UserID') AS INT);
-    DECLARE @IP NVARCHAR(50) = CAST(SESSION_CONTEXT(N'IPAddress') AS NVARCHAR(50));
-
-    IF EXISTS (SELECT 1 FROM inserted) AND NOT EXISTS (SELECT 1 FROM deleted)
-        INSERT INTO dbo.AuditLog (TableName, RecordID, Action, NewValue, ChangedBy, IPAddress)
-        SELECT 'LaborAssignments', i.AssignmentID, 'INSERT', 
-               (SELECT * FROM inserted i2 WHERE i2.AssignmentID = i.AssignmentID FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER),
-               @UserID, @IP FROM inserted i;
-
-    ELSE IF EXISTS (SELECT 1 FROM inserted) AND EXISTS (SELECT 1 FROM deleted)
-        INSERT INTO dbo.AuditLog (TableName, RecordID, Action, OldValue, NewValue, ChangedBy, IPAddress)
-        SELECT 'LaborAssignments', i.AssignmentID, 'UPDATE',
-               (SELECT * FROM deleted d WHERE d.AssignmentID = i.AssignmentID FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER),
-               (SELECT * FROM inserted ins WHERE ins.AssignmentID = i.AssignmentID FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER),
-               @UserID, @IP FROM inserted i;
-
-    ELSE IF EXISTS (SELECT 1 FROM deleted) AND NOT EXISTS (SELECT 1 FROM inserted)
-        INSERT INTO dbo.AuditLog (TableName, RecordID, Action, OldValue, ChangedBy, IPAddress)
-        SELECT 'LaborAssignments', d.AssignmentID, 'DELETE',
-               (SELECT * FROM deleted d2 WHERE d2.AssignmentID = d.AssignmentID FOR JSON AUTO, WITHOUT_ARRAY_WRAPPER),
-               @UserID, @IP FROM deleted d;
-END;
-GO
 
 -- ============================================================
 -- TRIGGER CHO BẢNG VISITS

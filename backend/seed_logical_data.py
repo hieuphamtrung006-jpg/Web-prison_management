@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.db.models.user import User
 from app.db.models.prisoner import Prisoner
 from app.db.models.location import Location
-from app.db.models.labor import LaborProject, LaborAssignment, DailyPerformance
+from app.db.models.labor import LaborProject, DailyPerformance
 from app.db.models.schedule import Shift, Schedule, SchedulingConfig
 from app.db.models.incident import Incident
 from app.db.models.visit import Visit
@@ -110,25 +110,6 @@ def seed():
         (30, "Lê Văn Định", "1986-05-04", "Male", "Cướp tài sản có tổ chức", "High", 5, "2020-03-25", "2035-03-25", Decimal("6.4")),
     ]
 
-    raw_assignments = [
-        # (prisoner_id, project_id, assigned_by, hours_assigned)
-        (1, 1, 2, Decimal("4.00")),
-        (3, 1, 2, Decimal("4.00")),
-        (11, 1, 2, Decimal("4.00")),
-        (13, 1, 2, Decimal("4.00")),
-        (2, 2, 2, Decimal("4.00")),
-        (5, 2, 2, Decimal("4.00")),
-        (12, 2, 2, Decimal("4.00")),
-        (6, 3, 2, Decimal("4.00")),
-        (7, 3, 2, Decimal("4.00")),
-        (8, 3, 2, Decimal("4.00")),
-        (16, 3, 2, Decimal("4.00")),
-        (9, 4, 2, Decimal("4.00")),
-        (10, 4, 2, Decimal("4.00")),
-        (14, 4, 2, Decimal("4.00")),
-        (4, 5, 2, Decimal("4.00")),
-        (15, 5, 2, Decimal("4.00")),
-    ]
 
     raw_performances = [
         # (prisoner_id, project_id, evaluated_by, productivity, notes)
@@ -160,7 +141,7 @@ def seed():
         print("Clearing database...")
         db.query(Schedule).delete()
         db.query(DailyPerformance).delete()
-        db.query(LaborAssignment).delete()
+
         db.query(Incident).delete()
         db.query(Visit).delete()
         db.query(VisitRequest).delete()
@@ -255,14 +236,6 @@ def seed():
         db.add_all(prisoners)
         db.commit()
 
-        # 7. Seed LaborAssignments
-        print("Seeding LaborAssignments...")
-        assignments = [
-            LaborAssignment(prisoner_id=a[0], project_id=a[1], assigned_by=a[2], assignment_date=date.today(), hours_assigned=a[3], created_at=datetime.now(timezone.utc))
-            for a in raw_assignments
-        ]
-        db.add_all(assignments)
-        db.commit()
 
         # 8. Seed DailyPerformance
         print("Seeding DailyPerformance...")
@@ -394,7 +367,7 @@ def seed():
             f.write("PRINT 'Clearing tables...';\n")
             f.write("DELETE FROM Schedules;\n")
             f.write("DELETE FROM DailyPerformance;\n")
-            f.write("DELETE FROM LaborAssignments;\n")
+
             f.write("DELETE FROM Incidents;\n")
             f.write("DELETE FROM VisitRequests;\n")
             f.write("DELETE FROM Visits;\n")
@@ -406,7 +379,7 @@ def seed():
             f.write("DELETE FROM SchedulingConfigs;\n")
             f.write("DBCC CHECKIDENT ('Schedules', RESEED, 0);\n")
             f.write("DBCC CHECKIDENT ('DailyPerformance', RESEED, 0);\n")
-            f.write("DBCC CHECKIDENT ('LaborAssignments', RESEED, 0);\n")
+
             f.write("DBCC CHECKIDENT ('Incidents', RESEED, 0);\n")
             f.write("DBCC CHECKIDENT ('VisitRequests', RESEED, 0);\n")
             f.write("DBCC CHECKIDENT ('Visits', RESEED, 0);\n")
@@ -473,12 +446,7 @@ def seed():
                         f"VALUES ({p[0]}, N'{p[1]}', '{p[2]}', '{p[3]}', N'{p[4]}', '{p[5]}', {p[9]}, {24 + (p[0]-1)*2}, {loc}, '{p[7]}', '{p[8]}', 'InPrison', GETUTCDATE());\n")
             f.write("SET IDENTITY_INSERT Prisoners OFF;\nGO\n\n")
 
-            f.write("-- 8. Insert LaborAssignments\n")
-            f.write("PRINT 'Seeding LaborAssignments...';\n")
-            for a in raw_assignments:
-                f.write(f"INSERT INTO LaborAssignments (PrisonerID, ProjectID, AssignedBy, AssignmentDate, HoursAssigned, CreatedAt) "
-                        f"VALUES ({a[0]}, {a[1]}, {a[2]}, CAST(GETDATE() AS DATE), {a[3]}, GETUTCDATE());\n")
-            f.write("GO\n\n")
+
 
             f.write("-- 9. Insert DailyPerformance\n")
             f.write("PRINT 'Seeding DailyPerformance...';\n")

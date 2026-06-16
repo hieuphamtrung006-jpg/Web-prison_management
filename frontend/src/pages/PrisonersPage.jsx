@@ -531,9 +531,11 @@ function PrisonerDetailModal({ prisoner, onClose, onEdit, onDelete, canEdit, can
 
             <div className="detail-item">
               <span className="text-[#64748b] text-xs tracking-[0.5px] uppercase">Current location</span>
-              <strong className="text-[#e2e8f0]">
-                {prisoner.current_location_name || location?.location_name || "Unassigned"}
-              </strong>
+              <RestrictedField>
+                <strong className="text-[#e2e8f0]">
+                  {prisoner.current_location_name || location?.location_name || "Unassigned"}
+                </strong>
+              </RestrictedField>
             </div>
 
             {/* Sentence - restricted for Viewer (dates are sensitive) */}
@@ -911,17 +913,19 @@ export default function PrisonersPage() {
                 </select>
               </label>
 
-              <label>
-                Địa điểm
-                <select value={filterDraft.location_id} onChange={(e) => setFilterDraft(prev => ({ ...prev, location_id: e.target.value }))}>
-                  <option value="">Tất cả</option>
-                  {locations.map((location) => (
-                    <option key={location.location_id} value={location.location_id}>
-                      {location.location_name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {!isViewer && (
+                <label>
+                  Địa điểm
+                  <select value={filterDraft.location_id} onChange={(e) => setFilterDraft(prev => ({ ...prev, location_id: e.target.value }))}>
+                    <option value="">Tất cả</option>
+                    {locations.map((location) => (
+                      <option key={location.location_id} value={location.location_id}>
+                        {location.location_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               <button className="primary-btn" type="submit">
                 Tìm kiếm
@@ -962,7 +966,7 @@ export default function PrisonersPage() {
                       {canCreate && <th>Ngày sinh</th>}
                       {canCreate && <th>Tội danh</th>}
                       <th>Mức Rủi ro</th>
-                      <th>Địa điểm</th>
+                      {!isViewer && <th>Địa điểm</th>}
                       <th>Trạng thái</th>
                       <th>Hành động</th>
                     </tr>
@@ -985,7 +989,7 @@ export default function PrisonersPage() {
                           <td>
                             <RiskBadge value={row.risk_level} />
                           </td>
-                          <td>{location?.location_name || "Unassigned"}</td>
+                          {!isViewer && <td>{location?.location_name || "Unassigned"}</td>}
                           <td>
                             <span className={`status-badge ${statusClass(row.status)}`}>{row.status}</span>
                           </td>

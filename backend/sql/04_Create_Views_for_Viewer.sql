@@ -86,29 +86,6 @@ PRINT 'Created View: vw_Incidents_Basic';
 
 
 -- ============================================================
--- View 4: LaborAssignments
--- ============================================================
-IF OBJECT_ID('dbo.vw_LaborAssignments_Basic', 'V') IS NOT NULL
-    DROP VIEW dbo.vw_LaborAssignments_Basic;
-GO
-
-CREATE VIEW dbo.vw_LaborAssignments_Basic AS
-SELECT 
-    AssignmentID,
-    PrisonerID,
-    ProjectID,
-    AssignedBy,
-    AssignmentDate,
-    HoursAssigned,
-    CreatedAt,
-    UpdatedAt
-FROM dbo.LaborAssignments;
-GO
-
-PRINT 'Created View: vw_LaborAssignments_Basic';
-
-
--- ============================================================
 -- View 5: LaborProjects (cho Viewer - dữ liệu công khai, không nhạy cảm cá nhân)
 -- ============================================================
 IF OBJECT_ID('dbo.vw_LaborProjects_Basic', 'V') IS NOT NULL
@@ -163,7 +140,6 @@ Các View đã tạo:
 - vw_Prisoners_Basic
 - vw_Visits_Basic
 - vw_Incidents_Basic
-- vw_LaborAssignments_Basic
 - vw_LaborProjects_Basic
 - vw_Locations_Basic
 

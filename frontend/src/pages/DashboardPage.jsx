@@ -187,7 +187,6 @@ export default function DashboardPage() {
   // Guard-specific state (focused operational data - gọn gàng cho vai trò vận hành)
   const [guardStats, setGuardStats] = useState({
     inCustody: 0,
-    todayAssignments: 0,
     openIncidents: 0,
     pendingVisits: 0,
   });
@@ -317,17 +316,6 @@ export default function DashboardPage() {
         pendingVisits = 0;
       }
 
-      // 2. Today's Labor Assignments (client filter still needed for "today")
-      let todayAssignments = 0;
-      try {
-        const aRes = await api.get("/labor/assignments?page=1&page_size=100");
-        const allAssigns = Array.isArray(aRes.data) ? aRes.data : [];
-        todayAssignments = allAssigns.filter((a) => {
-          const d = (a.assignment_date || "").toString().slice(0, 10);
-          return d === today;
-        }).length;
-      } catch { todayAssignments = 0; }
-
       // 3. Incidents (ưu tiên các sự cố gần đây để Guard xử lý)
       let openIncidents = 0;
       let recentInc = [];
@@ -357,7 +345,7 @@ export default function DashboardPage() {
         } catch { pendingVisitList = []; }
       }
 
-      setGuardStats({ inCustody, todayAssignments, openIncidents, pendingVisits });
+      setGuardStats({ inCustody, openIncidents, pendingVisits });
       setGuardAlerts({ incidents: recentInc.slice(0, 5), visits: pendingVisitList });
       setLastUpdated(new Date());
     } catch (err) {
@@ -1008,7 +996,7 @@ export default function DashboardPage() {
 
             {guardLoading ? (
               <div className="loading-grid">
-                {Array.from({ length: 4 }).map((_, i) => <div key={i} className="loading-card" />)}
+                {Array.from({ length: 3 }).map((_, i) => <div key={i} className="loading-card" />)}
               </div>
             ) : (
               <div className="metric-grid">
@@ -1018,14 +1006,6 @@ export default function DashboardPage() {
                   sub="hiện tại (In Custody)"
                   icon={UserCheck}
                   accent="#10a36e"
-                  loading={false}
-                />
-                <KeyIndicatorCard
-                  title="Phân công hôm nay"
-                  value={guardStats.todayAssignments}
-                  sub="Today's Assignments"
-                  icon={ClipboardList}
-                  accent="#2563eb"
                   loading={false}
                 />
                 <KeyIndicatorCard
@@ -1085,27 +1065,6 @@ export default function DashboardPage() {
                 </div>
               </Link>
 
-              {/* Create Labor Assignment - xanh dương */}
-              <Link to="/labor" className="quick-action">
-                <div className="icon-wrap" style={{ background: "#dbeafe", color: "#1e40af" }}>
-                  <UserPlus size={19} />
-                </div>
-                <div className="qa-content">
-                  <div className="qa-label">Tạo phân công lao động</div>
-                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Tạo Phân công Lao động</div>
-                </div>
-              </Link>
-
-              {/* View Today's Assignments - xanh dương */}
-              <Link to="/labor" className="quick-action">
-                <div className="icon-wrap" style={{ background: "#dbeafe", color: "#1e40af" }}>
-                  <Calendar size={19} />
-                </div>
-                <div className="qa-content">
-                  <div className="qa-label">Xem phân công hôm nay</div>
-                  <div className="qa-desc" style={{ fontSize: "0.78rem" }}>Xem Phân công Hôm nay</div>
-                </div>
-              </Link>
 
               {/* View Pending Visit Requests - tím */}
               <Link to="/visits" className="quick-action">

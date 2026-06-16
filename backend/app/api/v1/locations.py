@@ -28,7 +28,22 @@ def list_locations(
 ) -> list[LocationOccupancyRead]:
     offset = (page - 1) * page_size
 
-    # Build base query with occupancy join (always, for all roles that can list)
+    current_time = datetime.now()
+    active_schedules_sub = (
+        db.query(
+            Schedule.location_id.label("location_id"),
+            func.count(func.distinct(Schedule.prisoner_id)).label("occupancy"),
+        )
+        .filter(
+            Schedule.start_time <= current_time,
+            Schedule.end_time >= current_time,
+            Schedule.status == "Active",
+        )
+        .group_by(Schedule.location_id)
+        .subquery()
+    )
+
+    # Build base query with real-time occupancy join
     q = db.query(
         Location.location_id,
         Location.location_name,
@@ -36,11 +51,10 @@ def list_locations(
         Location.capacity,
         Location.security_level,
         Location.is_active,
-        func.count(Prisoner.prisoner_id).label("current_occupancy"),
+        func.coalesce(active_schedules_sub.c.occupancy, 0).label("current_occupancy"),
     ).outerjoin(
-        Prisoner,
-        (Prisoner.current_location_id == Location.location_id)
-        & (Prisoner.status != "Released"),
+        active_schedules_sub,
+        Location.location_id == active_schedules_sub.c.location_id,
     )
 
     # Search by name (partial, case-insensitive) - matches frontend requirement
@@ -52,15 +66,7 @@ def list_locations(
         q = q.filter(Location.type == type)
 
     rows = (
-        q.group_by(
-            Location.location_id,
-            Location.location_name,
-            Location.type,
-            Location.capacity,
-            Location.security_level,
-            Location.is_active,
-        )
-        .order_by(Location.location_id.desc())
+        q.order_by(Location.location_id.desc())
         .offset(offset)
         .limit(page_size)
         .all()

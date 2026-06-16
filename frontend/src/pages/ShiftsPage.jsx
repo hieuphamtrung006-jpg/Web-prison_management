@@ -6,6 +6,7 @@ export default function ShiftsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 20;
   const [error, setError] = useState("");
+  const [now, setNow] = useState(new Date());
 
   useEffect(() => {
     const load = async () => {
@@ -18,6 +19,30 @@ export default function ShiftsPage() {
     };
     load();
   }, [page]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isShiftActive = (startTimeStr, endTimeStr) => {
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const currentTime = `${hours}:${minutes}:${seconds}`;
+
+    const start = String(startTimeStr).slice(0, 8);
+    const end = String(endTimeStr).slice(0, 8);
+
+    if (start <= end) {
+      return currentTime >= start && currentTime <= end;
+    } else {
+      // Ca trực qua nửa đêm (ví dụ 22:00:00 - 06:00:00)
+      return currentTime >= start || currentTime <= end;
+    }
+  };
 
   return (
     <section className="panel">
@@ -39,7 +64,11 @@ export default function ShiftsPage() {
                 <td>{String(row.start_time).slice(0, 8)}</td>
                 <td>{String(row.end_time).slice(0, 8)}</td>
                 <td>{row.capacity}</td>
-                <td>{String(row.is_for_staff)}</td>
+                <td>
+                  <span className={`status-badge ${isShiftActive(row.start_time, row.end_time) ? "status-active" : "status-inactive"}`}>
+                    {isShiftActive(row.start_time, row.end_time) ? "true" : "false"}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -48,3 +77,4 @@ export default function ShiftsPage() {
     </section>
   );
 }
+
