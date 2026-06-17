@@ -67,6 +67,19 @@ def _classify_shift(shift_type: str | None) -> str:
     if is_sleep:
         return "sleep"
 
+    # Check for yard/recreation/activity shifts
+    is_yard = False
+    if "yard" in value or "playground" in value:
+        is_yard = True
+    else:
+        words = value.replace("/", " ").replace("&", " ").split()
+        activity_keywords = {"sinh", "hoạt", "hoat", "tự", "do", "tu", "thể", "dục", "the", "duc"}
+        if any(w in words for w in activity_keywords):
+            is_yard = True
+
+    if is_yard:
+        return "yard"
+
     if value in {"sang", "chieu", "morning", "afternoon"}:
         return "labor"
     return "general"
@@ -166,6 +179,35 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
                 meal_locs = [lid for lid, loc in locations_by_id.items() if str(loc.get("type")).lower() in {"dining", "cell"}]
                 if meal_locs:
                     model.Add(sum(x[(prisoner_id, shift_id, lid)] for lid in meal_locs) == 1)
+            elif shift_class == "labor":
+                project_loc_ids = [int(p["location_id"]) for p in projects_list if p.get("location_id") is not None]
+                project_loc_ids = list(set([lid for lid in project_loc_ids if lid in location_ids]))
+                
+                total_project_capacity = sum(int(p.get("max_workers") or 0) for p in projects_list)
+                if project_loc_ids:
+                    if len(prisoner_ids) <= total_project_capacity:
+                        model.Add(sum(x[(prisoner_id, shift_id, lid)] for lid in project_loc_ids) == 1)
+                    else:
+                        cell_locs = [lid for lid, loc in locations_by_id.items() if str(loc.get("type")).lower() == "cell"]
+                        allowed_locs = list(set(project_loc_ids + cell_locs))
+                        if allowed_locs:
+                            model.Add(sum(x[(prisoner_id, shift_id, lid)] for lid in allowed_locs) == 1)
+            elif shift_class == "yard":
+                yard_locs = [lid for lid, loc in locations_by_id.items() if str(loc.get("type")).lower() == "yard"]
+                cell_locs = [lid for lid, loc in locations_by_id.items() if str(loc.get("type")).lower() == "cell"]
+                
+                prisoner_obj = prisoners_by_id.get(prisoner_id, {})
+                risk = (prisoner_obj.get("risk_level") or "Medium").lower()
+                
+                if risk == "high":
+                    # High risk prisoners can be assigned to yard or cell
+                    allowed_locs = list(set(yard_locs + cell_locs))
+                else:
+                    # Low/Medium risk prisoners must be assigned to yard
+                    allowed_locs = yard_locs
+                
+                if allowed_locs:
+                    model.Add(sum(x[(prisoner_id, shift_id, lid)] for lid in allowed_locs) == 1)
 
     # Capacity constraints per shift and location.
     for shift_id in shift_ids:
@@ -218,8 +260,8 @@ def run_genetic_algorithm(payload: dict[str, Any]) -> dict[str, Any]:
                 if shift_class == "labor":
                     project = project_by_location.get(location_id)
                     if project:
-                        economy_gain += productivity + float(project.get("revenue_per_hour") or 0) / 100.0
-                elif shift_class == "general":
+                        economy_gain += 100.0 + productivity + float(project.get("revenue_per_hour") or 0) / 100.0
+                elif shift_class in {"general", "yard"}:
                     if loc_type in {"yard", "hospital"}:
                         rehab_gain += 1.0
 
