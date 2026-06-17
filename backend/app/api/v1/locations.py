@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, get_db, require_roles
@@ -29,6 +29,7 @@ def list_locations(
     offset = (page - 1) * page_size
 
     current_time = datetime.now()
+    # 1. Real-time schedules count (for workshops, yards, etc.)
     active_schedules_sub = (
         db.query(
             Schedule.location_id.label("location_id"),
@@ -43,7 +44,18 @@ def list_locations(
         .subquery()
     )
 
-    # Build base query with real-time occupancy join
+    # 2. Assigned resident count (for housing cells)
+    assigned_residents_sub = (
+        db.query(
+            Prisoner.current_location_id.label("location_id"),
+            func.count(Prisoner.prisoner_id).label("assigned_count"),
+        )
+        .filter(Prisoner.status != "Released")
+        .group_by(Prisoner.current_location_id)
+        .subquery()
+    )
+
+    # Build base query returning both real-time occupancy and assigned residency count
     q = db.query(
         Location.location_id,
         Location.location_name,
@@ -52,10 +64,15 @@ def list_locations(
         Location.security_level,
         Location.is_active,
         func.coalesce(active_schedules_sub.c.occupancy, 0).label("current_occupancy"),
+        func.coalesce(assigned_residents_sub.c.assigned_count, 0).label("assigned_occupancy"),
     ).outerjoin(
         active_schedules_sub,
         Location.location_id == active_schedules_sub.c.location_id,
+    ).outerjoin(
+        assigned_residents_sub,
+        Location.location_id == assigned_residents_sub.c.location_id,
     )
+
 
     # Search by name (partial, case-insensitive) - matches frontend requirement
     if search:

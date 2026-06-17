@@ -39,3 +39,4 @@ class LocationOccupancyRead(BaseModel):
     security_level: str | None = None
     is_active: bool
     current_occupancy: int
+    assigned_occupancy: int
