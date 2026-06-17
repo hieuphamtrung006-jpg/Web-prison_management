@@ -274,11 +274,18 @@ function PrisonerEditModal({ prisoner, userRole, locations, onClose, onSaved, sh
             Current location
             <select value={form.current_location_id} onChange={(e) => setForm({ ...form, current_location_id: e.target.value })}>
               <option value="">Unassigned</option>
-              {locations.map((location) => (
-                <option key={location.location_id} value={location.location_id}>
-                  {`${location.location_name} (${location.current_occupancy}/${location.capacity})`}
-                </option>
-              ))}
+              {locations
+                .filter((loc) => {
+                  const type = (loc.type || "").toLowerCase();
+                  const isCell = type === "cell" || type === "buồng giam";
+                  const isCurrent = Number(loc.location_id) === Number(form.current_location_id);
+                  return isCell || isCurrent;
+                })
+                .map((location) => (
+                  <option key={location.location_id} value={location.location_id}>
+                    {`${location.location_name} (${location.assigned_occupancy}/${location.capacity})`}
+                  </option>
+                ))}
             </select>
           </label>
 
@@ -426,11 +433,16 @@ function CreatePrisonerModal({ locations, onClose, onSaved, showToast }) {
               onChange={(e) => setForm({ ...form, current_location_id: e.target.value })}
             >
               <option value="">Unassigned</option>
-              {locations.map((location) => (
-                <option key={location.location_id} value={location.location_id}>
-                  {`${location.location_name} (${location.current_occupancy}/${location.capacity})`}
-                </option>
-              ))}
+              {locations
+                .filter((loc) => {
+                  const type = (loc.type || "").toLowerCase();
+                  return type === "cell" || type === "buồng giam";
+                })
+                .map((location) => (
+                  <option key={location.location_id} value={location.location_id}>
+                    {`${location.location_name} (${location.assigned_occupancy}/${location.capacity})`}
+                  </option>
+                ))}
             </select>
           </label>
 
