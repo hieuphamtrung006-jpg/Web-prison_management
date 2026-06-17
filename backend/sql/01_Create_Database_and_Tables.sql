@@ -1,9 +1,9 @@
 -- ============================================================
 -- File: 01_Create_Database_and_Tables.sql
--- Mục đích: Tạo Database + Toàn bộ bảng + Sửa lỗi tiếng Việt
+-- Mục đích: Tạo Database mới + Toàn bộ bảng + Foreign Key + Index cơ bản
 -- ============================================================
 
--- Xóa database cũ nếu tồn tại
+-- Xóa database cũ nếu tồn tại (để reset sạch)
 IF DB_ID('PRISON') IS NOT NULL
 BEGIN
     ALTER DATABASE PRISON SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
@@ -11,7 +11,6 @@ BEGIN
 END
 GO
 
--- Tạo database mới
 CREATE DATABASE PRISON;
 GO
 
@@ -22,9 +21,8 @@ PRINT '=== Bắt đầu tạo cấu trúc database ===';
 GO
 
 -- ============================================================
--- TẠO BẢNG
+-- BẢNG USERS
 -- ============================================================
-
 CREATE TABLE Users (
     UserID          INT IDENTITY(1,1) PRIMARY KEY,
     Username        NVARCHAR(50) NOT NULL UNIQUE,
@@ -38,6 +36,9 @@ CREATE TABLE Users (
     UpdatedAt       DATETIME2 NULL
 );
 
+-- ============================================================
+-- BẢNG LOCATIONS
+-- ============================================================
 CREATE TABLE Locations (
     LocationID      INT IDENTITY(1,1) PRIMARY KEY,
     LocationName    NVARCHAR(100) NOT NULL,
@@ -49,6 +50,9 @@ CREATE TABLE Locations (
     UpdatedAt       DATETIME2 NULL
 );
 
+-- ============================================================
+-- BẢNG PRISONERS
+-- ============================================================
 CREATE TABLE Prisoners (
     PrisonerID          INT IDENTITY(1,1) PRIMARY KEY,
     FullName            NVARCHAR(100) NOT NULL,
@@ -67,6 +71,9 @@ CREATE TABLE Prisoners (
     CONSTRAINT FK_Prisoners_Locations FOREIGN KEY (CurrentLocationID) REFERENCES Locations(LocationID)
 );
 
+-- ============================================================
+-- BẢNG LABORPROJECTS
+-- ============================================================
 CREATE TABLE LaborProjects (
     ProjectID       INT IDENTITY(1,1) PRIMARY KEY,
     ProjectName     NVARCHAR(100) NOT NULL,
@@ -81,6 +88,9 @@ CREATE TABLE LaborProjects (
     CONSTRAINT FK_LaborProjects_Locations FOREIGN KEY (LocationID) REFERENCES Locations(LocationID)
 );
 
+-- ============================================================
+-- CÁC BẢNG KHÁC
+-- ============================================================
 CREATE TABLE Shifts (
     ShiftID         INT IDENTITY(1,1) PRIMARY KEY,
     ShiftType       NVARCHAR(30) NOT NULL,
@@ -141,65 +151,4 @@ CREATE TABLE Visits (
     VisitorName     NVARCHAR(100) NOT NULL,
     VisitDate       DATETIME2 NOT NULL,
     Status          NVARCHAR(20) DEFAULT 'Pending',
-    ApprovedBy      INT NULL,
-    Notes           NVARCHAR(500),
-    CreatedAt       DATETIME2 DEFAULT GETDATE(),
-    UpdatedAt       DATETIME2 NULL,
-    CONSTRAINT FK_Visits_Prisoners FOREIGN KEY (PrisonerID) REFERENCES Prisoners(PrisonerID),
-    CONSTRAINT FK_Visits_Users FOREIGN KEY (ApprovedBy) REFERENCES Users(UserID)
-);
-
-CREATE TABLE Incidents (
-    IncidentID      INT IDENTITY(1,1) PRIMARY KEY,
-    PrisonerID      INT NOT NULL,
-    LocationID      INT NULL,
-    IncidentDate    DATETIME2 NOT NULL,
-    IncidentType    NVARCHAR(100),
-    Severity        NVARCHAR(20) CHECK (Severity IN ('Low', 'Medium', 'High')),
-    PenaltyPoints   INT DEFAULT 0,
-    Description     NVARCHAR(500),
-    CreatedBy       INT NULL,
-    CreatedAt       DATETIME2 DEFAULT GETDATE(),
-    CONSTRAINT FK_Incidents_Prisoners FOREIGN KEY (PrisonerID) REFERENCES Prisoners(PrisonerID),
-    CONSTRAINT FK_Incidents_Locations FOREIGN KEY (LocationID) REFERENCES Locations(LocationID),
-    CONSTRAINT FK_Incidents_Users FOREIGN KEY (CreatedBy) REFERENCES Users(UserID)
-);
-
-CREATE TABLE VisitRequests (
-    RequestID       INT IDENTITY(1,1) PRIMARY KEY,
-    PrisonerID      INT NOT NULL,
-    ViewerID        INT NOT NULL,
-    RequestedDate   DATETIME2(0) NOT NULL,
-    Status          NVARCHAR(20) NOT NULL DEFAULT 'Pending',
-    CreatedAt       DATETIME2(0) NOT NULL DEFAULT GETUTCDATE(),
-    UpdatedAt       DATETIME2(0) NULL,
-    CONSTRAINT PK_VisitRequests PRIMARY KEY CLUSTERED (RequestID),
-    CONSTRAINT FK_VisitRequests_Prisoners FOREIGN KEY (PrisonerID) REFERENCES Prisoners(PrisonerID),
-    CONSTRAINT FK_VisitRequests_Users FOREIGN KEY (ViewerID) REFERENCES Users(UserID),
-    CONSTRAINT CHK_VisitRequests_Status CHECK (Status IN ('Pending', 'Approved', 'Rejected'))
-);
-
--- Index cho VisitRequests
-CREATE NONCLUSTERED INDEX IX_VisitRequests_PrisonerID ON VisitRequests(PrisonerID);
-CREATE NONCLUSTERED INDEX IX_VisitRequests_ViewerID ON VisitRequests(ViewerID);
-CREATE NONCLUSTERED INDEX IX_VisitRequests_Status ON VisitRequests(Status);
-
-PRINT '=== Đã tạo xong các bảng ===';
-GO
-
--- ============================================================
--- SỬA LỖI TIẾNG VIỆT (Chuyển sang NVARCHAR)
--- ============================================================
-ALTER TABLE Visits ALTER COLUMN VisitorName NVARCHAR(100) NOT NULL;
-ALTER TABLE Visits ALTER COLUMN Notes NVARCHAR(500) NULL;
-ALTER TABLE Visits ALTER COLUMN Status NVARCHAR(20) NOT NULL;
-
-ALTER TABLE Incidents ALTER COLUMN IncidentType NVARCHAR(100) NULL;
-ALTER TABLE Incidents ALTER COLUMN Description NVARCHAR(500) NULL;
-ALTER TABLE Incidents ALTER COLUMN Severity NVARCHAR(20) NULL;
-
-PRINT '=== Đã sửa lỗi tiếng Việt ===';
-GO
-
-PRINT '=== File 01 hoàn tất ===';
-GO
+    ApprovedBy      INT

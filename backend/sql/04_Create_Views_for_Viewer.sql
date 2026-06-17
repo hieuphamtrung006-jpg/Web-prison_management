@@ -1,17 +1,17 @@
 -- ============================================================
 -- File: 04_Create_Views_for_Viewer.sql
--- Mục đích: Tạo các View cho role Viewer (chỉ cho xem dữ liệu đã lọc)
--- Viewer KHÔNG được SELECT trực tiếp trên các bảng gốc
+-- Mục đích: Tạo các View GIỚI HẠN cho role Viewer (thân nhân)
+-- Viewer chỉ được xem dữ liệu tối thiểu, không được xem toàn bộ tù nhân
 -- ============================================================
 
 USE PRISON;
 GO
 
-PRINT '=== Bắt đầu tạo View cho role Viewer ===';
+PRINT '=== Bắt đầu tạo Views cho role Viewer (phiên bản hạn chế) ===';
 GO
 
 -- ============================================================
--- View 1: Prisoners (Ẩn thông tin nhạy cảm)
+-- View 1: vw_Prisoners_Basic - RẤT HẠN CHẾ
 -- ============================================================
 IF OBJECT_ID('dbo.vw_Prisoners_Basic', 'V') IS NOT NULL
     DROP VIEW dbo.vw_Prisoners_Basic;
@@ -21,24 +21,20 @@ CREATE VIEW dbo.vw_Prisoners_Basic AS
 SELECT 
     PrisonerID,
     FullName,
-    DateOfBirth,
     Gender,
     RiskLevel,
-    ProductivityScore,
-    RehabHours,
-    CurrentLocationID,
     Status,
-    CreatedAt,
-    UpdatedAt
-    -- Ẩn: CrimeType, SentenceStart, SentenceEnd (thông tin nhạy cảm)
+    CurrentLocationID
+    -- CHỈ giữ thông tin tối thiểu cần thiết cho thân nhân
+    -- Ẩn hoàn toàn: DateOfBirth, CrimeType, SentenceStart, SentenceEnd, ProductivityScore, RehabHours
 FROM dbo.Prisoners;
 GO
 
-PRINT 'Created View: vw_Prisoners_Basic';
-
+PRINT 'Created View: vw_Prisoners_Basic (hạn chế)';
+GO
 
 -- ============================================================
--- View 2: Visits (Ẩn Notes)
+-- View 2: vw_Visits_Basic - Chỉ xem được của chính mình (sẽ filter ở backend)
 -- ============================================================
 IF OBJECT_ID('dbo.vw_Visits_Basic', 'V') IS NOT NULL
     DROP VIEW dbo.vw_Visits_Basic;
@@ -54,39 +50,15 @@ SELECT
     ApprovedBy,
     CreatedAt,
     UpdatedAt
-    -- Ẩn: Notes (có thể chứa thông tin nhạy cảm)
 FROM dbo.Visits;
 GO
 
 PRINT 'Created View: vw_Visits_Basic';
-
-
--- ============================================================
--- View 3: Incidents (Ẩn Description và PenaltyPoints)
--- ============================================================
-IF OBJECT_ID('dbo.vw_Incidents_Basic', 'V') IS NOT NULL
-    DROP VIEW dbo.vw_Incidents_Basic;
 GO
 
-CREATE VIEW dbo.vw_Incidents_Basic AS
-SELECT 
-    IncidentID,
-    PrisonerID,
-    LocationID,
-    IncidentDate,
-    IncidentType,
-    Severity,
-    CreatedBy,
-    CreatedAt
-    -- Ẩn: Description, PenaltyPoints (thông tin nhạy cảm)
-FROM dbo.Incidents;
-GO
-
-PRINT 'Created View: vw_Incidents_Basic';
-
 
 -- ============================================================
--- View 5: LaborProjects (cho Viewer - dữ liệu công khai, không nhạy cảm cá nhân)
+-- View 3: vw_LaborProjects_Basic - Giữ nguyên (công khai)
 -- ============================================================
 IF OBJECT_ID('dbo.vw_LaborProjects_Basic', 'V') IS NOT NULL
     DROP VIEW dbo.vw_LaborProjects_Basic;
@@ -99,21 +71,17 @@ SELECT
     LP.LocationID,
     L.LocationName,
     LP.RevenuePerHour,
-    LP.PriorityScore,
     LP.MaxWorkers,
-    LP.RequiredSkills,
-    LP.IsActive,
-    LP.CreatedAt,
-    LP.UpdatedAt
+    LP.IsActive
 FROM dbo.LaborProjects LP
 LEFT JOIN dbo.Locations L ON L.LocationID = LP.LocationID;
 GO
 
 PRINT 'Created View: vw_LaborProjects_Basic';
-
+GO
 
 -- ============================================================
--- View 6: Locations (cho phép xem đầy đủ vì ít nhạy cảm)
+-- View 4: vw_Locations_Basic - Giữ nguyên
 -- ============================================================
 IF OBJECT_ID('dbo.vw_Locations_Basic', 'V') IS NOT NULL
     DROP VIEW dbo.vw_Locations_Basic;
@@ -126,26 +94,16 @@ SELECT
     Type,
     Capacity,
     SecurityLevel,
-    IsActive,
-    CreatedAt,
-    UpdatedAt
+    IsActive
 FROM dbo.Locations;
 GO
 
 PRINT 'Created View: vw_Locations_Basic';
+GO
 
 PRINT '
-=== Đã tạo xong các View cho Viewer ===
-Các View đã tạo:
-- vw_Prisoners_Basic
-- vw_Visits_Basic
-- vw_Incidents_Basic
-- vw_LaborProjects_Basic
-- vw_Locations_Basic
-
-Lưu ý: 
-- Viewer chỉ nên được cấp quyền SELECT trên các View này (kể cả vw_LaborProjects_Basic).
-- Không cấp quyền SELECT trực tiếp trên các bảng gốc (Prisoners, Visits, Incidents, Labor*...).
-- Backend sử dụng get_table_name_for_role + execute_viewer_query khi current_user.role=Viewer.
+=== ĐÃ TẠO XONG VIEWS CHO VIEWER ===
+- vw_Prisoners_Basic: Chỉ còn ID, Tên, Giới tính, Rủi ro, Trạng thái
+- Các view khác giữ ở mức tối thiểu cần thiết
 ';
 GO

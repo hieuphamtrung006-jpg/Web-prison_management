@@ -1,6 +1,7 @@
 -- ============================================================
 -- File: 02_Create_AuditLog_and_Triggers.sql
--- Mục đích: Tạo bảng AuditLog + 4 Triggers
+-- Mục đích: Tạo bảng AuditLog + Các Trigger ghi log thay đổi dữ liệu
+-- Chạy sau File 01 (sau khi đã tạo các bảng)
 -- ============================================================
 
 USE PRISON;
@@ -12,8 +13,11 @@ GO
 -- ============================================================
 -- TẠO BẢNG AUDIT LOG
 -- ============================================================
-CREATE TABLE dbo.AuditLog
-(
+IF OBJECT_ID('dbo.AuditLog', 'U') IS NOT NULL
+    DROP TABLE dbo.AuditLog;
+GO
+
+CREATE TABLE dbo.AuditLog (
     AuditID      INT IDENTITY(1,1) NOT NULL,
     TableName    NVARCHAR(100)     NOT NULL,
     RecordID     INT               NOT NULL,
@@ -26,17 +30,20 @@ CREATE TABLE dbo.AuditLog
     CONSTRAINT PK_AuditLog PRIMARY KEY CLUSTERED (AuditID),
     CONSTRAINT CK_AuditLog_Action CHECK (Action IN ('INSERT', 'UPDATE', 'DELETE'))
 );
+GO
 
-CREATE INDEX IX_AuditLog_Table_Record ON AuditLog(TableName, RecordID, ChangedAt DESC);
-CREATE INDEX IX_AuditLog_ChangedBy ON AuditLog(ChangedBy, ChangedAt DESC);
+-- Index hỗ trợ truy vấn log nhanh
+CREATE NONCLUSTERED INDEX IX_AuditLog_Table_Record ON AuditLog(TableName, RecordID, ChangedAt DESC);
+CREATE NONCLUSTERED INDEX IX_AuditLog_ChangedBy ON AuditLog(ChangedBy, ChangedAt DESC);
+GO
 
-PRINT '=== Đã tạo bảng AuditLog ===';
+PRINT 'Đã tạo bảng AuditLog';
 GO
 
 -- ============================================================
 -- TRIGGER CHO BẢNG PRISONERS
 -- ============================================================
-CREATE TRIGGER dbo.trg_Prisoners_Audit
+CREATE OR ALTER TRIGGER dbo.trg_Prisoners_Audit
 ON dbo.Prisoners
 AFTER INSERT, UPDATE, DELETE
 AS
@@ -66,11 +73,10 @@ BEGIN
 END;
 GO
 
-
 -- ============================================================
 -- TRIGGER CHO BẢNG VISITS
 -- ============================================================
-CREATE TRIGGER dbo.trg_Visits_Audit
+CREATE OR ALTER TRIGGER dbo.trg_Visits_Audit
 ON dbo.Visits
 AFTER INSERT, UPDATE, DELETE
 AS
@@ -103,7 +109,7 @@ GO
 -- ============================================================
 -- TRIGGER CHO BẢNG INCIDENTS
 -- ============================================================
-CREATE TRIGGER dbo.trg_Incidents_Audit
+CREATE OR ALTER TRIGGER dbo.trg_Incidents_Audit
 ON dbo.Incidents
 AFTER INSERT, UPDATE, DELETE
 AS
@@ -133,5 +139,73 @@ BEGIN
 END;
 GO
 
-PRINT '=== Đã tạo xong AuditLog và 4 Triggers ===';
+-- ============================================================
+-- TRIGGER CHO BẢNG DAILYPERFORMANCE (Cập nhật ProductivityScore)
+-- ============================================================
+CREATE OR ALTER TRIGGER dbo.trg_Update_Prisoner_Productivity
+ON dbo.DailyPerformance
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    UPDATE Prisoners
+    SET ProductivityScore = ISNULL((
+        SELECT AVG(CAST(Productivity AS FLOAT))
+        FROM DailyPerformance
+        WHERE DailyPerformance.PrisonerID = Prisoners.PrisonerID
+    ), 0)
+    WHERE PrisonerID IN (
+        SELECT PrisonerID FROM inserted
+        UNION
+        SELECT PrisonerID FROM deleted
+    );
+END;
+GO
+
+-- ============================================================
+-- TRIGGER BẢO VỆ BẢNG USERS (Chỉ Admin mới được sửa/xóa)
+-- ============================================================
+CREATE OR ALTER TRIGGER dbo.trg_Users_Protect
+ON dbo.Users
+INSTEAD OF UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @UserID INT = CAST(SESSION_CONTEXT(N'UserID') AS INT);
+    DECLARE @Role NVARCHAR(20);
+
+    SELECT @Role = Role FROM Users WHERE UserID = @UserID;
+
+    IF @Role = 'Admin'
+    BEGIN
+        -- Cho phép Admin thực hiện
+        IF EXISTS (SELECT 1 FROM deleted)
+            DELETE FROM Users WHERE UserID IN (SELECT UserID FROM deleted);
+        
+        IF EXISTS (SELECT 1 FROM inserted)
+            UPDATE Users 
+            SET Username = i.Username,
+                PasswordHash = i.PasswordHash,
+                FullName = i.FullName,
+                Role = i.Role,
+                Email = i.Email,
+                Phone = i.Phone,
+                IsActive = i.IsActive,
+                UpdatedAt = GETDATE()
+            FROM inserted i
+            WHERE Users.UserID = i.UserID;
+    END
+    ELSE
+    BEGIN
+        RAISERROR('Chỉ có tài khoản Admin mới được phép sửa hoặc xóa User.', 16, 1);
+        ROLLBACK TRANSACTION;
+    END
+END;
+GO
+
+PRINT '=== Đã tạo xong AuditLog và tất cả Triggers ===';
+PRINT '   - Audit triggers: Prisoners, Visits, Incidents';
+PRINT '   - Productivity update trigger';
+PRINT '   - Users protection trigger (chỉ Admin được sửa/xóa)';
 GO
