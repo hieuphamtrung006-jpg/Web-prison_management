@@ -26,7 +26,6 @@ def get_dashboard_stats(
     """
     active_staff = (
         db.query(User)
-        .filter(User.is_active == True)  # IsActive column
         .count()
     )
 

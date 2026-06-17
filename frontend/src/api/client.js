@@ -19,8 +19,15 @@ api.interceptors.request.use((config) => {
 });
 
 export const parseApiError = (error) => {
-  if (error?.response?.data?.detail) {
-    return error.response.data.detail;
+  const detail = error?.response?.data?.detail;
+  if (detail) {
+    if (typeof detail === "string") {
+      return detail;
+    }
+    if (Array.isArray(detail)) {
+      return detail.map((err) => `${err.loc.join(".")}: ${err.msg}`).join(", ");
+    }
+    return JSON.stringify(detail);
   }
   if (error?.message) {
     return error.message;

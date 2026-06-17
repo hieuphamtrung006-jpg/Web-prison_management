@@ -74,10 +74,10 @@ function UserEditModal({ user, onClose, onSave }) {
           <label>
             Vai trò
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Quản trị viên</option>
-              <option>Giám thị trưởng</option>
-              <option>Giám thị</option>
-              <option>Người xem</option>
+              <option value="Admin">Quản trị viên</option>
+              <option value="Warden">Giám thị trưởng</option>
+              <option value="Guard">Giám thị</option>
+              <option value="Viewer">Người xem</option>
             </select>
           </label>
 
@@ -183,10 +183,10 @@ function CreateUserModal({ onClose, onSave, showToast }) {
           <label>
             Vai trò
             <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-              <option>Quản trị viên</option>
-              <option>Giám thị trưởng</option>
-              <option>Giám thị</option>
-              <option>Người xem</option>
+              <option value="Admin">Quản trị viên</option>
+              <option value="Warden">Giám thị trưởng</option>
+              <option value="Guard">Giám thị</option>
+              <option value="Viewer">Người xem</option>
             </select>
           </label>
           <label>

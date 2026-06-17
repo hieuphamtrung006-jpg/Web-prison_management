@@ -30,11 +30,11 @@ import {
 const KEY_INDICATORS = [
   {
     key: "users",
-    title: "Nhân viên đang hoạt động",
+    title: "Số tài khoản hiện có",
     endpoint: "/users?active_only=true",
     icon: Users,
     accent: "#4f5df0",
-    sub: "đang làm việc",
+    sub: "tài khoản hệ thống",
   },
   {
     key: "prisoners",
